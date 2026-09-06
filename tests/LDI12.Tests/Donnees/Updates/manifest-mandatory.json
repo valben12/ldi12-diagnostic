@@ -1,0 +1,38 @@
+{
+  "product": "ldi12-diagnostic",
+  "name": "LDI12 Diagnostic",
+  "channel": "stable",
+  "checkedAt": "2026-09-20T09:15:00.000Z",
+  "current": "1.19.0",
+  "updateAvailable": true,
+  "latest": {
+    "version": "1.21.0",
+    "title": "Le chemin d’un paquet",
+    "summary": "Table de routage, fichier hosts, pile réseau et voisinage.",
+    "highlights": [
+      "La table de routage, que Windows ne montre nulle part",
+      "Le fichier hosts, ligne par ligne avant de le remettre à neuf",
+      "Trois opérations de plus pour le réseau"
+    ],
+    "releasedAt": "2026-09-20T09:00:00.000Z",
+    "mandatory": true,
+    "minOs": "6.1",
+    "notesUrl": "https://ldi12.fr/logiciels/ldi12-diagnostic/versions#v1-20-0",
+    "pageUrl": "https://ldi12.fr/logiciels/ldi12-diagnostic",
+    "download": {
+      "url": "https://ldi12.fr/telecharger/ldi12-diagnostic/1.20.0/LDI12-Diagnostic-1.20.0.exe",
+      "filename": "LDI12-Diagnostic-1.20.0.exe",
+      "size": 12888888,
+      "sha256": "03319bfc8d6338401c579f2703928b939dd8cf7685b96cf6916171d310588960",
+      "kind": "portable",
+      "arch": "x64",
+      "signed": false
+    }
+  },
+  "signature": {
+    "alg": "RS256",
+    "keyId": "753c6075c5f3df96",
+    "value": "KaN2rEO+FHNPuMT9LY33k3FW/aAxrPYE59wmHbqg0A5SvAJ0nKuBkdHsWU8yBorvTleNzOrwDJbgIPuyYfIC7ibgR2w1spDdEifGWVl6KdpO4HJr/Lv8UD7BgBsqTwmoZb1e1Ek3vUQqmqGbod4cBLl37michHis/wE6o7n3XQ2mwH3oKZD6S2k4NRPyu4CxWiBnGptA71byKZ4COSo5vN+tikRIAgBsvzQE/5eTuIbSnOkAI5Khdnsck2WTTfDE5QnC4AN4qrDglHi2ZDbqU0md/VrKD19RXayQh34OSSDTjh3sxawiipfHuSEfCmfgyl5AxSCgrW0nyCG/VWotLQ==",
+    "payload": "eyJjaGFubmVsIjoic3RhYmxlIiwiY2hlY2tlZEF0IjoiMjAyNi0wOS0yMFQwOToxNTowMC4wMDBaIiwiY3VycmVudCI6IjEuMTkuMCIsImxhdGVzdCI6eyJkb3dubG9hZCI6eyJhcmNoIjoieDY0IiwiZmlsZW5hbWUiOiJMREkxMi1EaWFnbm9zdGljLTEuMjAuMC5leGUiLCJraW5kIjoicG9ydGFibGUiLCJzaGEyNTYiOiIwMzMxOWJmYzhkNjMzODQwMWM1NzlmMjcwMzkyOGI5MzlkZDhjZjc2ODViOTZjZjY5MTYxNzFkMzEwNTg4OTYwIiwic2lnbmVkIjpmYWxzZSwic2l6ZSI6MTI4ODg4ODgsInVybCI6Imh0dHBzOi8vbGRpMTIuZnIvdGVsZWNoYXJnZXIvbGRpMTItZGlhZ25vc3RpYy8xLjIwLjAvTERJMTItRGlhZ25vc3RpYy0xLjIwLjAuZXhlIn0sImhpZ2hsaWdodHMiOlsiTGEgdGFibGUgZGUgcm91dGFnZSwgcXVlIFdpbmRvd3MgbmUgbW9udHJlIG51bGxlIHBhcnQiLCJMZSBmaWNoaWVyIGhvc3RzLCBsaWduZSBwYXIgbGlnbmUgYXZhbnQgZGUgbGUgcmVtZXR0cmUgw6AgbmV1ZiIsIlRyb2lzIG9ww6lyYXRpb25zIGRlIHBsdXMgcG91ciBsZSByw6lzZWF1Il0sIm1hbmRhdG9yeSI6dHJ1ZSwibWluT3MiOiI2LjEiLCJub3Rlc1VybCI6Imh0dHBzOi8vbGRpMTIuZnIvbG9naWNpZWxzL2xkaTEyLWRpYWdub3N0aWMvdmVyc2lvbnMjdjEtMjAtMCIsInBhZ2VVcmwiOiJodHRwczovL2xkaTEyLmZyL2xvZ2ljaWVscy9sZGkxMi1kaWFnbm9zdGljIiwicmVsZWFzZWRBdCI6IjIwMjYtMDktMjBUMDk6MDA6MDAuMDAwWiIsInN1bW1hcnkiOiJUYWJsZSBkZSByb3V0YWdlLCBmaWNoaWVyIGhvc3RzLCBwaWxlIHLDqXNlYXUgZXQgdm9pc2luYWdlLiIsInRpdGxlIjoiTGUgY2hlbWluIGTigJl1biBwYXF1ZXQiLCJ2ZXJzaW9uIjoiMS4yMS4wIn0sIm5hbWUiOiJMREkxMiBEaWFnbm9zdGljIiwicHJvZHVjdCI6ImxkaTEyLWRpYWdub3N0aWMiLCJ1cGRhdGVBdmFpbGFibGUiOnRydWV9"
+  }
+}

@@ -1,0 +1,227 @@
+﻿<UserControl x:Class="LDI12.App.Views.AboutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:controls="clr-namespace:LDI12.App.Controls">
+
+    <!-- Écran de présentation. Il ne mesure rien : il dit qui édite ce logiciel, ce qu'il est, et
+         ce qu'il sait faire. Les chiffres viennent des catalogues au moment de l'affichage, pour
+         qu'ils ne puissent pas vieillir sans qu'on s'en aperçoive. -->
+
+    <UserControl.Resources>
+        <Style x:Key="AboutRow" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,9" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Info}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="À propos" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- ===== L'atelier ===== -->
+            <TextBlock Text="L'ÉDITEUR" Style="{StaticResource Text.Eyebrow}" Margin="2,24,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Text="{Binding Company}" Style="{StaticResource Text.Emphasis}" />
+                    <TextBlock Text="{Binding Activity}" Style="{StaticResource Text.Body}" Margin="0,6,0,0"
+                               MaxWidth="900" HorizontalAlignment="Left" TextWrapping="Wrap" />
+
+                    <Border Style="{StaticResource AboutRow}" Margin="0,14,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Secteur" Style="{StaticResource Text.Muted}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Area}" Style="{StaticResource Text.Body}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource AboutRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Site" Style="{StaticResource Text.Muted}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Site}" Style="{StaticResource Text.Body}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource AboutRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Contact" Style="{StaticResource Text.Muted}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Contact}" Style="{StaticResource Text.Body}" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Ouvrir le site"
+                                Command="{Binding OpenSiteCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Écrire un courriel"
+                                Margin="10,0,0,0" Command="{Binding OpenMailCommand}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               MaxWidth="900" HorizontalAlignment="Left"
+                               Text="Ces deux boutons ouvrent le navigateur et la messagerie de la machine. Sur un poste client, rien n'est envoyé : c'est vous qui écrivez." />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Le logiciel ===== -->
+            <TextBlock Text="LE LOGICIEL" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Text="{Binding Product}" Style="{StaticResource Text.Emphasis}" />
+                    <TextBlock Text="{Binding Copyright}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding Terms}" Style="{StaticResource Text.Body}" Margin="0,10,0,0"
+                               MaxWidth="960" HorizontalAlignment="Left" TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding Software}" Margin="0,14,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource AboutRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                   Style="{StaticResource Text.Muted}" VerticalAlignment="Top"
+                                                   TextWrapping="Wrap" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Value}" Style="{StaticResource Text.Body}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Note}" Style="{StaticResource Text.Muted}"
+                                                       Margin="0,3,0,0" TextWrapping="Wrap"
+                                                       Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Ce qu'il sait faire ===== -->
+            <TextBlock Text="CE QUE CE LOGICIEL SAIT FAIRE" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960" HorizontalAlignment="Left"
+                               TextWrapping="Wrap"
+                               Text="Ces chiffres sont comptés dans les catalogues au moment où cet écran s'affiche. Ils ne peuvent donc pas vieillir sans que personne s'en aperçoive." />
+
+                    <ItemsControl ItemsSource="{Binding Coverage}" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource AboutRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                   Style="{StaticResource Text.Muted}" VerticalAlignment="Top"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                   Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   FontWeight="SemiBold" VerticalAlignment="Top" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Note}"
+                                                   Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Ce qu'il écrit ===== -->
+            <TextBlock Text="CE QUE CE LOGICIEL ÉCRIT" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <ItemsControl ItemsSource="{Binding Storage}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource AboutRow}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                               Style="{StaticResource Text.Muted}" VerticalAlignment="Top"
+                                               TextWrapping="Wrap" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Value}" Style="{StaticResource Text.Body}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Text.Muted}"
+                                                   Margin="0,3,0,0" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- ===== Composants tiers ===== -->
+            <TextBlock Text="COMPOSANTS EMBARQUÉS" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960" HorizontalAlignment="Left"
+                               TextWrapping="Wrap"
+                               Text="Ces bibliothèques sont publiées par d'autres et distribuées à l'intérieur de l'exécutable. Chacune reste soumise à sa propre licence, qui prime sur celle de ce logiciel pour ce qui la concerne. Le détail figure dans LICENCES-TIERCES.md, à côté du programme." />
+
+                    <ItemsControl ItemsSource="{Binding Components}" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource AboutRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="70" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                   Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   TextWrapping="Wrap" VerticalAlignment="Top" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Version}"
+                                                   Style="{StaticResource Text.Muted}" VerticalAlignment="Top" />
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="{Binding Role}" Style="{StaticResource Text.Body}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Style="{StaticResource Text.Muted}" Margin="0,3,0,0"
+                                                       TextWrapping="Wrap">
+                                                <Run Text="{Binding Licence, Mode=OneWay}" />
+                                                <Run Text=", " />
+                                                <Run Text="{Binding Url, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

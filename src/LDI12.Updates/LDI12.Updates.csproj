@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Updates</RootNamespace>
+    <AssemblyName>LDI12.Updates</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Deuxième et dernier projet de la solution à référencer la pile HTTP, après Klarvi.
+         C'est ce qui rend vérifiable la promesse « aucune dépendance inutile à Internet » :
+         la liste tient sur deux lignes. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Analyse du manifeste. Même version que LDI12.Actions et Klarvi. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

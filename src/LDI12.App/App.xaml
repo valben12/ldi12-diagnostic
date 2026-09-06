@@ -1,0 +1,67 @@
+﻿<Application x:Class="LDI12.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:vm="clr-namespace:LDI12.App.ViewModels"
+             xmlns:views="clr-namespace:LDI12.App.Views">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Position 0 : les jetons, échangés à chaud par ThemeManager. -->
+                <ResourceDictionary Source="Themes/Tokens.Dark.xaml" />
+                <ResourceDictionary Source="Themes/Typography.xaml" />
+                <ResourceDictionary Source="Themes/LucideIcons.xaml" />
+                <ResourceDictionary Source="Themes/Controls.xaml" />
+                <ResourceDictionary Source="Themes/Chrome.xaml" />
+                <ResourceDictionary Source="Themes/Semantics.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+            <local:InverseBoolToVisibilityConverter x:Key="HiddenWhenTrue" />
+            <local:CountToVisibilityConverter x:Key="CountToVisibility" />
+            <local:IconKeyConverter x:Key="IconKey" />
+            <local:RoundedTextConverter x:Key="Rounded" />
+            <local:TextToVisibilityConverter x:Key="TextToVisibility" />
+            <local:WiderThanConverter x:Key="WiderThan" />
+
+            <!-- Navigation « view-model first » : ajouter un écran, c'est ajouter un modèle de vue
+                 et son gabarit. La coquille n'en sait rien. -->
+            <DataTemplate DataType="{x:Type vm:OverviewViewModel}">
+                <views:OverviewView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SectionViewModel}">
+                <views:SectionView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:RepairsViewModel}">
+                <views:RepairsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:CleanupViewModel}">
+                <views:CleanupView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ToolsViewModel}">
+                <views:ToolsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:SettingsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AboutViewModel}">
+                <views:AboutView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
+                <views:ReportsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
+                <views:HistoryView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:MonitoringViewModel}">
+                <views:MonitoringView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:MeasuresViewModel}">
+                <views:MeasuresView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:UserDataViewModel}">
+                <views:UserDataView />
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

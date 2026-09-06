@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.ProbeHost</RootNamespace>
+    <AssemblyName>LDI12.ProbeHost</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+    <ProjectReference Include="..\LDI12.Platform\LDI12.Platform.csproj" />
+    <ProjectReference Include="..\LDI12.Collectors\LDI12.Collectors.csproj" />
+    <ProjectReference Include="..\LDI12.Engine\LDI12.Engine.csproj" />
+    <ProjectReference Include="..\LDI12.Reports\LDI12.Reports.csproj" />
+    <ProjectReference Include="..\LDI12.Actions\LDI12.Actions.csproj" />
+  </ItemGroup>
+
+</Project>

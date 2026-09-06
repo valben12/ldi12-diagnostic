@@ -1,0 +1,53 @@
+﻿<Project>
+
+  <!-- Importé en fin de csproj : $(TargetFramework) y est enfin résolu.
+       Les assemblies de référence en paquet rendent la compilation reproductible
+       sur une machine sans les targeting packs .NET Framework installés. -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Support de langage, pas une bibliothèque : System.ValueTuple n'entre dans le
+         .NET Framework qu'en 4.7. Sur net462, le compilateur exige ce paquet dès qu'un
+         tuple apparaît. Même catégorie que le shim IsExternalInit de C# 9 : la règle
+         « LDI12.Core ne dépend de rien » reste tenue au sens des bibliothèques tierces. -->
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+
+  <!-- Chaque assembly a besoin de son propre IsExternalInit : le compilateur exige que le type
+       soit visible depuis l'assembly qui déclare un accesseur « init ». Un fichier source
+       partagé, lié dans tous les projets .NET Framework, est la forme la plus simple. -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' AND '$(MSBuildProjectName)' != ''">
+    <Compile Include="$(MSBuildThisFileDirectory)src\Shared\IsExternalInit.cs" Link="Compat\IsExternalInit.cs" />
+  </ItemGroup>
+
+  <!-- Le résolveur de dépendances embarquées est lié dans les deux exécutables et nulle part
+       ailleurs. Il doit être compilé DANS l'hôte : il entre en action avant que la première
+       bibliothèque soit chargée, et LDI12.Core est justement l'une de celles qu'il rend. -->
+  <!-- Sur le dossier et non sur le nom du projet : la compilation du balisage XAML passe par un
+       projet temporaire rebaptisé « LDI12.App_xxxxxxx_wpftmp », qui vit dans le même dossier.
+       Un test de nom y échouerait, et l'échec ne se verrait qu'à la compilation de l'interface. -->
+  <PropertyGroup>
+    <LdiHostProject Condition="$(MSBuildProjectDirectory.EndsWith('LDI12.App'))">true</LdiHostProject>
+    <LdiHostProject Condition="$(MSBuildProjectDirectory.EndsWith('LDI12.ProbeHost'))">true</LdiHostProject>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(LdiHostProject)' == 'true'">
+    <Compile Include="$(MSBuildThisFileDirectory)src\Shared\ModuleInitializerAttribute.cs"
+             Link="Compat\ModuleInitializerAttribute.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)src\Shared\AssemblyBundle.cs"
+             Link="Hosting\AssemblyBundle.cs" />
+  </ItemGroup>
+
+  <!-- Publication : les dépendances rassemblées par build\publish.ps1 dans Bundle\ deviennent
+       des ressources de l'exécutable. Rien de tout cela n'existe en compilation ordinaire, où
+       les fichiers restent côte à côte sur le disque. -->
+  <ItemGroup Condition="'$(BundleDependencies)' == 'true'">
+    <EmbeddedResource Include="Bundle\*.dll;Bundle\*.exe">
+      <LogicalName>LDI12.Bundle.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,66 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Mêmes clés que Tokens.Dark.xaml, valeurs inversées.
+         Le rouge de marque tombe à 4,16:1 sur fond clair : le texte rouge passe donc au ton
+         foncé #BE2129, comme le fait déjà le site. Les couleurs d'état sont assombries pour
+         rester lisibles sur fond blanc. -->
+
+    <SolidColorBrush x:Key="Brush.SurfaceHard" Color="#FFE8E5EC" />
+    <SolidColorBrush x:Key="Brush.Ground" Color="#FFF4F3F7" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Brush.SurfaceSoft" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Brush.SurfaceHover" Color="#0F100D14" />
+
+    <SolidColorBrush x:Key="Brush.BrandRed" Color="#FFBE2129" />
+    <SolidColorBrush x:Key="Brush.BrandRedDark" Color="#FF9A1A21" />
+    <SolidColorBrush x:Key="Brush.BrandRedButton" Color="#FFDE2028" />
+    <SolidColorBrush x:Key="Brush.BrandRedSoft" Color="#18BE2129" />
+
+    <SolidColorBrush x:Key="Brush.TextPrimary" Color="#FF131116" />
+    <SolidColorBrush x:Key="Brush.TextSecondary" Color="#B3131116" />
+    <SolidColorBrush x:Key="Brush.TextTertiary" Color="#7A131116" />
+    <SolidColorBrush x:Key="Brush.TextOnAccent" Color="#FFFFFFFF" />
+
+    <SolidColorBrush x:Key="Brush.BorderSubtle" Color="#1A100D14" />
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="#33100D14" />
+
+    <!-- Sur fond clair, la lumière vient toujours du haut elle aussi : la bordure est donc plus
+         marquée en haut, pas plus claire. -->
+    <LinearGradientBrush x:Key="Brush.CardEdge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#2A100D14" Offset="0" />
+        <GradientStop Color="#18100D14" Offset="0.42" />
+        <GradientStop Color="#12100D14" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="Brush.SidebarFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFEFEDF3" Offset="0" />
+        <GradientStop Color="#FFE5E2EA" Offset="1" />
+    </LinearGradientBrush>
+
+
+
+    <SolidColorBrush x:Key="Brush.LogoPlate" Color="#FF15151C" />
+
+    <SolidColorBrush x:Key="Brush.WindowEdge" Color="#FFC7C3CE" />
+
+    <SolidColorBrush x:Key="Brush.CaptionHover" Color="#14100D14" />
+    <SolidColorBrush x:Key="Brush.CaptionClose" Color="#FFDE2028" />
+
+    <SolidColorBrush x:Key="Brush.StatusGood" Color="#FF047857" />
+    <SolidColorBrush x:Key="Brush.StatusWarning" Color="#FFB45309" />
+    <SolidColorBrush x:Key="Brush.StatusProblem" Color="#FFC2410C" />
+    <SolidColorBrush x:Key="Brush.StatusCritical" Color="#FFBE2129" />
+    <SolidColorBrush x:Key="Brush.StatusInfo" Color="#FF2563EB" />
+    <SolidColorBrush x:Key="Brush.StatusUnavailable" Color="#FF6B6873" />
+
+    <SolidColorBrush x:Key="Brush.StatusGoodSoft" Color="#1A047857" />
+    <SolidColorBrush x:Key="Brush.StatusWarningSoft" Color="#1AB45309" />
+    <SolidColorBrush x:Key="Brush.StatusProblemSoft" Color="#1AC2410C" />
+    <SolidColorBrush x:Key="Brush.StatusCriticalSoft" Color="#1ABE2129" />
+    <SolidColorBrush x:Key="Brush.StatusInfoSoft" Color="#1A2563EB" />
+    <SolidColorBrush x:Key="Brush.StatusUnavailableSoft" Color="#166B6873" />
+
+    <SolidColorBrush x:Key="Brush.TrackBackground" Color="#1A100D14" />
+
+</ResourceDictionary>

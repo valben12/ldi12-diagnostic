@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Core</RootNamespace>
+    <AssemblyName>LDI12.Core</AssemblyName>
+    <!-- Contrat d'architecture : ce projet ne référence AUCUN paquet et AUCUN autre projet. -->
+  </PropertyGroup>
+
+</Project>

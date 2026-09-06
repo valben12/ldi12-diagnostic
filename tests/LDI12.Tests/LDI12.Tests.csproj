@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net472 : le projet de test n'est pas déployé sur les machines clientes, il peut donc
+         cibler un framework plus récent tout en référençant les assemblies net462. -->
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>LDI12.Tests</RootNamespace>
+    <AssemblyName>LDI12.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LDI12.Core\LDI12.Core.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Collectors\LDI12.Collectors.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Platform\LDI12.Platform.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Engine\LDI12.Engine.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Reports\LDI12.Reports.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Actions\LDI12.Actions.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Publishing.Klarvi\LDI12.Publishing.Klarvi.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Updates\LDI12.Updates.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Le gestionnaire HTTP de substitution qui rend la publication vérifiable sans Klarvi. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Manifestes réellement signés par la clé de production, produits une fois et versionnés.
+         Sans eux, les tests de signature ne prouveraient que la cohérence du code avec
+         lui-même. -->
+    <None Include="Donnees\Updates\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

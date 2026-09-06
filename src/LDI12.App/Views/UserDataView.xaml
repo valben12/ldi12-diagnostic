@@ -1,0 +1,156 @@
+﻿<UserControl x:Class="LDI12.App.Views.UserDataView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Archive}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Données" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
+                       TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
+
+            <!-- ===== Ce que le relevé fait, et ne fait pas =====
+                 Le pendant en lecture de l'écran de nettoyage : celui-ci montre ce qui peut
+                 disparaître, celui-là ce qu'il ne faut pas perdre. -->
+            <Border Style="{StaticResource Card}" Padding="20,18" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Text="CE QU'IL Y AURAIT À SAUVEGARDER" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
+                               HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Text="Avant une réinstallation, la question n'est pas seulement « combien de gigaoctets » mais « combien de temps, combien de place, et qu'est-ce qu'on oublie ». Ce relevé compte les fichiers du compte ouvert, dossier par dossier. Il n'en ouvre aucun, n'en copie aucun, et n'affiche aucun nom de fichier : ce sont les données du client, et les regarder ne fait pas partie du travail." />
+
+                    <TextBlock Text="{Binding PlanSummary}" Style="{StaticResource Text.Muted}"
+                               Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="960"
+                               HorizontalAlignment="Left" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Relever les données"
+                                Command="{Binding RunCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
+                                Command="{Binding CancelCommand}" Margin="10,0,0,0" />
+                        <TextBlock Text="{Binding Progress}" Style="{StaticResource Text.Muted}"
+                                   VerticalAlignment="Center" Margin="16,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Résultat ===== -->
+            <TextBlock Text="{Binding Headline}" Style="{StaticResource Text.Body}" Margin="2,22,0,0"
+                       FontWeight="SemiBold" TextWrapping="Wrap"
+                       Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}" />
+
+            <TextBlock Text="DOSSIER PAR DOSSIER" Style="{StaticResource Text.Eyebrow}" Margin="2,18,0,10"
+                       Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}" />
+
+            <Border Style="{StaticResource Card}" Padding="18,14"
+                    Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding Folders}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                                    <TextBlock Text="{Binding Label}" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Text="{Binding Path}" Style="{StaticResource Text.Muted}"
+                                               Margin="0,3,0,0" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Path}" />
+
+                                    <!-- La distinction qui décide d'une réinstallation : ce que la
+                                         copie emporterait, et ce qu'elle laisserait derrière. -->
+                                    <TextBlock Text="{Binding CloudNote}" Style="{StaticResource Text.Muted}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap" FontStyle="Italic"
+                                               Foreground="{DynamicResource Brush.StatusWarning}"
+                                               Visibility="{Binding HasCloudNote, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="1" Text="{Binding Files}"
+                                           Style="{StaticResource Text.Muted}" MinWidth="110"
+                                           TextAlignment="Right" VerticalAlignment="Top" />
+                                <TextBlock Grid.Column="2" Text="{Binding OnDisk}"
+                                           Style="{StaticResource FactValue}" MinWidth="110"
+                                           TextAlignment="Right" VerticalAlignment="Top" Margin="16,0,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- ===== Réserves =====
+                 Ce que le relevé ne dit pas, et il en dit beaucoup : les fichiers restés dans le
+                 nuage, les autres comptes, les autres volumes. -->
+            <Border Style="{StaticResource Card}" Padding="18,15" Margin="0,10,0,0"
+                    Visibility="{Binding HasCaveats, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="CE QUE CE RELEVÉ NE COUVRE PAS" Style="{StaticResource Text.Eyebrow}" />
+                    <ItemsControl ItemsSource="{Binding Caveats}" Margin="0,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,7" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Copie vers un support externe =====
+                 La moitié manquante de cet écran : il disait depuis longtemps ce qu'il y avait à
+                 sauvegarder, il fallait ensuite le faire à la main. Les trois promesses sont
+                 écrites dans la carte, parce que ce sont elles qui permettent de lancer la copie
+                 sans crainte, et qu'elles sont tenues par le code, pas par cette phrase. -->
+            <TextBlock Text="COPIER SUR UN SUPPORT EXTERNE" Style="{StaticResource Text.Eyebrow}"
+                       Margin="2,22,0,10" />
+
+            <Border Style="{StaticResource Card}" Padding="20,18">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960"
+                               HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Text="Les dossiers personnels du compte ouvert sont copiés vers le support choisi, puis chaque fichier est relu et comparé à sa source. Rien n'est déplacé ni effacé à la source, rien n'est écrasé à la destination, et un manifeste de tout ce qui a été copié est déposé dans le dossier de sauvegarde." />
+
+                    <TextBlock Text="Dossier de destination" Style="{StaticResource Text.Muted}"
+                               Margin="0,16,0,6" />
+                    <!-- Largeur posée : un champ vide aligné à gauche se réduit à son contenu,
+                         c'est-à-dire à rien, et étiré il se centre au milieu de la carte. -->
+                    <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
+                             Text="{Binding BackupDestination, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
+                                Command="{Binding PrepareBackupCommand}" />
+                        <Button Style="{StaticResource Button.Primary}" Content="Copier et vérifier"
+                                Command="{Binding RunBackupCommand}" Margin="10,0,0,0" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding BackupSummary}" Style="{StaticResource Text.Body}"
+                               Margin="0,16,0,0" TextWrapping="Wrap" MaxWidth="960"
+                               HorizontalAlignment="Left"
+                               Visibility="{Binding HasBackupPreview, Converter={StaticResource BoolToVisibility}}" />
+
+                    <ItemsControl ItemsSource="{Binding BackupLines}" Margin="0,10,0,0"
+                                  Visibility="{Binding HasBackupPreview, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,6" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

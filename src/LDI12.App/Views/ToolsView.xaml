@@ -1,0 +1,76 @@
+<UserControl x:Class="LDI12.App.Views.ToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:controls="clr-namespace:LDI12.App.Controls">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Toolbox}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Outils" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,4" MaxWidth="1100"
+                       HorizontalAlignment="Left"
+                       Text="Les consoles de Windows, ouvertes depuis le diagnostic. Elles s'exécutent telles quelles : LDI12 ne fait que les lancer, et consigne leur ouverture dans le journal d'intervention." />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,18"
+                       MaxWidth="1100" HorizontalAlignment="Left" />
+
+            <ItemsControl ItemsSource="{Binding Items}">
+                <!-- PairGrid plutôt qu'UniformGrid : une raison d'indisponibilité un peu longue
+                     étirerait sinon toutes les autres tuiles à sa hauteur. -->
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <controls:PairGrid Columns="2" ColumnGap="10" MinColumnWidth="360" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource ToolCard}" Padding="18,15" Margin="0,0,0,10"
+                                local:Motion.Entrance="True">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Title}"
+                                               Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}"
+                                               FontWeight="SemiBold" Margin="0,0,10,0"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}"
+                                               Style="{StaticResource Text.Muted}" VerticalAlignment="Top" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Purpose}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,7,0,0" />
+
+                                <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0"
+                                           Text="Windows demandera les privilèges administrateur à l'ouverture."
+                                           Visibility="{Binding PromptsForElevation, Converter={StaticResource BoolToVisibility}}" />
+
+                                <!-- Absente : on dit pourquoi. Un outil grisé sans phrase laisse
+                                     croire que la machine du client a un problème de plus. -->
+                                <TextBlock Text="{Binding Reason}" Style="{StaticResource Text.Muted}"
+                                           Foreground="{DynamicResource Brush.StatusWarning}"
+                                           Margin="0,8,0,0"
+                                           Visibility="{Binding HasReason, Converter={StaticResource BoolToVisibility}}" />
+
+                                <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir"
+                                        HorizontalAlignment="Left" Margin="0,12,0,0"
+                                        Command="{Binding LaunchCommand}"
+                                        Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

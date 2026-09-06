@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Collectors</RootNamespace>
+    <AssemblyName>LDI12.Collectors</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Assemblies du framework, aucun paquet.
+         ServiceProcess : énumération des services sans passer par WMI.
+         Core : System.Diagnostics.Eventing.Reader, lecture XML des journaux d'événements.
+         Xml : durées ISO 8601 du planificateur de tâches.
+         CSharp : liaison tardive sur l'interface du planificateur, sans assemblage d'interop. -->
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+</Project>

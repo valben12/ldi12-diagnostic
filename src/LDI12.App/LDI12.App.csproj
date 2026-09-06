@@ -1,0 +1,66 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.App</RootNamespace>
+    <AssemblyName>LDI12.Diagnostic</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Icône de l'exécutable : c'est elle que montrent l'Explorateur, la barre des tâches et
+         Alt+Tab. Générée depuis ico.png à la racine, en neuf résolutions de 16 à 256 points. -->
+    <ApplicationIcon>Assets\ldi12.ico</ApplicationIcon>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <!-- WPF sur .NET Framework impose l'inclusion explicite : les items par défaut du SDK
+         ne connaissent ni ApplicationDefinition ni Page. -->
+    <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Include="**\*.xaml" Exclude="App.xaml;bin\**;obj\**">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="**\*.cs" Exclude="bin\**;obj\**" />
+    <Resource Include="Assets\logo.png" />
+
+    <!-- Écran d'attente. L'action de génération « SplashScreen » du SDK reste sans effet sur
+         ce projet, vérifié : aucune ressource de ce nom dans l'assemblage produit. L'image
+         est donc une ressource ordinaire, et c'est l'application qui l'affiche et la ferme,
+         ce qui a l'avantage de la faire disparaître quand la fenêtre est réellement prête
+         plutôt qu'au premier signe de vie du processus. -->
+    <Resource Include="Assets\splash.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+    <ProjectReference Include="..\LDI12.Platform\LDI12.Platform.csproj" />
+    <ProjectReference Include="..\LDI12.Collectors\LDI12.Collectors.csproj" />
+    <ProjectReference Include="..\LDI12.Engine\LDI12.Engine.csproj" />
+    <ProjectReference Include="..\LDI12.Reports\LDI12.Reports.csproj" />
+    <ProjectReference Include="..\LDI12.Actions\LDI12.Actions.csproj" />
+
+    <!-- Seule référence réseau de la solution, et elle s'arrête ici : l'application connaît
+         l'implémentation Klarvi pour la construire, le reste ne connaît que IReportPublisher. -->
+    <ProjectReference Include="..\LDI12.Publishing.Klarvi\LDI12.Publishing.Klarvi.csproj" />
+    <!-- La vérification de mise à jour : le second et dernier projet qui parle HTTP. -->
+    <ProjectReference Include="..\LDI12.Updates\LDI12.Updates.csproj" />
+  </ItemGroup>
+
+</Project>

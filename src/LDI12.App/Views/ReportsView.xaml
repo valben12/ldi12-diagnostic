@@ -1,0 +1,229 @@
+﻿<UserControl x:Class="LDI12.App.Views.ReportsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App">
+
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.FileText}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Rapports" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18" />
+
+            <!-- ===== Mentions portées sur les documents ===== -->
+            <Border Style="{StaticResource Card}" Padding="20,18" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Text="MENTIONS PORTÉES SUR LES DOCUMENTS" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" MaxWidth="820"
+                               HorizontalAlignment="Left"
+                               Text="Ces informations ne sont pas enregistrées dans le diagnostic : elles sont ajoutées à l'édition. Le même diagnostic peut donc être réédité plus tard, à un autre nom, sans être refait." />
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                            <TextBlock Text="TECHNICIEN" Style="{StaticResource FieldLabel}" />
+                            <TextBox Style="{StaticResource Field}"
+                                     Text="{Binding Technician, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                            <TextBlock Text="RÉFÉRENCE DU DOSSIER CLIENT" Style="{StaticResource FieldLabel}" />
+                            <TextBox Style="{StaticResource Field}"
+                                     Text="{Binding ClientReference, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="OBSERVATION" Style="{StaticResource FieldLabel}" Margin="2,16,0,5" />
+                    <TextBox Style="{StaticResource Field}" MinHeight="66" AcceptsReturn="True"
+                             TextWrapping="Wrap" VerticalContentAlignment="Top"
+                             Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="DOSSIER D'ENREGISTREMENT" Style="{StaticResource FieldLabel}" Margin="2,16,0,5" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource Field}"
+                                 Text="{Binding Directory, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1" Style="{StaticResource Button.Ghost}" Content="Ouvrir le dossier"
+                                Command="{Binding OpenFolderCommand}" Margin="10,0,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Les trois documents ===== -->
+            <TextBlock Text="DOCUMENTS DISPONIBLES" Style="{StaticResource Text.Eyebrow}" Margin="2,22,0,10" />
+
+            <ItemsControl>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="3" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <Border Style="{StaticResource Card}" Padding="20,18" Margin="0,0,10,0"
+                        local:Motion.Entrance="True">
+                    <DockPanel LastChildFill="True">
+                        <Button DockPanel.Dock="Bottom" Style="{StaticResource Button.Ghost}" Content="Exporter"
+                                Margin="0,15,0,0" HorizontalAlignment="Left"
+                                Command="{Binding ExportTechnicianCommand}" />
+                        <StackPanel>
+                        <TextBlock Text="Rapport technicien" Style="{StaticResource Text.Emphasis}" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="Constats, caractéristiques relevées, modules de collecte et justification ligne à ligne du score. Contient les numéros de série et les noms de périphériques." />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="Fichier HTML autonome, imprimable en PDF depuis n'importe quel navigateur." />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Padding="20,18" Margin="5,0,5,0"
+                        local:Motion.Entrance="True">
+                    <DockPanel LastChildFill="True">
+                        <Button DockPanel.Dock="Bottom" Style="{StaticResource Button.Ghost}" Content="Exporter"
+                                Margin="0,15,0,0" HorizontalAlignment="Left"
+                                Command="{Binding ExportClientCommand}" />
+                        <StackPanel>
+                        <TextBlock Text="Bilan client" Style="{StaticResource Text.Emphasis}" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="État général, ce qui va bien, ce qu'il faut surveiller, recommandations numérotées. Aucun jargon, aucun code, aucun numéro de série." />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="Dit aussi ce qui n'a pas pu être vérifié : c'est ce qui rend le reste crédible." />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Padding="20,18" Margin="10,0,0,0"
+                        local:Motion.Entrance="True">
+                    <DockPanel LastChildFill="True">
+                        <Button DockPanel.Dock="Bottom" Style="{StaticResource Button.Ghost}" Content="Exporter"
+                                Margin="0,15,0,0" HorizontalAlignment="Left"
+                                Command="{Binding ExportJsonCommand}" />
+                        <StackPanel>
+                        <TextBlock Text="Données brutes" Style="{StaticResource Text.Emphasis}" />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="L'instantané complet en JSON, avec l'état de disponibilité et la provenance de chaque mesure." />
+                        <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                                   Text="Relisible par l'outil : c'est ce qui permettra de comparer un avant et un après réparation." />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </ItemsControl>
+
+            <Button Style="{StaticResource Button.Primary}" Content="Exporter les trois documents"
+                    HorizontalAlignment="Left" Margin="0,18,0,0"
+                    Command="{Binding ExportAllCommand}" />
+
+            <!-- ===== Journal d'intervention =====
+                 Relu ici, au moment de remettre les documents : c'est là que le technicien
+                 vérifie que ce qu'il donne correspond à ce qu'il a fait. Les deux rapports
+                 HTML le reprennent, chacun dans sa rédaction. -->
+            <TextBlock Text="JOURNAL D'INTERVENTION" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10"
+                       Visibility="{Binding HasJournal, Converter={StaticResource BoolToVisibility}}" />
+            <Border Style="{StaticResource Card}" Padding="20,16"
+                    Visibility="{Binding HasJournal, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding JournalEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Time}"
+                                                   Style="{StaticResource Text.Muted}" MinWidth="62" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Kind}"
+                                                   Style="{StaticResource Text.Muted}" MinWidth="126" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Title}"
+                                                   Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Detail}"
+                                                   Style="{StaticResource Text.Muted}"
+                                                   Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Muted}"
+                                               Margin="188,3,0,0" MaxWidth="900" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{Binding JournalPath}" Style="{StaticResource Text.Muted}"
+                               Margin="0,8,0,0" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding JournalPath}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Publication =====
+                 Deux gestes et non un seul : le premier dresse la liste de ce qui quitterait la
+                 machine, le second l'envoie. Il s'agit des données d'un client ; un bouton unique
+                 demanderait de faire confiance à une phrase générale. -->
+            <Border Style="{StaticResource Card}" Padding="20,18" Margin="0,18,0,0"
+                    Visibility="{Binding HasResult, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="PUBLIER LE DOSSIER" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
+                               HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Text="Le logiciel fonctionne hors ligne et n'envoie jamais rien de lui-même. La publication dépose le bilan client dans le service de l'atelier, sur demande, une fois par dossier. Le rapport technicien et le diagnostic brut restent sur cette machine." />
+
+                    <TextBlock Text="{Binding PublicationStatus}" Style="{StaticResource Text.Body}"
+                               Margin="0,12,0,0" TextWrapping="Wrap" MaxWidth="960"
+                               HorizontalAlignment="Left" />
+
+                    <!-- Ce qui quitterait la machine, ligne par ligne, avant que quoi que ce soit
+                         ne parte. -->
+                    <Border Style="{StaticResource PreviewPanel}" Margin="0,12,0,0"
+                            Visibility="{Binding HasPublicationPreview, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="CE QUI QUITTERAIT CETTE MACHINE" Style="{StaticResource Text.Eyebrow}" />
+                            <ItemsControl ItemsSource="{Binding PublicationLines}" Margin="0,10,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Style="{StaticResource Text.Body}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Le bouton d'envoi n'existe qu'une fois la liste établie : on ne peut pas
+                         déclencher un envoi avant d'avoir lu ce qu'il emporte. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Préparer l'envoi"
+                                Command="{Binding PreparePublicationCommand}"
+                                Visibility="{Binding HasPublicationPreview, Converter={StaticResource HiddenWhenTrue}}" />
+                        <Button Style="{StaticResource Button.Primary}" Content="Envoyer vers Klarvi"
+                                Command="{Binding PublishCommand}"
+                                Visibility="{Binding HasPublicationPreview, Converter={StaticResource BoolToVisibility}}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Abandonner"
+                                Command="{Binding AbandonPublicationCommand}" Margin="10,0,0,0"
+                                Visibility="{Binding HasPublicationPreview, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Avant la première analyse ===== -->
+            <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,18,0,0"
+                    Visibility="{Binding HasResult, Converter={StaticResource HiddenWhenTrue}}">
+                <TextBlock Style="{StaticResource Text.Body}"
+                           Text="Aucun diagnostic n'a encore été produit. Lancez une analyse rapide ou un diagnostic complet depuis la barre supérieure." />
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,33 @@
+﻿<Project>
+
+  <PropertyGroup>
+    <!-- C# 9 et non « latest » : MSBuild 16.11 (VS2019 Build Tools, utilisé pour WPF net462)
+         plafonne à C# 9, alors que le SDK dotnet 7 irait jusqu'à C# 11. Figer la version
+         garantit que les deux chaînes produisent exactement le même code. -->
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <Company>Laguiole Dépannage Informatique</Company>
+    <Product>LDI12 Diagnostic</Product>
+    <Authors>LDI12</Authors>
+    <Copyright>Copyright © LDI12</Copyright>
+    <!-- Le numéro apparaît dans le pied de chaque rapport et dans le nom du fichier publié :
+         c'est ce qui permet de savoir, six mois plus tard, quelle version a produit un document.
+         1.0.0 : les phases 0 à 8, le logiciel sort de l'atelier en un seul fichier.
+         1.1.0 : l'inventaire logiciel, et le français imposé quelle que soit la machine. -->
+    <VersionPrefix>1.23.0</VersionPrefix>
+    <NeutralLanguage>fr-FR</NeutralLanguage>
+    <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
+
+    <DebugType>portable</DebugType>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- Le logiciel tourne sur des machines potentiellement instables : on veut voir
+         les avertissements, pas les transformer en échec de build. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+  </PropertyGroup>
+
+</Project>

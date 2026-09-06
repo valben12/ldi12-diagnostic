@@ -1,0 +1,209 @@
+<UserControl x:Class="LDI12.App.Views.SectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:controls="clr-namespace:LDI12.App.Controls">
+
+    <!-- La colonne suit la largeur de la fenêtre jusqu'à 1440 points, puis se centre : au-delà,
+         une ligne de texte devient trop longue pour être lue d'un seul balayage de l'œil. En
+         deçà (c'est-à-dire presque toujours), rien n'est bridé, et redimensionner la fenêtre
+         redistribue vraiment la place.
+         La réserve est portée par le contenu, jamais par ScrollViewer.Padding : le gabarit du
+         ScrollViewer applique sa marge intérieure au présentateur, qui découpe donc le contenu
+         30 points avant le bord réel. On voyait alors une bande de fond nu au-dessus d'une carte
+         tranchée, une coupure qui semblait prématurée, parce qu'elle l'était. Portée par le
+         contenu, la réserve défile avec lui et le contenu est découpé au bord même du cadre. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{Binding IconKey, Converter={StaticResource IconKey}}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,8,0,18" />
+
+            <!-- ===== Constats ===== -->
+            <ItemsControl ItemsSource="{Binding Findings}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="0"
+                                local:Motion.Entrance="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- Pastille de gravité posée en retrait, et non à fleur de carte.
+                                     Un bandeau collé au bord devrait épouser l'arrondi intérieur de
+                                     la carte ; or WPF rabote un rayon de 13 points sur un élément
+                                     large de 4, et la barre se déforme en fuseau. Le retrait
+                                     supprime le problème au lieu d'essayer de le corriger, et
+                                     reprend au passage la forme de la pastille de navigation. -->
+                                <Border Grid.Column="0" Style="{StaticResource SeverityStripe}"
+                                        Margin="15,16,0,16" />
+                                <StackPanel Grid.Column="1" Margin="13,16,20,16">
+
+                                    <!-- Niveau 1 : le constat, toujours visible -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Style="{StaticResource SeverityDot}"
+                                                 VerticalAlignment="Top" Margin="0,5,0,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="10,0,12,0"
+                                                   Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   FontWeight="SemiBold" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                            <TextBlock Text="{Binding SeverityLabel}"
+                                                       Style="{StaticResource SeverityText}" />
+                                            <TextBlock Text="{Binding RuleId}" Style="{StaticResource Text.Muted}"
+                                                       Margin="10,0,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Niveau 2 : le détail technique -->
+                                    <TextBlock Text="{Binding TechnicalDetail}" Style="{StaticResource Text.Body}"
+                                               Margin="19,8,0,0" MaxWidth="1100" HorizontalAlignment="Left" />
+
+                                    <!-- Niveau 3 : explication client et mesures à l'appui -->
+                                    <Expander Style="{StaticResource Detail}" Margin="19,10,0,0"
+                                              Header="Explication client et mesures">
+                                        <StackPanel Margin="0,10,0,0">
+                                            <TextBlock Text="{Binding PlainExplanation}"
+                                                       Style="{StaticResource Text.Body}" MaxWidth="1100" HorizontalAlignment="Left"
+                                                       Foreground="{DynamicResource Brush.TextSecondary}" />
+                                            <ItemsControl ItemsSource="{Binding Evidence}" Margin="0,10,0,0"
+                                                          Visibility="{Binding HasEvidence, Converter={StaticResource BoolToVisibility}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                                                   Margin="0,0,0,3" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Expander>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{StaticResource Card}" Padding="20,16"
+                    Visibility="{Binding HasFindings, Converter={StaticResource HiddenWhenTrue}}">
+                <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.Body}" />
+            </Border>
+
+            <!-- ===== Caractéristiques relevées =====
+                 Les groupes viennent de FactSheetBuilder, partagé avec les rapports : ce que le
+                 technicien lit ici est mot pour mot ce que le client lira dans le document. -->
+            <TextBlock Text="CARACTÉRISTIQUES RELEVÉES" Style="{StaticResource Text.Eyebrow}" Margin="2,22,0,10"
+                       Visibility="{Binding HasGroups, Converter={StaticResource BoolToVisibility}}" />
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Padding="20,17" Margin="0,0,0,10"
+                                local:Motion.Entrance="True">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Emphasis}" />
+                                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,3,0,0"
+                                           Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisibility}}" />
+
+                                <ItemsControl ItemsSource="{Binding Visible}" Margin="0,13,0,0"
+                                              Visibility="{Binding HasFacts, Converter={StaticResource BoolToVisibility}}">
+                                    <!-- PairGrid et non UniformGrid : ce dernier impose à toutes
+                                         les cellules la hauteur de la plus haute, si bien qu'une
+                                         seule raison d'absence étirait toute la carte. -->
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <controls:PairGrid Columns="2" ColumnGap="30" MinColumnWidth="320" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                                                    BorderThickness="0,0,0,1" Padding="0,7">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                               Style="{StaticResource Text.Muted}"
+                                                               MaxWidth="180" VerticalAlignment="Top" />
+                                                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                                                        <TextBlock Text="{Binding Value}"
+                                                                   Style="{StaticResource FactValue}" />
+                                                        <!-- La raison n'apparaît que là où il y en a une :
+                                                             sur une mesure absente, partielle, ou bloquée
+                                                             par les privilèges. -->
+                                                        <TextBlock Text="{Binding Note}" TextAlignment="Right"
+                                                                   Style="{StaticResource Text.Muted}"
+                                                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                                                   Margin="0,2,0,0"
+                                                                   Visibility="{Binding Note, Converter={StaticResource TextToVisibility}}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="{Binding NotCollectedNote}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,11,0,0"
+                                           Visibility="{Binding HasNotCollected, Converter={StaticResource BoolToVisibility}}" />
+
+                                <controls:FactTableView Table="{Binding Table}"
+                                                        Visibility="{Binding HasTable, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ===== Modules de collecte : « pourquoi cette information manque » ===== -->
+            <TextBlock Text="MODULES DE COLLECTE" Style="{StaticResource Text.Eyebrow}" Margin="2,20,0,10"
+                       Visibility="{Binding HasModules, Converter={StaticResource BoolToVisibility}}" />
+            <Border Style="{StaticResource Card}" Padding="18,14"
+                    Visibility="{Binding HasModules, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding Modules}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Style="{StaticResource ModuleDot}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="10,0,12,0"
+                                               Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding StatusLabel}"
+                                               Style="{StaticResource Text.Muted}" Margin="0,0,14,0" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Duration}"
+                                               Style="{StaticResource Text.Muted}" MinWidth="58"
+                                               TextAlignment="Right" />
+                                </Grid>
+                                <TextBlock Text="{Binding Message}" Style="{StaticResource Text.Muted}"
+                                           Margin="17,4,0,0" MaxWidth="1100" HorizontalAlignment="Left"
+                                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

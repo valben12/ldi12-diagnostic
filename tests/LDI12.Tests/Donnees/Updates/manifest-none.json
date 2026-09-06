@@ -1,0 +1,15 @@
+{
+  "product": "ldi12-diagnostic",
+  "name": "LDI12 Diagnostic",
+  "channel": "stable",
+  "checkedAt": "2026-09-20T09:15:00.000Z",
+  "current": "1.20.0",
+  "updateAvailable": false,
+  "latest": null,
+  "signature": {
+    "alg": "RS256",
+    "keyId": "753c6075c5f3df96",
+    "value": "JpIjMgJ3bJW2Sq4xuD37tvXQ5ObBRe0XcoPieZtC59vRdPorECMsaz2lrGHgSDMK87lIXRfP5VjV0lbse1LW5SCUOQ7egKKIPtcc/3CSJHGPSV8RxE0TkDelGPxA1oSzuOKi/aHU7zThCH6eSLD2/x4ooT08onSn0QZDVZTSjlpMrG46zAiy7xcVVeeGlSGoukqzjJudDxJnaymmnzTSC+ob1kVOfXZXHQ5gm0P8u9K+tIpP8LzvqCcSzSAYDPaWTWBmt7NM6Q6NfRM9+L14I1AZ22TWdl2e+ZKt/RYnpC8zb7SgqngY+LA7DeNtgsgWmLS6SXHp4q9KNjJVCxivpw==",
+    "payload": "eyJjaGFubmVsIjoic3RhYmxlIiwiY2hlY2tlZEF0IjoiMjAyNi0wOS0yMFQwOToxNTowMC4wMDBaIiwiY3VycmVudCI6IjEuMjAuMCIsImxhdGVzdCI6bnVsbCwibmFtZSI6IkxESTEyIERpYWdub3N0aWMiLCJwcm9kdWN0IjoibGRpMTItZGlhZ25vc3RpYyIsInVwZGF0ZUF2YWlsYWJsZSI6ZmFsc2V9"
+  }
+}

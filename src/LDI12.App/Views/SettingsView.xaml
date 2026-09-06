@@ -1,0 +1,307 @@
+﻿<UserControl x:Class="LDI12.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:controls="clr-namespace:LDI12.App.Controls">
+
+    <UserControl.Resources>
+        <Style x:Key="ThresholdBox" TargetType="TextBox">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+            <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush.BrandRed}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource Brush.BrandRed}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{DynamicResource Brush.SurfaceHover}"
+                                BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Control}">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource Brush.BrandRed}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding HasProblem}" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource Brush.StatusWarning}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Sliders}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Réglages" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,4" MaxWidth="1100"
+                       HorizontalAlignment="Left"
+                       Text="Les seuils qui déclenchent les constats. Tous y figurent, sans exception : c'est le technicien qui répond au client, il n'y a donc pas de chiffre qu'il n'aurait pas le droit de voir. Un seuil déplacé change ce que l'outil signale, jamais ce qu'il mesure." />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0"
+                       MaxWidth="1100" HorizontalAlignment="Left" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button Style="{StaticResource Button.Primary}" Content="Enregistrer les seuils"
+                        Command="{Binding SaveCommand}" />
+                <Button Style="{StaticResource Button.Ghost}" Content="Annuler les modifications"
+                        Margin="10,0,0,0" Command="{Binding RevertCommand}" />
+                <Button Style="{StaticResource Button.Ghost}" Content="Revenir au barème d'origine"
+                        Margin="10,0,0,0" Command="{Binding ResetCommand}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding ProfilePath}" Style="{StaticResource Text.Muted}" Margin="2,12,0,0"
+                       TextTrimming="CharacterEllipsis" ToolTip="{Binding ProfilePath}" />
+
+            <!-- ===== Mises à jour =====
+                 Le seul échange réseau du logiciel en dehors des sondes réseau. L'écran dit ce
+                 qui part, parce qu'un technicien chez un client doit pouvoir le lui répéter. -->
+            <TextBlock Text="MISES À JOUR" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
+                <StackPanel>
+                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding CheckUpdatesOnStartup}">
+                        <TextBlock Text="Vérifier au démarrage s'il existe une version plus récente"
+                                   Style="{StaticResource Text.Body}"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />
+                    </CheckBox>
+
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="27,9,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Ce qui part : le numéro de version installée, le canal, l'architecture et la famille de Windows. Rien d'autre, ni le nom de la machine, ni un identifiant, ni aucun résultat d'analyse. La réponse du serveur est signée, et le fichier téléchargé est vérifié par son empreinte : un réseau d'entreprise qui déchiffre le trafic ne peut ni annoncer une fausse version, ni glisser un autre exécutable." />
+
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Sans connexion, il ne se passe rien : aucun message, aucune attente. Le diagnostic fonctionne entièrement hors ligne, et c'est chez les clients dont la box est en panne qu'il sert le plus." />
+
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Une version ordinaire est proposée : vous décidez. Une version qui corrige un constat faux ou une réparation qui abîme s'installe sans demander : un outil de diagnostic qui se trompe est pire qu'un outil absent. Dans les deux cas, le logiciel se remplace sur place et redémarre, y compris depuis une clé USB." />
+
+                    <TextBlock Text="{Binding UpdateStatus}" Style="{StaticResource Text.Muted}"
+                               Margin="27,12,0,0" MaxWidth="980" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="{Binding UpdatesPath}" Style="{StaticResource Text.Muted}"
+                               Margin="27,6,0,0" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding UpdatesPath}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Capteurs matériels =====
+                 Le seul réglage du logiciel qui installe quelque chose sur la machine. L'écran
+                 dit ce qu'il engage plutôt que de se contenter d'un libellé : c'est la différence
+                 entre un choix et un piège. -->
+            <TextBlock Text="CAPTEURS MATÉRIELS" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
+                <StackPanel>
+                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding AdvancedSensors}">
+                        <TextBlock Text="Lire la température du processeur et les sondes de la carte mère"
+                                   Style="{StaticResource Text.Body}"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />
+                    </CheckBox>
+
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="27,9,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Windows n'expose la température du processeur par aucune interface : ni le capteur DTS d'Intel ni le Tctl d'AMD ne sont lisibles depuis un programme ordinaire. HWMonitor, HWiNFO, NZXT CAM et Core Temp l'affichent tous en chargeant un pilote noyau signé. Il n'existe pas d'autre méthode, et c'est celle-ci qui s'active ici." />
+
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Foreground="{DynamicResource Brush.StatusWarning}"
+                               Text="Ce que cela implique : le pilote employé, WinRing0, figure sur la liste des pilotes vulnérables tenue par Microsoft ; il ouvre un accès direct au matériel, et un antivirus peut le signaler. Il est écrit sous forme d'un fichier .sys portant le nom du programme, chargé par un service à démarrage manuel le temps de l'analyse, puis les deux sont retirés : rien ne reste en place entre deux passages. Une alerte de Defender annonce alors la menace « VulnerableDriver:WinNT/Winring0 » et désigne, comme fichier en cause, celui qui porte le nom du programme : le client lit les deux à la fois. Une session administrateur est nécessaire, et sur Windows 10 et 11 la liste de blocage peut simplement le refuser, ce qui n'est pas une panne mais une protection qui fait son travail. Sur la machine d'un client, à annoncer avant de cocher." />
+
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Ce que cela apporte : température du processeur, sondes et ventilateurs de la carte mère, température des disques que le SMART ne rend pas." />
+
+                    <TextBlock Text="{Binding SensorStatus}" Style="{StaticResource Text.Muted}"
+                               Margin="27,10,0,0" MaxWidth="980" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Empreinte du logiciel =====
+                 Un outil qu'on emmène chez les gens doit pouvoir dire ce qu'il a laissé, et le
+                 retirer. Le relevé s'affiche sans qu'on le demande ; la suppression, elle, exige
+                 d'avoir vu la liste : c'est le typage de l'action qui l'impose, pas cet écran. -->
+            <TextBlock Text="TRACES DE CE LOGICIEL" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" MaxWidth="980" HorizontalAlignment="Left"
+                               Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold"
+                               Text="Ce logiciel écrit dans un seul dossier du profil de l'utilisateur." />
+
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" MaxWidth="980"
+                               HorizontalAlignment="Left"
+                               Text="Journaux, barème ajusté, diagnostics archivés et journal d'intervention. Rien dans la base de registre, aucun service, aucune tâche planifiée, aucun dossier de programmes." />
+
+                    <TextBlock Text="{Binding FootprintSummary}" Style="{StaticResource Text.Muted}"
+                               Margin="0,10,0,0" MaxWidth="980" HorizontalAlignment="Left"
+                               TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Style="{StaticResource Button.Ghost}" Content="Voir ce qui serait supprimé"
+                                Command="{Binding MeasureFootprintCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Effacer" Margin="10,0,0,0"
+                                Command="{Binding RemoveFootprintCommand}" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding FootprintLines}" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           TextWrapping="Wrap" MaxWidth="980" Margin="0,0,0,4"
+                                           HorizontalAlignment="Left" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="SEUILS DE DÉCLENCHEMENT" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,0" />
+
+            <ItemsControl ItemsSource="{Binding Groups}" Margin="0,10,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Eyebrow}"
+                                       Margin="2,18,0,10" />
+
+                            <Border Style="{StaticResource Card}" Padding="20,14"
+                                    local:Motion.Entrance="True">
+                                <ItemsControl ItemsSource="{Binding Items}">
+                                    <!-- PairGrid : un effet un peu long ne doit pas étirer les
+                                         quinze autres lignes à sa hauteur. -->
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <controls:PairGrid Columns="2" ColumnGap="28" MinColumnWidth="420" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                                                    BorderThickness="0,0,0,1" Padding="0,9">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                                        <TextBlock Text="{Binding Label}"
+                                                                   Style="{StaticResource Text.Body}"
+                                                                   Foreground="{DynamicResource Brush.TextPrimary}" />
+                                                        <TextBlock Text="{Binding Effect}"
+                                                                   Style="{StaticResource Text.Muted}"
+                                                                   Margin="0,3,0,0" />
+                                                        <TextBlock Text="{Binding RangeLabel}"
+                                                                   Style="{StaticResource Text.Muted}"
+                                                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                                                   Margin="0,3,0,0" />
+                                                        <TextBlock Text="{Binding Problem}"
+                                                                   Style="{StaticResource Text.Muted}"
+                                                                   Foreground="{DynamicResource Brush.StatusWarning}"
+                                                                   Margin="0,3,0,0"
+                                                                   Visibility="{Binding HasProblem, Converter={StaticResource BoolToVisibility}}" />
+                                                    </StackPanel>
+
+                                                    <TextBox Grid.Column="1" Style="{StaticResource ThresholdBox}"
+                                                             MinWidth="86" VerticalAlignment="Top"
+                                                             Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+
+                                                    <TextBlock Grid.Column="2" Text="{Binding Unit}"
+                                                               Style="{StaticResource Text.Muted}"
+                                                               MinWidth="66" Margin="8,10,0,0"
+                                                               VerticalAlignment="Top" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ===== Analyse personnalisée =====
+                 Deux besoins d'atelier : écarter un module qui cale sur une machine malade, et
+                 rejouer un seul domaine après une réparation sans refaire quatre minutes. -->
+            <Border Style="{StaticResource Card}" Padding="20,18" Margin="0,24,0,0">
+                <StackPanel>
+                    <TextBlock Text="ANALYSE PERSONNALISÉE" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
+                               HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Text="Choisir les modules à exécuter. Utile quand un module cale sur une machine malade, et quand on veut rejouer un seul domaine après une réparation sans refaire le diagnostic complet. Les modules écartés apparaissent dans le rapport avec la raison de leur absence." />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Style="{StaticResource Button.Ghost}" Content="Tout"
+                                Command="{Binding SelectAllCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Comme une analyse rapide"
+                                Command="{Binding SelectQuickCommand}" Margin="10,0,0,0" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Rien"
+                                Command="{Binding SelectNoneCommand}" Margin="10,0,0,0" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding Modules}" Margin="0,16,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="300" Margin="0,0,12,10" Padding="14,10"
+                                        Background="{DynamicResource Brush.Surface}"
+                                        BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1"
+                                        CornerRadius="{DynamicResource Radius.Card}">
+                                    <StackPanel>
+                                        <CheckBox Style="{StaticResource Check}" IsChecked="{Binding IsSelected}"
+                                                  Content="{Binding Name}" />
+                                        <TextBlock Text="{Binding CategoryLabel}" Style="{StaticResource Text.Muted}"
+                                                   Margin="26,4,0,0" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Text.Muted}"
+                                                   Margin="26,4,0,0" TextWrapping="Wrap" FontStyle="Italic"
+                                                   Opacity="0.85"
+                                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Ce que la sélection coûte, et ce qu'elle coûte à la note : la seconde
+                         phrase est la raison d'être de ce résumé. -->
+                    <TextBlock Text="{Binding SelectionSummary}" Style="{StaticResource Text.Body}"
+                               Margin="0,6,0,0" TextWrapping="Wrap" MaxWidth="960"
+                               HorizontalAlignment="Left" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Analyser la sélection"
+                                Command="{Binding RunSelectionCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- L'identité du logiciel, ses licences et ses composants ont leur propre écran :
+                 ils n'ont rien à faire au bas d'une page de seuils, où personne ne les cherche. -->
+            <TextBlock Style="{StaticResource Text.Muted}" Margin="2,26,0,0" TextWrapping="Wrap"
+                       MaxWidth="960" HorizontalAlignment="Left"
+                       Text="Version, licences, composants embarqués et coordonnées : écran « À propos », juste en dessous." />
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

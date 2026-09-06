@@ -1,0 +1,83 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Jetons repris du site ldi12.fr (globals.css / tailwind.config.ts).
+         Tokens.Light.xaml définit exactement les mêmes clés : la bascule se fait par échange
+         de dictionnaire, jamais par surcharge ponctuelle dans une vue. Toute vue référence
+         ces brosses en DynamicResource, sans quoi le changement de thème ne se propagerait pas. -->
+
+    <!-- Surfaces. Les neutres portent une pointe de violet (le bleu dépasse le rouge et le vert
+         de quatre unités) : un gris parfaitement neutre sur un si grand aplat paraît terne, et
+         cette dérive rattache la surface au rouge de la marque au lieu de s'y opposer.
+         Hiérarchie : barre latérale la plus sombre, puis le fond, puis les barres, puis les
+         cartes, l'élévation se lit par la clarté, jamais par une ombre. -->
+    <SolidColorBrush x:Key="Brush.SurfaceHard" Color="#FF06060A" />
+    <SolidColorBrush x:Key="Brush.Ground" Color="#FF09090D" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="#FF0D0D12" />
+    <SolidColorBrush x:Key="Brush.SurfaceSoft" Color="#FF141419" />
+    <SolidColorBrush x:Key="Brush.SurfaceHover" Color="#14FFFFFF" />
+
+    <!-- Marque : le rouge ne sert qu'à l'action principale et à l'état critique. -->
+    <SolidColorBrush x:Key="Brush.BrandRed" Color="#FFED2E36" />
+    <SolidColorBrush x:Key="Brush.BrandRedDark" Color="#FFBE2129" />
+    <SolidColorBrush x:Key="Brush.BrandRedButton" Color="#FFDE2028" />
+    <SolidColorBrush x:Key="Brush.BrandRedSoft" Color="#22ED2E36" />
+
+    <!-- Texte -->
+    <SolidColorBrush x:Key="Brush.TextPrimary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Brush.TextSecondary" Color="#B8FFFFFF" />
+    <SolidColorBrush x:Key="Brush.TextTertiary" Color="#78FFFFFF" />
+    <SolidColorBrush x:Key="Brush.TextOnAccent" Color="#FFFFFFFF" />
+
+    <!-- Bordures -->
+    <SolidColorBrush x:Key="Brush.BorderSubtle" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="#28FFFFFF" />
+
+    <!-- Bordure de carte : plus claire en haut, presque éteinte en bas. C'est le relief d'une
+         surface éclairée par le haut, obtenu par un dégradé de bordure d'un pixel, pas par une
+         ombre portée, qui serait un nuanceur de pixels. -->
+    <LinearGradientBrush x:Key="Brush.CardEdge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#30FFFFFF" Offset="0" />
+        <GradientStop Color="#14FFFFFF" Offset="0.42" />
+        <GradientStop Color="#0BFFFFFF" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- Barre latérale : dégradé très court, du haut légèrement éclairci vers le noir. Un seul
+         élément, donc un seul remplissage dégradé dans toute la fenêtre. -->
+    <LinearGradientBrush x:Key="Brush.SidebarFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FF0C0C11" Offset="0" />
+        <GradientStop Color="#FF06060A" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- Plaque du logo : le mot « LDI » du logotype est blanc, invisible sur fond clair. En thème
+         sombre il n'y a rien à faire, en thème clair il faut lui rendre un fond sombre. -->
+    <SolidColorBrush x:Key="Brush.LogoPlate" Color="#00000000" />
+
+    <!-- Contour de la fenêtre. Sans cadre système, c'est la seule chose qui sépare l'application
+         d'un fond de bureau sombre. -->
+    <SolidColorBrush x:Key="Brush.WindowEdge" Color="#FF26262E" />
+
+    <!-- Boutons de fenêtre -->
+    <SolidColorBrush x:Key="Brush.CaptionHover" Color="#18FFFFFF" />
+    <SolidColorBrush x:Key="Brush.CaptionClose" Color="#FFDE2028" />
+
+    <!-- États de diagnostic. « Non disponible » est gris et jamais rouge : une information
+         manquante n'est pas un problème de la machine. -->
+    <SolidColorBrush x:Key="Brush.StatusGood" Color="#FF34D399" />
+    <SolidColorBrush x:Key="Brush.StatusWarning" Color="#FFF59E0B" />
+    <SolidColorBrush x:Key="Brush.StatusProblem" Color="#FFF97316" />
+    <SolidColorBrush x:Key="Brush.StatusCritical" Color="#FFED2E36" />
+    <SolidColorBrush x:Key="Brush.StatusInfo" Color="#FF60A5FA" />
+    <SolidColorBrush x:Key="Brush.StatusUnavailable" Color="#FF7E7C85" />
+
+    <SolidColorBrush x:Key="Brush.StatusGoodSoft" Color="#2634D399" />
+    <SolidColorBrush x:Key="Brush.StatusWarningSoft" Color="#26F59E0B" />
+    <SolidColorBrush x:Key="Brush.StatusProblemSoft" Color="#26F97316" />
+    <SolidColorBrush x:Key="Brush.StatusCriticalSoft" Color="#26ED2E36" />
+    <SolidColorBrush x:Key="Brush.StatusInfoSoft" Color="#2660A5FA" />
+    <SolidColorBrush x:Key="Brush.StatusUnavailableSoft" Color="#207E7C85" />
+
+    <!-- Piste des jauges et barres -->
+    <SolidColorBrush x:Key="Brush.TrackBackground" Color="#1AFFFFFF" />
+
+</ResourceDictionary>

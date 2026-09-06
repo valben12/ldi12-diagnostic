@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Publishing.Klarvi</RootNamespace>
+    <AssemblyName>LDI12.Publishing.Klarvi</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Assemblies du framework. Le seul projet de la solution qui référence la pile HTTP :
+         c'est ce qui rend vérifiable la promesse « aucune dépendance inutile à Internet ». -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Sérialisation du dossier envoyé. Même version que LDI12.Actions. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

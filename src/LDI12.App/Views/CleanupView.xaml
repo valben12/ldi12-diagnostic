@@ -1,0 +1,166 @@
+<UserControl x:Class="LDI12.App.Views.CleanupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Trash}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Nettoyage" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,4" MaxWidth="1100"
+                       HorizontalAlignment="Left"
+                       Text="Rien n'est supprimé sans avoir été relevé et affiché. L'analyse liste les fichiers concernés ; la suppression ne porte que sur cette liste, et vérifie pour chacun qu'il n'a pas changé entre-temps." />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,18"
+                       MaxWidth="1100" HorizontalAlignment="Left" />
+
+            <!-- ===== Les sources ===== -->
+            <ItemsControl ItemsSource="{Binding Sources}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,10"
+                                local:Motion.Entrance="True">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox Grid.Column="0" Style="{StaticResource Check}"
+                                              IsChecked="{Binding IsSelected}" VerticalAlignment="Top">
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   FontWeight="SemiBold" />
+                                    </CheckBox>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding ResultLabel}"
+                                               Style="{StaticResource Text.Muted}" VerticalAlignment="Top"
+                                               TextAlignment="Right" Margin="16,0,0,0" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Explanation}" Style="{StaticResource Text.Muted}"
+                                           Margin="27,7,0,0" MaxWidth="900" HorizontalAlignment="Left" />
+
+                                <!-- Ce que la suppression coûte réellement. Une source de nettoyage
+                                     sans conséquence n'en affiche pas. -->
+                                <TextBlock Text="{Binding Consequence}" Style="{StaticResource Text.Muted}"
+                                           Foreground="{DynamicResource Brush.StatusWarning}"
+                                           Margin="27,5,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                           Visibility="{Binding HasConsequence, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Style="{StaticResource Text.Muted}" Margin="27,5,0,0"
+                                           MaxWidth="900" HorizontalAlignment="Left"
+                                           Text="Ce dossier n'est lisible qu'avec les privilèges administrateur : une invite Windows s'affichera à l'analyse."
+                                           Visibility="{Binding NeedsElevation, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="{Binding ScopeLabel}" Style="{StaticResource Text.Muted}"
+                                           Margin="27,5,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                           Visibility="{Binding HasScopeLabel, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Style="{StaticResource Text.Muted}" Margin="27,5,0,0"
+                                           MaxWidth="900" HorizontalAlignment="Left"
+                                           Text="Contient des fichiers supprimés par l'utilisateur : à ne cocher qu'après lui avoir demandé."
+                                           Foreground="{DynamicResource Brush.StatusCritical}"
+                                           Visibility="{Binding ContainsUserData, Converter={StaticResource BoolToVisibility}}" />
+
+                                <!-- La liste exacte de ce qui partirait -->
+                                <Expander Style="{StaticResource Detail}" Margin="27,10,0,0"
+                                          Header="Fichiers relevés"
+                                          Visibility="{Binding HasFiles, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Margin="0,8,0,0">
+                                        <TextBlock Text="{Binding PathsNote}" Style="{StaticResource Text.Muted}"
+                                                   Margin="0,0,0,6"
+                                                   Visibility="{Binding HasPathsNote, Converter={StaticResource BoolToVisibility}}" />
+                                        <ItemsControl ItemsSource="{Binding Paths}" MaxHeight="240">
+                                            <ItemsControl.Template>
+                                                <ControlTemplate TargetType="ItemsControl">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                        <ItemsPresenter />
+                                                    </ScrollViewer>
+                                                </ControlTemplate>
+                                            </ItemsControl.Template>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                                               FontFamily="Consolas" FontSize="11.5"
+                                                               Margin="0,0,0,2" TextTrimming="CharacterEllipsis" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ===== Commandes ===== -->
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button Style="{StaticResource Button.Ghost}" Content="Analyser la sélection"
+                        Command="{Binding AnalyzeCommand}" />
+                <Button Style="{StaticResource Button.Primary}" Content="Supprimer…" Margin="10,0,0,0"
+                        Command="{Binding RequestDeleteCommand}" />
+                <Button Style="{StaticResource Button.Ghost}" Content="Interrompre" Margin="10,0,0,0"
+                        Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
+                       MaxWidth="1100" HorizontalAlignment="Left"
+                       Visibility="{Binding HasSummary, Converter={StaticResource BoolToVisibility}}" />
+
+            <!-- ===== Confirmation ===== -->
+            <Border Style="{StaticResource ConfirmPanel}"
+                    Visibility="{Binding IsConfirming, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Confirmer la suppression" Style="{StaticResource Text.Emphasis}" />
+                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,7,0,0"
+                               MaxWidth="1000" HorizontalAlignment="Left" />
+
+                    <ItemsControl ItemsSource="{Binding WillNotDo}" Margin="0,10,0,0"
+                                  Visibility="{Binding HasWillNotDo, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Oui, supprimer ces éléments"
+                                Command="{Binding ConfirmDeleteCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Annuler" Margin="10,0,0,0"
+                                Command="{Binding AbandonCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Compte rendu ===== -->
+            <Border Style="{StaticResource OutcomePanel}"
+                    Visibility="{Binding HasOutcome, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="RÉSULTAT" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Text="{Binding OutcomeSummary}" Style="{StaticResource Text.Body}"
+                               Margin="0,6,0,0" MaxWidth="1000" HorizontalAlignment="Left" />
+                    <ItemsControl ItemsSource="{Binding OutcomeDetails}" Margin="0,9,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

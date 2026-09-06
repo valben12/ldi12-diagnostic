@@ -1,0 +1,187 @@
+<UserControl x:Class="LDI12.App.Views.MeasuresView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1440" Margin="28,30,28,36">
+
+            <StackPanel Orientation="Horizontal">
+                <Path Style="{StaticResource Icon}" Width="20" Height="20"
+                      Data="{StaticResource Icon.Gauge}"
+                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                <TextBlock Text="Mesures" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
+                       TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
+
+            <!-- ===== Ce qui va se passer =====
+                 Le seul écran qui sollicite volontairement la machine : ce qu'il va écrire, où et
+                 combien, est affiché avant le bouton qui le déclenche. -->
+            <Border Style="{StaticResource Card}" Padding="20,18" local:Motion.Entrance="True">
+                <StackPanel>
+                    <TextBlock Text="CE QUE LA MESURE VA FAIRE" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
+                               HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Text="Contrairement au reste du logiciel, cet écran ne se contente pas de regarder : il charge le processeur à fond et écrit un fichier sur le disque pour mesurer ce qu'il encaisse réellement. La machine répondra moins bien pendant ce temps, et c'est normal. Le chiffre qui compte est le temps d'un accès isolé : il sépare un disque mécanique d'une mémoire flash par un facteur cent." />
+
+                    <!-- Les volumes se choisissent à plat plutôt que dans une liste déroulante :
+                         une machine en a deux ou trois, et ce qui est mesuré doit rester lisible
+                         sur la capture d'écran comme sur le rapport. -->
+                    <TextBlock Text="VOLUME À MESURER" Style="{StaticResource Text.Eyebrow}" Margin="0,18,0,8" />
+
+                    <ListBox ItemsSource="{Binding Volumes}" SelectedItem="{Binding Volume}"
+                             Background="Transparent" BorderThickness="0" Padding="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="{DynamicResource Brush.Surface}"
+                                                    BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}"
+                                                    Padding="14,8">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="BorderBrush"
+                                                            Value="{DynamicResource Brush.BorderStrong}" />
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="BorderBrush"
+                                                            Value="{DynamicResource Brush.BrandRed}" />
+                                                    <Setter TargetName="Bd" Property="Background"
+                                                            Value="{DynamicResource Brush.SurfaceHover}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Display}" Style="{StaticResource Text.Body}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <CheckBox Style="{StaticResource Check}" Content="Disque"
+                                  IsChecked="{Binding MeasureStorage}" />
+                        <CheckBox Style="{StaticResource Check}" Content="Processeur"
+                                  IsChecked="{Binding MeasureProcessor}" Margin="20,0,0,0" />
+                        <CheckBox Style="{StaticResource Check}" Content="Mémoire"
+                                  IsChecked="{Binding MeasureMemory}" Margin="20,0,0,0" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding PlanSummary}" Style="{StaticResource Text.Muted}"
+                               Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="960"
+                               HorizontalAlignment="Left" />
+
+                    <!-- Un refus est expliqué, jamais un bouton grisé : « il ne reste pas assez de
+                         place » est en soi un résultat de diagnostic. -->
+                    <Border Style="{StaticResource ConfirmPanel}" Margin="0,14,0,0"
+                            Visibility="{Binding HasRefusal, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding Refusal}" Style="{StaticResource Text.Body}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Lancer les mesures"
+                                Command="{Binding RunCommand}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
+                                Command="{Binding CancelCommand}" Margin="10,0,0,0" />
+                        <TextBlock Text="{Binding Progress}" Style="{StaticResource Text.Muted}"
+                                   VerticalAlignment="Center" Margin="16,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Résultats ===== -->
+            <TextBlock Text="{Binding Headline}" Style="{StaticResource Text.Body}" Margin="2,22,0,0"
+                       FontWeight="SemiBold" TextWrapping="Wrap"
+                       Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}" />
+
+            <ItemsControl ItemsSource="{Binding Verdicts}" Margin="0,12,0,0"
+                          Visibility="{Binding HasVerdicts, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Padding="18,14" Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource SeverityStripe}" />
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                    <TextBlock Text="{Binding Statement}" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}"
+                                               FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Explanation}" Style="{StaticResource Text.Muted}"
+                                               Margin="0,5,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="CE QUI A ÉTÉ MESURÉ" Style="{StaticResource Text.Eyebrow}" Margin="2,18,0,10"
+                       Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}" />
+
+            <Border Style="{StaticResource Card}" Padding="18,14"
+                    Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding Measures}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,11">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                                    <TextBlock Text="{Binding Label}" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Text="{Binding Meaning}" Style="{StaticResource Text.Muted}"
+                                               Margin="0,3,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Display}"
+                                           Style="{StaticResource FactValue}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- ===== Réserves =====
+                 Relevées au moment de la mesure et non écrites après coup : une machine occupée
+                 ou un portable sur batterie suffisent à faire d'un mauvais chiffre un artefact. -->
+            <Border Style="{StaticResource Card}" Padding="18,15" Margin="0,10,0,0"
+                    Visibility="{Binding HasCaveats, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="DANS QUELLES CONDITIONS" Style="{StaticResource Text.Eyebrow}" />
+                    <ItemsControl ItemsSource="{Binding Caveats}" Margin="0,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           TextWrapping="Wrap" Margin="0,0,0,7" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

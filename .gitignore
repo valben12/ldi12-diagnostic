@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+artifacts/
+
+# Dépendances rassemblées le temps d'une publication, jamais versionnées :
+# ce sont des copies de la sortie de compilation.
+src/LDI12.App/Bundle/
+src/LDI12.ProbeHost/Bundle/
+TestResults/
+*.log
+snapshot*.json
+!build/fixtures/*.json

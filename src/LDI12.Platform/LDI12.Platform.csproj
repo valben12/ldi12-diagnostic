@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Platform</RootNamespace>
+    <AssemblyName>LDI12.Platform</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Assemblies du framework. -->
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Capteurs matériels : température du processeur, sondes Super-I/O de la carte mère,
+         ventilateurs. Seule méthode existante sous Windows, et celle qu'emploient HWMonitor,
+         HWiNFO, NZXT CAM et Core Temp : elle passe par un pilote noyau signé.
+         MPL-2.0, copyleft par fichier : la bibliothèque est utilisée sans modification, ce qui
+         n'impose rien au reste du logiciel.
+         Le pilote n'est jamais chargé tant que le technicien n'a pas activé la couche dans les
+         réglages, et jamais sans privilèges administrateur. Voir LibreHardwareSensorApi. -->
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
+  </ItemGroup>
+
+</Project>

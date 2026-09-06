@@ -1,0 +1,592 @@
+﻿<Window x:Class="LDI12.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:LDI12.App.Controls"
+        Title="LDI12 Diagnostic"
+        Icon="Assets/logo.png"
+        Height="700" Width="1220" MinHeight="700" MinWidth="1220"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None" ResizeMode="CanResize"
+        Background="{DynamicResource Brush.Ground}"
+        FontFamily="{DynamicResource Font.Ui}"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True">
+
+    <!-- Fenêtre sans cadre système.
+
+         WindowChrome, et non AllowsTransparency : une fenêtre transparente en WPF bascule tout le
+         rendu en logiciel, ce qui reviendrait à infliger à toutes les machines le mode dégradé
+         réservé aux plus faibles. Ici la fenêtre reste opaque et accélérée ; seule la zone non
+         cliente est reprise.
+
+         CaptionHeight vaut la hauteur de la barre supérieure : Windows continue donc de gérer
+         lui-même le déplacement, le double-clic qui agrandit, l'accroche aux bords et le menu
+         système au clic droit. Tout ce qui est cliquable dans cette bande porte
+         WindowChrome.IsHitTestVisibleInChrome, sans quoi le clic serait avalé par le déplacement.
+
+         Disponible depuis .NET Framework 4.0, donc sur Windows 7 comme sur Windows 11. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="56"
+                      ResizeBorderThickness="6"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <!-- Sans cadre système, ce liseré d'un pixel est la seule chose qui détache la fenêtre d'un
+         fond de bureau sombre. Il disparaît en plein écran, où il n'a plus rien à séparer. -->
+    <Border x:Name="Root">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Brush.Ground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.WindowEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                                 Value="Maximized">
+                        <Setter Property="BorderThickness" Value="0" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="236" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ================= Barre latérale ================= -->
+            <Border Grid.Column="0" Background="{DynamicResource Brush.SidebarFill}"
+                    BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="0,0,1,0">
+                <DockPanel LastChildFill="True">
+
+                    <!-- Même hauteur que la barre supérieure : le filet qui court sous les deux
+                         est continu d'un bord à l'autre de la fenêtre. -->
+                    <Border DockPanel.Dock="Top" Height="56"
+                            BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" Margin="18,0,20,0" VerticalAlignment="Center">
+                            <!-- L'icône du logiciel, telle qu'elle apparaît aussi dans la barre des tâches
+                                 et sur la fiche du site. Elle porte son propre fond et son propre
+                                 cadre : la plaque sombre qui existait ici ne servait qu'à rattraper
+                                 un logo blanc sur fond transparent, qui disparaissait en thème clair. -->
+                            <Image Source="Assets/logo.png" Width="38" Height="38"
+                                   VerticalAlignment="Center" Stretch="Uniform"
+                                   SnapsToDevicePixels="True"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="LDI12 Diagnostic" Style="{StaticResource Text.Emphasis}" />
+                                <TextBlock Text="OUTIL TECHNICIEN" Style="{StaticResource Text.Eyebrow}" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Pied : bascule de thème -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="20,16,20,20">
+                        <Button Style="{StaticResource Button.Ghost}" Command="{Binding ToggleThemeCommand}"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="14" Height="14">
+                                    <Path.Style>
+                                        <Style TargetType="Path" BasedOn="{StaticResource Icon}">
+                                            <Setter Property="Data" Value="{StaticResource Icon.Sun}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDarkTheme}" Value="False">
+                                                    <Setter Property="Data" Value="{StaticResource Icon.Moon}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                                <TextBlock Text="Thème" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <ListBox Style="{StaticResource Nav}" Margin="0,10,0,0"
+                             ItemsSource="{Binding Navigation}"
+                             SelectedItem="{Binding SelectedNavigation, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- L'entrée active passe au blanc, icône comprise. Le contraste
+                                         fait le travail que la couleur seule ne ferait pas : la
+                                         pastille rouge dit « ici », la valeur du texte dit « actif ». -->
+                                    <Path Grid.Column="0" Width="17" Height="17"
+                                          Data="{Binding IconKey, Converter={StaticResource IconKey}}">
+                                        <Path.Style>
+                                            <Style TargetType="Path" BasedOn="{StaticResource Icon}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Value="True"
+                                                                 Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}">
+                                                        <Setter Property="Stroke" Value="{DynamicResource Brush.TextPrimary}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="12,0,0,0"
+                                               VerticalAlignment="Center"
+                                               FontSize="{DynamicResource Font.Size.Body}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Value="True"
+                                                                 Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Ellipse Grid.Column="2" Style="{StaticResource NavBadge}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- ================= Zone principale ================= -->
+            <DockPanel Grid.Column="1" LastChildFill="True">
+
+                <!-- Barre supérieure : elle sert à la fois d'en-tête et de barre de titre. -->
+                <Border DockPanel.Dock="Top" Height="56" Background="{DynamicResource Brush.Surface}"
+                        BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="0,0,0,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Grille et non pile horizontale : dans une pile, chaque enfant reçoit une
+                             largeur infinie, donc rien ne se tronque et la version de Windows finit
+                             coupée net sous les boutons dès que la fenêtre se resserre. Ici la
+                             version occupe la colonne élastique et s'abrège proprement ; le nom de
+                             la machine et le niveau de privilèges, eux, ne disparaissent jamais :
+                             ce sont les deux informations qu'il ne faut pas perdre. -->
+                        <Grid Grid.Column="0" VerticalAlignment="Center" Margin="24,0,16,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="{Binding MachineName}"
+                                       Style="{StaticResource Text.Emphasis}" VerticalAlignment="Center" />
+
+                            <Border Grid.Column="1" Margin="13,0,0,0" Padding="8,2" VerticalAlignment="Center"
+                                    CornerRadius="{DynamicResource Radius.Badge}"
+                                    Background="{DynamicResource Brush.StatusUnavailableSoft}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Style="{StaticResource Icon}" Width="11" Height="11"
+                                          Data="{StaticResource Icon.Lock}"
+                                          Stroke="{DynamicResource Brush.TextTertiary}" />
+                                    <TextBlock Text="{Binding ElevationLabel}" Margin="6,0,0,0"
+                                               VerticalAlignment="Center"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource Brush.TextTertiary}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Séparateur et version disparaissent ensemble : un trait vertical
+                                 seul, sans rien à séparer, serait une poussière à l'écran. -->
+                            <Rectangle Grid.Column="2" Width="1" Height="13" Margin="13,0"
+                                       VerticalAlignment="Center" Fill="{DynamicResource Brush.BorderStrong}"
+                                       Visibility="{Binding ActualWidth,
+                                           RelativeSource={RelativeSource AncestorType=Window},
+                                           Converter={StaticResource WiderThan}, ConverterParameter=1150}" />
+
+                            <TextBlock Grid.Column="3" Text="{Binding WindowsLabel}"
+                                       ToolTip="{Binding WindowsDetail}"
+                                       Style="{StaticResource Text.Muted}" VerticalAlignment="Center"
+                                       HorizontalAlignment="Left" TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       Visibility="{Binding ActualWidth,
+                                           RelativeSource={RelativeSource AncestorType=Window},
+                                           Converter={StaticResource WiderThan}, ConverterParameter=1150}" />
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Margin="0,0,14,0" WindowChrome.IsHitTestVisibleInChrome="True">
+                            <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
+                                    Command="{Binding CancelCommand}" Margin="0,0,10,0"
+                                    Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Analyse rapide"
+                                    Command="{Binding RunQuickScanCommand}" Margin="0,0,10,0"
+                                    Visibility="{Binding IsScanning, Converter={StaticResource HiddenWhenTrue}}" />
+                            <!-- Seul aplat rouge de l'application : l'action principale. -->
+                            <Button Style="{StaticResource Button.Primary}" Content="Diagnostic complet"
+                                    Command="{Binding RunFullScanCommand}" />
+                        </StackPanel>
+
+                        <!-- Boutons de fenêtre, à fleur du bord et sur toute la hauteur de la barre,
+                             comme le fait Windows lui-même. -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                    WindowChrome.IsHitTestVisibleInChrome="True">
+                            <Button Style="{StaticResource CaptionButton}" Click="OnMinimizeClick"
+                                    ToolTip="Réduire">
+                                <Path Style="{StaticResource CaptionGlyph}" Data="{StaticResource Glyph.Minimize}" />
+                            </Button>
+                            <Button Click="OnMaximizeRestoreClick">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+                                        <Setter Property="ToolTip" Value="Agrandir" />
+                                        <Style.Triggers>
+                                            <DataTrigger Value="Maximized"
+                                                         Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                <Setter Property="ToolTip" Value="Restaurer" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Path>
+                                    <Path.Style>
+                                        <Style TargetType="Path" BasedOn="{StaticResource CaptionGlyph}">
+                                            <Setter Property="Data" Value="{StaticResource Glyph.Maximize}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Value="Maximized"
+                                                             Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                    <Setter Property="Data" Value="{StaticResource Glyph.Restore}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                            </Button>
+                            <Button Style="{StaticResource CaptionButton.Close}" Click="OnCloseClick"
+                                    ToolTip="Fermer">
+                                <Path Style="{StaticResource CaptionGlyph.Close}" Data="{StaticResource Glyph.Close}" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Mode OneWay explicite : ProgressBar.Value se lie en TwoWay par défaut et lève
+                     sur une propriété en lecture seule, au moment même de l'affichage de la fenêtre. -->
+                <ProgressBar DockPanel.Dock="Top" Style="{StaticResource Progress}" Maximum="100"
+                             Value="{Binding ProgressValue, Mode=OneWay}"
+                             Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}" />
+
+                <!-- Bandeau de mise à jour.
+
+                     Docké sous la barre supérieure, il pousse le contenu vers le bas au lieu de
+                     le recouvrir : un bandeau flottant masquerait précisément ce que le
+                     technicien est en train de lire. Il n'existe pas tant qu'il n'a rien à dire.
+
+                     La teinte change avec la nature de la nouvelle : information pour une version
+                     proposée, alerte pour une version qui corrige un défaut de l'outil lui-même. -->
+                <Border DockPanel.Dock="Top" Padding="24,12"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                        Visibility="{Binding Updates.IsVisible, Converter={StaticResource BoolToVisibility}}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Brush.StatusInfoSoft}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Updates.IsMandatory}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.StatusWarningSoft}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Updates.Title}" Style="{StaticResource Text.Emphasis}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Updates.Message}" Style="{StaticResource Text.Muted}"
+                                       Margin="0,3,0,0" TextWrapping="Wrap" />
+
+                            <!-- Les points marquants de la version, au plus trois. -->
+                            <ItemsControl ItemsSource="{Binding Updates.Highlights}" Margin="0,7,0,0"
+                                          Visibility="{Binding Updates.HasHighlights, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding StringFormat=• {0}}"
+                                                   Style="{StaticResource Text.Muted}"
+                                                   Margin="0,1,0,0" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ProgressBar Height="4" Margin="0,10,0,0" Maximum="100"
+                                         Value="{Binding Updates.Progress, Mode=OneWay}"
+                                         Visibility="{Binding Updates.ShowsProgress, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Margin="20,0,0,0">
+                            <!-- La question posée une seule fois, au premier lancement. -->
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding Updates.ShowsConsent, Converter={StaticResource BoolToVisibility}}">
+                                <Button Style="{StaticResource Button.Ghost}" Content="Non, jamais"
+                                        Command="{Binding Updates.DeclineCommand}" Margin="0,0,8,0" />
+                                <Button Style="{StaticResource Button.Primary}" Content="Oui, vérifier"
+                                        Command="{Binding Updates.AcceptCommand}" />
+                            </StackPanel>
+
+                            <!-- Une version proposée : prendre, remettre, ou écarter. -->
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding Updates.ShowsChoice, Converter={StaticResource BoolToVisibility}}">
+                                <Button Style="{StaticResource Button.Ghost}" Content="Nouveautés"
+                                        Command="{Binding Updates.NotesCommand}" Margin="0,0,8,0" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Ignorer cette version"
+                                        Command="{Binding Updates.SkipCommand}" Margin="0,0,8,0" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Plus tard"
+                                        Command="{Binding Updates.LaterCommand}" Margin="0,0,8,0" />
+                                <Button Style="{StaticResource Button.Primary}" Content="Mettre à jour"
+                                        Command="{Binding Updates.InstallCommand}" />
+                            </StackPanel>
+
+                            <!-- Un simple compte rendu se referme. -->
+                            <Button Content="Fermer" Command="{Binding Updates.CloseCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Updates.State}" Value="Informed">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Updates.State}" Value="Failed">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Barre d'état -->
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource Brush.Surface}"
+                        BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="0,1,0,0"
+                        Padding="24,9">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding StatusLine}" Style="{StaticResource Text.Muted}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{Binding ProgressText}" Style="{StaticResource Text.Muted}"
+                                   Margin="16,0,0,0" TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding HasProgressText, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+                </Border>
+
+                <!-- Contenu, sur le halo rouge discret du site.
+
+                     Le contenu se coupe net sous la barre supérieure et au-dessus de la barre
+                     d'état. Deux tentatives d'adoucissement ont été essayées puis abandonnées,
+                     et l'échec des deux dit la même chose :
+
+                     - un dégradé de la couleur du fond posé par-dessus ne fond rien, il peint un
+                       voile. Les cartes étant plus claires que le fond, il les assombrissait au
+                       lieu de les effacer : une bande opaque en travers du contenu ;
+                     - un masque d'opacité efface vraiment, mais il efface la carte et laisse voir
+                       le fond nu à sa place. Une carte à demi dissoute au bord de l'écran n'est
+                       pas plus lisible qu'une carte coupée.
+
+                     Ce que fait toute application de bureau sérieuse : le contenu passe sous une
+                     barre pleine, terminée par un filet d'un pixel. Le bord franc n'est pas un
+                     défaut, c'est la limite assumée d'un cadre. -->
+                <Grid>
+                    <Border IsHitTestVisible="False">
+                        <Border.Background>
+                            <RadialGradientBrush GradientOrigin="0.5,0" Center="0.5,0" RadiusX="0.75" RadiusY="0.55">
+                                <GradientStop Color="#1AED2E36" Offset="0" />
+                                <GradientStop Color="#00ED2E36" Offset="1" />
+                            </RadialGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <controls:TransitionPresenter Content="{Binding CurrentContent}" />
+
+                    <!-- ================= Écran d'analyse =================
+                         Pendant une collecte, la zone de contenu est entièrement remplacée. Ce
+                         n'est pas un écran d'attente : le plan des modules y est affiché dès le
+                         départ, et chaque tuile s'allume au moment où son module s'exécute
+                         réellement : c'est pour cela que le moteur signale désormais le démarrage
+                         d'un module en plus de sa fin. Rien n'est simulé, rien n'est inféré. -->
+                    <Grid DataContext="{Binding Scan}">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Background" Value="{DynamicResource Brush.Ground}" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Setter Property="Opacity" Value="0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility">
+                                                        <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Visible}" />
+                                                    </ObjectAnimationUsingKeyFrames>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                     To="1" Duration="0:0:0.22" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <!-- Disparition différée : la visibilité ne bascule qu'une
+                                             fois le fondu terminé, sans quoi l'écran s'évanouirait
+                                             d'un coup après être apparu en douceur. -->
+                                        <DataTrigger.ExitActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                     To="0" Duration="0:0:0.26" />
+                                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility">
+                                                        <DiscreteObjectKeyFrame KeyTime="0:0:0.26" Value="{x:Static Visibility.Collapsed}" />
+                                                    </ObjectAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+
+                        <!-- Halo, comme sur le reste de l'application. -->
+                        <Border IsHitTestVisible="False">
+                            <Border.Background>
+                                <RadialGradientBrush GradientOrigin="0.5,0.42" Center="0.5,0.42"
+                                                     RadiusX="0.6" RadiusY="0.6">
+                                    <GradientStop Color="#22ED2E36" Offset="0" />
+                                    <GradientStop Color="#00ED2E36" Offset="1" />
+                                </RadialGradientBrush>
+                            </Border.Background>
+                        </Border>
+
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    Margin="40,0,40,0">
+
+                            <Grid Width="286" Height="286" HorizontalAlignment="Center">
+                                <Ellipse Style="{StaticResource ScanPulse}"
+                                         Visibility="{Binding ShowPulses, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever" Duration="0:0:2.7">
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0" />
+                                                        <LinearDoubleKeyFrame Value="0.5" KeyTime="0:0:0.6" />
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:2.7" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                                <Ellipse Style="{StaticResource ScanPulse}"
+                                         Visibility="{Binding ShowPulses, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever" Duration="0:0:2.7" BeginTime="0:0:0.9">
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0" />
+                                                        <LinearDoubleKeyFrame Value="0.5" KeyTime="0:0:0.6" />
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:2.7" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                                <Ellipse Style="{StaticResource ScanPulse}"
+                                         Visibility="{Binding ShowPulses, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever" Duration="0:0:2.7" BeginTime="0:0:1.8">
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY"
+                                                                     From="0.55" To="1.32" Duration="0:0:2.7" />
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0" />
+                                                        <LinearDoubleKeyFrame Value="0.5" KeyTime="0:0:0.6" />
+                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:2.7" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+
+                                <controls:ScoreArc Width="216" Height="216"
+                                                   IsScanning="{Binding IsActive}"
+                                                   ScanProgress="{Binding Percent}"
+                                                   TrackBrush="{DynamicResource Brush.TrackBackground}"
+                                                   ScanBrush="{DynamicResource Brush.BrandRed}"
+                                                   Thickness="13" />
+
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding PercentText}" Style="{StaticResource Text.Display}"
+                                               FontSize="52" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding Caption}" Style="{StaticResource Text.Muted}"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Title}"
+                                       HorizontalAlignment="Center" Margin="0,-6,0,0" />
+                            <TextBlock Text="{Binding Machine}" Style="{StaticResource Text.Eyebrow}"
+                                       HorizontalAlignment="Center" Margin="0,6,0,0" />
+                            <TextBlock Text="{Binding CurrentModule}" Style="{StaticResource Text.Body}"
+                                       HorizontalAlignment="Center" Margin="0,14,0,0"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+
+                            <ItemsControl ItemsSource="{Binding Modules}" MaxWidth="900"
+                                          Margin="0,22,0,0" HorizontalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel HorizontalAlignment="Center" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource ScanTile}" Margin="0,0,8,8">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Style="{StaticResource ScanDot}" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           Style="{StaticResource ScanTileText}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </Border>
+</Window>

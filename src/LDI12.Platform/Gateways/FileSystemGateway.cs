@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -294,7 +294,7 @@ namespace LDI12.Platform.Gateways
 
                 try
                 {
-                    expected = Write(info, destination, out written, cancellationToken);
+                    expected = Write(info, destination, out written, request.Progressed, cancellationToken);
                 }
                 catch
                 {
@@ -312,7 +312,7 @@ namespace LDI12.Platform.Gateways
                 byte[] actual;
                 try
                 {
-                    actual = Fingerprint(destination, cancellationToken);
+                    actual = Fingerprint(destination, request.Progressed, cancellationToken);
                 }
                 catch
                 {
@@ -357,7 +357,8 @@ namespace LDI12.Platform.Gateways
 
         /// <summary>Écrit la copie et rend l'empreinte de ce qui a été lu à la source.</summary>
         private static byte[] Write(
-            FileInfo source, string destination, out long written, CancellationToken cancellationToken)
+            FileInfo source, string destination, out long written, Action<long>? progressed,
+            CancellationToken cancellationToken)
         {
             const int Buffer = 1024 * 1024;
 
@@ -376,13 +377,14 @@ namespace LDI12.Platform.Gateways
                 output.Write(buffer, 0, read);
                 hash.TransformBlock(buffer, 0, read, null, 0);
                 written += read;
+                progressed?.Invoke(read);
             }
 
             hash.TransformFinalBlock(buffer, 0, 0);
             return hash.Hash;
         }
 
-        private static byte[] Fingerprint(string path, CancellationToken cancellationToken)
+        private static byte[] Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
         {
             const int Buffer = 1024 * 1024;
 
@@ -395,6 +397,7 @@ namespace LDI12.Platform.Gateways
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 hash.TransformBlock(buffer, 0, read, null, 0);
+                progressed?.Invoke(read);
             }
 
             hash.TransformFinalBlock(buffer, 0, 0);

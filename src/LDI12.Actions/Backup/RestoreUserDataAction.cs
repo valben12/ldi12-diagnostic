@@ -300,14 +300,16 @@ namespace LDI12.Actions.Backup
             var details = new List<string>();
             var running = await RunningAsync(context, cancellationToken).ConfigureAwait(false);
 
-            int copied = 0, skipped = 0, failed = 0, done = 0;
+            int copied = 0, skipped = 0, failed = 0;
             long written = 0;
             var itemsFailed = 0;
+            var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Restauration de");
 
             foreach (var folder in plan.Folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var item = folder.Item;
+                tracker.Folder(item.Label);
 
                 // Relu au moment d'agir : entre la préparation et le clic, le client a pu rouvrir
                 // son navigateur. Un profil remplacé sous un navigateur ouvert serait réécrit par
@@ -316,6 +318,7 @@ namespace LDI12.Actions.Backup
                 {
                     details.Add(item.Label + " : non restauré, " + item.Application + " est ouvert.");
                     itemsFailed++;
+                    tracker.Skip(folder.Files);
                     continue;
                 }
 
@@ -334,6 +337,7 @@ namespace LDI12.Actions.Backup
                                     "probablement parce qu'un programme le tient ouvert.");
                         itemsFailed++;
                         failed += folder.Files.Count;
+                        tracker.Skip(folder.Files);
                         continue;
                     }
 
@@ -350,7 +354,9 @@ namespace LDI12.Actions.Backup
                         : Path.GetFileName(file.Path);
 
                     var result = context.Files.Copy(
-                        new FileCopyRequest(file, Path.Combine(item.Destination, relative)), cancellationToken);
+                        new FileCopyRequest(file, Path.Combine(item.Destination, relative)) { Progressed = tracker.Bytes },
+                        cancellationToken);
+                    tracker.FileDone(file.SizeBytes);
 
                     switch (result.Outcome)
                     {
@@ -358,11 +364,6 @@ namespace LDI12.Actions.Backup
                         case FileCopyOutcome.AlreadyPresent: hereSkipped++; break;
                         default: hereFailed++; break;
                     }
-
-                    done++;
-                    if (done % 25 == 0)
-                        progress?.Report(new ActionProgress(item.Label + " : " + (copied + here) + " fichier(s) restaurés",
-                            plan.Files == 0 ? 0 : (double)done / plan.Files));
 
                     if (result.Outcome == FileCopyOutcome.NoSpace)
                     {

@@ -97,6 +97,100 @@ namespace LDI12.App.ViewModels
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
         }
 
+        // ---------- avancement d'un transfert
+
+        private bool _isBackupTransferring;
+        private bool _isRestoreTransferring;
+        private string _transferTitle = string.Empty;
+        private string _transferDetail = string.Empty;
+        private double _transferPercent;
+        private string _transferRemaining = string.Empty;
+        private string _transferElapsed = string.Empty;
+
+        /// <summary>
+        /// Une copie est en cours : l'écran ne montre plus que son avancement.
+        /// </summary>
+        /// <remarks>
+        /// Pendant une heure de copie, le relevé, les réserves et les lignes de préparation ne
+        /// servent plus à rien, et ils repoussent la seule information qui compte hors de l'écran.
+        /// Ils reviennent à la fin, avec le compte rendu.
+        /// </remarks>
+        public bool IsBackupTransferring
+        {
+            get => _isBackupTransferring;
+            private set { if (Set(ref _isBackupTransferring, value)) RaiseTransferStates(); }
+        }
+
+        public bool IsRestoreTransferring
+        {
+            get => _isRestoreTransferring;
+            private set { if (Set(ref _isRestoreTransferring, value)) RaiseTransferStates(); }
+        }
+
+        public bool ShowScreen => !IsBackupTransferring && !IsRestoreTransferring;
+        public bool ShowBackupSection => !IsRestoreTransferring;
+        public bool ShowRestoreSection => !IsBackupTransferring;
+        public bool ShowBackupForm => !IsBackupTransferring;
+        public bool ShowRestoreForm => !IsRestoreTransferring;
+
+        public string TransferTitle { get => _transferTitle; private set => Set(ref _transferTitle, value); }
+        public string TransferDetail { get => _transferDetail; private set => Set(ref _transferDetail, value); }
+        public double TransferPercent { get => _transferPercent; private set { if (Set(ref _transferPercent, value)) Raise(nameof(TransferPercentText)); } }
+        public string TransferPercentText => ((int)Math.Floor(TransferPercent)).ToString(System.Globalization.CultureInfo.CurrentCulture) + " %";
+        public string TransferRemaining { get => _transferRemaining; private set => Set(ref _transferRemaining, value); }
+        public string TransferElapsed { get => _transferElapsed; private set => Set(ref _transferElapsed, value); }
+
+        private void RaiseTransferStates()
+        {
+            Raise(nameof(ShowScreen));
+            Raise(nameof(ShowBackupSection));
+            Raise(nameof(ShowRestoreSection));
+            Raise(nameof(ShowBackupForm));
+            Raise(nameof(ShowRestoreForm));
+        }
+
+        private void BeginTransfer(string title)
+        {
+            TransferTitle = title;
+            TransferDetail = string.Empty;
+            TransferPercent = 0;
+            TransferRemaining = "Estimation du temps restant en cours…";
+            TransferElapsed = string.Empty;
+        }
+
+        private void OnTransfer(ActionProgress report)
+        {
+            TransferTitle = report.Text;
+            if (report.Detail != null) TransferDetail = report.Detail;
+            if (report.Fraction.HasValue) TransferPercent = Math.Max(0, Math.Min(100, report.Fraction.Value * 100));
+            if (report.Elapsed.HasValue) TransferElapsed = "Écoulé : " + Duration(report.Elapsed.Value);
+
+            // Seulement quand le rapport vient de la copie elle-même : les étapes de fin (export
+            // Wi-Fi, fiche) ne portent pas d'estimation, et effacer la dernière laisserait un vide.
+            if (report.Detail != null) TransferRemaining = Remaining(report.Remaining);
+        }
+
+        /// <summary>« environ 12 min restantes » : arrondi comme on le dirait à voix haute.</summary>
+        internal static string Remaining(TimeSpan? remaining)
+        {
+            if (remaining == null) return "Estimation du temps restant en cours…";
+
+            var value = remaining.Value;
+            if (value < TimeSpan.FromMinutes(1)) return "Temps restant estimé : moins d'une minute";
+            if (value < TimeSpan.FromHours(1))
+                return "Temps restant estimé : environ " + (int)Math.Ceiling(value.TotalMinutes) + " min";
+
+            var minutes = (int)Math.Ceiling(value.TotalMinutes);
+            return "Temps restant estimé : environ " + minutes / 60 + " h " + (minutes % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string Duration(TimeSpan value)
+            => value < TimeSpan.FromMinutes(1)
+                ? (int)value.TotalSeconds + " s"
+                : value < TimeSpan.FromHours(1)
+                    ? (int)value.TotalMinutes + " min " + value.Seconds.ToString("00", System.Globalization.CultureInfo.InvariantCulture) + " s"
+                    : (int)value.TotalHours + " h " + value.Minutes.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+
         // ---------- restauration d'une sauvegarde
 
         private IRepairAction? _restore;
@@ -205,7 +299,9 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             Status = "Restauration en cours…";
-            var progress = new Progress<ActionProgress>(report => Progress = report.Text);
+            BeginTransfer("Préparation de la restauration…");
+            IsRestoreTransferring = true;
+            var progress = new Progress<ActionProgress>(OnTransfer);
 
             try
             {
@@ -228,7 +324,7 @@ namespace LDI12.App.ViewModels
             finally
             {
                 IsCopying = false;
-                Progress = string.Empty;
+                IsRestoreTransferring = false;
                 Raise(nameof(HasRestorePreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -404,8 +500,10 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             Status = "Copie en cours…";
+            BeginTransfer("Préparation de la copie…");
+            IsBackupTransferring = true;
 
-            var progress = new Progress<ActionProgress>(report => Progress = report.Text);
+            var progress = new Progress<ActionProgress>(OnTransfer);
             ActionOutcome? outcome = null;
 
             try
@@ -424,7 +522,7 @@ namespace LDI12.App.ViewModels
             finally
             {
                 IsCopying = false;
-                Progress = string.Empty;
+                IsBackupTransferring = false;
 
                 // Le relevé est consommé : le rejouer porterait sur un état qui a changé. Ce qui
                 // reste à l'écran est le compte rendu, dossier par dossier.

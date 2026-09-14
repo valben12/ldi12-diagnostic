@@ -258,5 +258,13 @@ namespace LDI12.Actions
 
         /// <summary>Avancement de 0 à 1 quand il est connu. La plupart des outils ne le disent pas.</summary>
         public double? Fraction { get; }
+
+        /// <summary>Précision chiffrée sous le texte : volumes et nombres de fichiers traités.</summary>
+        public string? Detail { get; init; }
+
+        /// <summary>Temps restant estimé. Nul tant que le débit mesuré ne permet pas de l'estimer.</summary>
+        public TimeSpan? Remaining { get; init; }
+
+        public TimeSpan? Elapsed { get; init; }
     }
 }

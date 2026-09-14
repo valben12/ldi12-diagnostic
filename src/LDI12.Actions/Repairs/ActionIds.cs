@@ -44,6 +44,9 @@
         /// </summary>
         public const string BackupUserData = "BACKUP-USER-DATA";
 
+        /// <summary>Restauration d'une sauvegarde LDI12. Écrit dans le profil, ne supprime rien.</summary>
+        public const string RestoreUserData = "RESTORE-USER-DATA";
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

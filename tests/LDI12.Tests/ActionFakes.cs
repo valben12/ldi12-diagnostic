@@ -212,6 +212,22 @@ namespace LDI12.Tests
             return true;
         }
 
+        /// <summary>Dossiers déplacés : source puis destination.</summary>
+        public List<(string Source, string Destination)> Moved { get; } = new List<(string, string)>();
+
+        /// <summary>Dossiers qui refusent d'être déplacés.</summary>
+        public HashSet<string> Unmovable { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public bool MoveDirectory(string source, string destination)
+        {
+            if (Unmovable.Contains(source) || !Directories.Contains(source) || Directories.Contains(destination)) return false;
+
+            Moved.Add((source, destination));
+            Directories.Remove(source);
+            Directories.Add(destination);
+            return true;
+        }
+
         public Measured<long> FreeSpace(string path) => Free;
 
         public bool WriteText(string path, string content)

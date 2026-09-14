@@ -93,6 +93,146 @@ namespace LDI12.App.ViewModels
             PrepareBackupCommand = new AsyncRelayCommand(PrepareBackupAsync, () => CanPrepareBackup);
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
+            PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
+            RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
+        }
+
+        // ---------- restauration d'une sauvegarde
+
+        private IRepairAction? _restore;
+        private ActionPreview? _restorePreview;
+        private string _restoreSource = string.Empty;
+        private string _restoreSummary = string.Empty;
+        private bool _restoreWifi = true;
+
+        /// <summary>Lignes du relevé de restauration, puis du compte rendu.</summary>
+        public ObservableCollection<string> RestoreLines { get; } = new ObservableCollection<string>();
+
+        /// <summary>Le disque ou le dossier de la sauvegarde. La plus récente qu'il contient est retenue.</summary>
+        public string RestoreSource
+        {
+            get => _restoreSource;
+            set { if (Set(ref _restoreSource, value)) InvalidateRestore(); }
+        }
+
+        /// <summary>Réimporter les profils Wi-Fi que la sauvegarde contient. Coché par défaut : ils ont été exportés exprès.</summary>
+        public bool RestoreWifi
+        {
+            get => _restoreWifi;
+            set { if (Set(ref _restoreWifi, value)) InvalidateRestore(); }
+        }
+
+        public string RestoreSummary
+        {
+            get => _restoreSummary;
+            private set { if (Set(ref _restoreSummary, value)) Raise(nameof(HasRestorePreview)); }
+        }
+
+        public bool HasRestorePreview => RestoreLines.Count > 0 || RestoreSummary.Length > 0;
+
+        public bool CanPrepareRestore => !IsRunning && !IsCopying && !string.IsNullOrWhiteSpace(RestoreSource);
+
+        public bool CanRestore => !IsCopying && _restorePreview != null && _restorePreview.CanExecute;
+
+        public ICommand PrepareRestoreCommand { get; }
+        public ICommand RunRestoreCommand { get; }
+
+        private void InvalidateRestore()
+        {
+            _restorePreview = null;
+            RestoreLines.Clear();
+            RestoreSummary = string.Empty;
+            Raise(nameof(HasRestorePreview));
+            RaiseBackupStates();
+        }
+
+        private IReadOnlyDictionary<string, string> RestoreParameters()
+            => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [RestoreUserDataAction.SourceParameter] = RestoreSource.Trim(),
+                [RestoreUserDataAction.WifiParameter] = RestoreWifi ? "1" : "0",
+            };
+
+        private async Task PrepareRestoreAsync()
+        {
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (runner == null) return;
+
+            _restore ??= ActionCatalog.Find(ActionIds.RestoreUserData, _logger);
+            if (_restore == null) return;
+
+            IsCopying = true;
+            RestoreLines.Clear();
+            Status = "Relevé de la sauvegarde en cours. Rien n'est encore écrit sur cette machine.";
+
+            try
+            {
+                _restorePreview = await runner
+                    .PreviewAsync(_restore, RestoreParameters(), CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                RestoreSummary = _restorePreview.Summary;
+
+                foreach (var line in _restorePreview.Measurements)
+                    if (line.Kind == PreviewLineKind.Caution) RestoreLines.Add("Attention. " + line.Label + " : " + line.Value);
+                foreach (var line in _restorePreview.WillDo) RestoreLines.Add(line);
+                foreach (var line in _restorePreview.WillNotDo) RestoreLines.Add(line);
+
+                Status = _restorePreview.Outcome == PreviewOutcome.Blocked
+                    ? _restorePreview.Blocker ?? "La restauration ne peut pas être préparée."
+                    : "Relevé de la sauvegarde terminé. Rien n'a encore été restauré.";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Le relevé de la restauration a échoué.", ex);
+                _restorePreview = null;
+                Status = "Le relevé de la restauration a échoué : " + ex.Message;
+            }
+            finally
+            {
+                IsCopying = false;
+                Raise(nameof(HasRestorePreview));
+                RaiseBackupStates();
+            }
+        }
+
+        private async Task RestoreAsync()
+        {
+            var preview = _restorePreview;
+            var action = _restore;
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (preview == null || action == null || runner == null) return;
+
+            IsCopying = true;
+            Status = "Restauration en cours…";
+            var progress = new Progress<ActionProgress>(report => Progress = report.Text);
+
+            try
+            {
+                var outcome = await runner
+                    .ExecuteAsync(action, preview, RestoreParameters(), progress, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                Status = outcome.Summary;
+                _restorePreview = null;
+                RestoreLines.Clear();
+                RestoreSummary = "Compte rendu de la restauration :";
+                foreach (var line in outcome.Details) RestoreLines.Add(line);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La restauration a échoué.", ex);
+                Status = "La restauration a échoué : " + ex.Message;
+                _restorePreview = null;
+            }
+            finally
+            {
+                IsCopying = false;
+                Progress = string.Empty;
+                Raise(nameof(HasRestorePreview));
+                RaiseBackupStates();
+                JournalChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         public ObservableCollection<DataFolderItem> Folders { get; } = new ObservableCollection<DataFolderItem>();
@@ -338,8 +478,12 @@ namespace LDI12.App.ViewModels
         {
             Raise(nameof(CanPrepareBackup));
             Raise(nameof(CanCopy));
+            Raise(nameof(CanPrepareRestore));
+            Raise(nameof(CanRestore));
             (PrepareBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
 
         public event EventHandler? JournalChanged;

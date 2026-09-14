@@ -122,13 +122,35 @@ namespace LDI12.Tests
             if (!_roots.TryGetValue(request.Root, out var files))
                 return Measured.Missing<DirectoryScan>("Dossier absent du système de fichiers de test.");
 
-            long total = 0;
-            foreach (var file in files) total += file.SizeBytes;
-
             // Une copie, comme le fait la vraie passerelle : un relevé est une photographie, et
-            // ce qui s'écrit après lui ne doit pas s'y ajouter rétroactivement.
+            // ce qui s'écrit après lui ne doit pas s'y ajouter rétroactivement. Les exclusions et
+            // le premier niveau sont appliqués comme elle le fait, sur le chemin relatif.
+            var kept = new List<FileEntry>();
+            long total = 0;
+            foreach (var file in files)
+            {
+                var relative = file.Path.Length > request.Root.Length
+                    ? file.Path.Substring(request.Root.Length).TrimStart('\\')
+                    : string.Empty;
+
+                if (request.TopLevelOnly && relative.IndexOf('\\') >= 0) continue;
+                var directories = relative.Split('\\');
+                var excluded = false;
+                for (var depth = 1; depth < directories.Length && !excluded; depth++)
+                {
+                    var prefix = string.Join("\\", directories, 0, depth);
+                    excluded = request.ExcludeRelative.Any(pattern =>
+                        LDI12.Platform.Gateways.FileSystemGateway.MatchesRelative(pattern, prefix));
+                }
+
+                if (excluded) continue;
+
+                kept.Add(file);
+                total += file.SizeBytes;
+            }
+
             return Measured.Ok(
-                new DirectoryScan { Root = request.Root, Files = files.ToArray(), TotalBytes = total },
+                new DirectoryScan { Root = request.Root, Files = kept, TotalBytes = total },
                 DataSource.FileSystem);
         }
 

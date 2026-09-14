@@ -118,7 +118,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Les dossiers personnels du compte ouvert sont copiés vers le support choisi, puis chaque fichier est relu et comparé à sa source. Rien n'est déplacé ni effacé à la source, rien n'est écrasé à la destination, et un manifeste de tout ce qui a été copié est déposé dans le dossier de sauvegarde." />
+                               Text="Les dossiers personnels du compte ouvert sont copiés vers le support choisi, puis chaque fichier est relu et comparé à sa source. Rien n'est déplacé ni effacé à la source, rien n'est écrasé à la destination. Un manifeste de la copie et une fiche de réinstallation, avec les logiciels installés et leurs versions, sont déposés dans le dossier de sauvegarde." />
 
                     <TextBlock Text="Dossier de destination" Style="{StaticResource Text.Muted}"
                                Margin="0,16,0,6" />
@@ -127,11 +127,43 @@
                     <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
                              Text="{Binding BackupDestination, UpdateSourceTrigger=PropertyChanged}" />
 
+                    <!-- Les trois options. La dernière est décochée à chaque ouverture : les clés
+                         Wi-Fi sortent en clair, et ce choix se refait pour chaque client. -->
+                    <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
+                              IsChecked="{Binding IncludePersonal}">
+                        <StackPanel>
+                            <TextBlock Text="Dossiers personnels" Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                       Text="Bureau, Documents, Images, Musique, Vidéos, Téléchargements et OneDrive." />
+                        </StackPanel>
+                    </CheckBox>
+                    <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0"
+                              IsChecked="{Binding IncludeApplications}">
+                        <StackPanel>
+                            <TextBlock Text="Données d'applications" Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                       Text="Chrome, Edge, Firefox, Thunderbird, archives Outlook et signatures, Pense-bêtes, sauvegardes OneNote, arrière-plans Teams, parties de jeux. Sans les caches. Seul ce qui existe sur cette machine est copié." />
+                        </StackPanel>
+                    </CheckBox>
+                    <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0"
+                              IsChecked="{Binding ExportWifi}">
+                        <StackPanel>
+                            <TextBlock Text="Profils Wi-Fi, avec leurs clés" Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                       Text="Les codes des réseaux enregistrés sont écrits en clair sur le support de sauvegarde. À effacer une fois la machine rendue." />
+                        </StackPanel>
+                    </CheckBox>
+
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
                                 Command="{Binding PrepareBackupCommand}" />
                         <Button Style="{StaticResource Button.Primary}" Content="Copier et vérifier"
                                 Command="{Binding RunBackupCommand}" Margin="10,0,0,0" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir la sauvegarde"
+                                Command="{Binding OpenBackupCommand}" Margin="10,0,0,0" />
                     </StackPanel>
 
                     <TextBlock Text="{Binding BackupSummary}" Style="{StaticResource Text.Body}"

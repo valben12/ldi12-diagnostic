@@ -380,6 +380,12 @@ namespace LDI12.App.ViewModels
         {
             _snapshot = snapshot;
 
+            // Le service d'actions vient de reconstruire son exécuteur sur ce diagnostic. Garder
+            // l'ancien, créé au démarrage avant la fin de la première analyse, faisait tourner
+            // toutes les actions sans diagnostic : la fiche de réinstallation annonçait « aucune
+            // analyse » juste après une analyse rapide.
+            _runner = null;
+
             try
             {
                 await RefreshAsync().ConfigureAwait(true);

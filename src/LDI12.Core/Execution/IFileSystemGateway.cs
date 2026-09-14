@@ -126,6 +126,20 @@ namespace LDI12.Core.Execution
         /// à la suppression.
         /// </remarks>
         public bool TopLevelOnly { get; init; }
+
+        /// <summary>
+        /// Sous-dossiers à ne pas parcourir, en chemin relatif à la racine.
+        /// </summary>
+        /// <remarks>
+        /// Sert à la sauvegarde des données d'applications : un profil Chrome de deux cents
+        /// mégaoctets traîne souvent un cache de plusieurs gigaoctets et de dizaines de milliers de
+        /// fichiers. Les écarter après le balayage coûterait le parcours entier ; les écarter
+        /// pendant, rien.
+        /// <para>
+        /// Un segment « * » remplace exactement un nom de dossier : <c>WebStorage\*\CacheStorage</c>.
+        /// </para>
+        /// </remarks>
+        public IReadOnlyList<string> ExcludeRelative { get; init; } = Array.Empty<string>();
     }
 
     /// <summary>Ce qu'un balayage a réellement trouvé, et ce qu'il n'a pas pu regarder.</summary>

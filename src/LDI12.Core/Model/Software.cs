@@ -59,6 +59,18 @@ namespace LDI12.Core.Model
         public string RegistryKey { get; init; } = string.Empty;
     }
 
+    /// <summary>Une application du Microsoft Store installée pour le compte ouvert.</summary>
+    public sealed class StoreApp
+    {
+        /// <summary>Nom affiché par Windows, quand le paquet le déclare en clair.</summary>
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary>Nom technique du paquet, stable d'une version à l'autre.</summary>
+        public string PackageName { get; init; } = string.Empty;
+
+        public string Version { get; init; } = string.Empty;
+    }
+
     /// <summary>
     /// Ce qui est installé sur la machine.
     /// </summary>
@@ -72,6 +84,16 @@ namespace LDI12.Core.Model
     public sealed class SoftwareInventory
     {
         public IReadOnlyList<InstalledProgram> Programs { get; init; } = Array.Empty<InstalledProgram>();
+
+        /// <summary>
+        /// Applications du Microsoft Store du compte ouvert.
+        /// </summary>
+        /// <remarks>
+        /// Absentes de la clé <c>Uninstall</c>, et c'est là que vivent désormais Teams, WhatsApp
+        /// ou le nouvel Outlook. Une fiche de réinstallation qui ne les listerait pas oublierait
+        /// précisément ce que le client utilise tous les jours.
+        /// </remarks>
+        public IReadOnlyList<StoreApp> StoreApps { get; init; } = Array.Empty<StoreApp>();
 
         /// <summary>
         /// Entrées écartées parce qu'elles décrivent une mise à jour ou un composant système.

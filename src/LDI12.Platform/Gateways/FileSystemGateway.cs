@@ -126,6 +126,8 @@ namespace LDI12.Platform.Gateways
                         continue;
                     }
 
+                    if (IsExcludedRelative(request, child.FullName)) continue;
+
                     pending.Push(child.FullName);
                 }
 
@@ -678,6 +680,34 @@ namespace LDI12.Platform.Gateways
                 SkippedReparsePoints = reparse,
                 Truncated = truncated,
             }, DataSource.FileSystem);
+        }
+
+        internal static bool IsExcludedRelative(DirectoryScanRequest request, string path)
+        {
+            if (request.ExcludeRelative.Count == 0) return false;
+
+            var root = request.Root.TrimEnd('\\', '/');
+            if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase) || path.Length <= root.Length) return false;
+
+            var relative = path.Substring(root.Length).Trim('\\', '/');
+            foreach (var candidate in request.ExcludeRelative)
+                if (MatchesRelative(candidate, relative)) return true;
+
+            return false;
+        }
+
+        /// <summary>Compare segment par segment ; « * » vaut exactement un nom de dossier.</summary>
+        internal static bool MatchesRelative(string pattern, string relative)
+        {
+            var wanted = pattern.Trim('\\', '/').Split('\\', '/');
+            var actual = relative.Trim('\\', '/').Split('\\', '/');
+            if (wanted.Length != actual.Length) return false;
+
+            for (var i = 0; i < wanted.Length; i++)
+                if (wanted[i] != "*" && !string.Equals(wanted[i], actual[i], StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+            return true;
         }
 
         private static bool IsExcluded(IReadOnlyList<string> excluded, string path)

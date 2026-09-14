@@ -434,10 +434,12 @@ namespace LDI12.Actions.Backup
                 };
 
             var interrupted = false;
+            var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Copie de");
 
             foreach (var folder in plan.Folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                tracker.Folder(folder.Label);
 
                 var here = new BackupFolderResult
                 {
@@ -454,8 +456,10 @@ namespace LDI12.Actions.Backup
                     var relative = Relative(folder.Path, file.Path);
                     var target = System.IO.Path.Combine(plan.Destination, folder.Destination, relative);
 
-                    var result = context.Files.Copy(new FileCopyRequest(file, target), cancellationToken);
+                    var result = context.Files.Copy(
+                        new FileCopyRequest(file, target) { Progressed = tracker.Bytes }, cancellationToken);
 
+                    tracker.FileDone(file.SizeBytes);
                     Count(here, result);
                     counters.Add(result);
 
@@ -463,11 +467,6 @@ namespace LDI12.Actions.Backup
                         .Append(Csv(relative)).Append(';')
                         .Append(file.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
                         .AppendLine(Describe(result.Outcome));
-
-                    if (counters.Total % 25 == 0)
-                        progress?.Report(new ActionProgress(
-                            folder.Label + " : " + counters.Copied + " fichier(s) copiés",
-                            plan.Files == 0 ? 0 : (double)counters.Total / plan.Files));
 
                     // Un support plein n'a aucune chance de se libérer pendant la copie :
                     // continuer produirait des milliers d'échecs identiques et ferait perdre une

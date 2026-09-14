@@ -202,6 +202,10 @@ namespace LDI12.Tests
             if (request.Verify && CorruptOnCopy.Contains(source.Path))
                 return FileCopyResult.Of(FileCopyOutcome.VerificationFailed);
 
+            // Comme la vraie passerelle : l'écriture puis la relecture remontent chacune la taille.
+            request.Progressed?.Invoke(source.SizeBytes);
+            request.Progressed?.Invoke(source.SizeBytes);
+
             Copied.Add((request.Destination, source.Path));
             return FileCopyResult.Of(FileCopyOutcome.Copied, source.SizeBytes);
         }

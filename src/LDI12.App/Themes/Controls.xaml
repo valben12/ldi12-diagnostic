@@ -443,8 +443,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
+                    <!-- PART_Track est indispensable : c'est sur sa largeur que WPF calcule celle de
+                         l'indicateur. Sans lui, la barre restait vide à 32 %, relevé sur la barre de
+                         copie ; la barre d'analyse, trois pixels de haut, cachait le même défaut. -->
                     <Grid>
-                        <Border Background="{TemplateBinding Background}" CornerRadius="2" />
+                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2" />
                         <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
                                 Background="{TemplateBinding Foreground}" CornerRadius="2" />
                     </Grid>

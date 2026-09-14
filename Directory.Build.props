@@ -16,7 +16,7 @@
          c'est ce qui permet de savoir, six mois plus tard, quelle version a produit un document.
          1.0.0 : les phases 0 à 8, le logiciel sort de l'atelier en un seul fichier.
          1.1.0 : l'inventaire logiciel, et le français imposé quelle que soit la machine. -->
-    <VersionPrefix>1.26.0</VersionPrefix>
+    <VersionPrefix>1.27.0</VersionPrefix>
     <NeutralLanguage>fr-FR</NeutralLanguage>
     <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
 

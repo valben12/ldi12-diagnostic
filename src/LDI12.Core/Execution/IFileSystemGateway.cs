@@ -50,6 +50,16 @@ namespace LDI12.Core.Execution
         /// de la seule phrase qui compte : « j'ai vérifié ».
         /// </remarks>
         public bool Verify { get; init; } = true;
+
+        /// <summary>
+        /// Appelé à chaque bloc écrit puis relu, avec le nombre d'octets traités depuis l'appel précédent.
+        /// </summary>
+        /// <remarks>
+        /// Sans lui, l'avancement ne bouge qu'entre deux fichiers : une vidéo de quatre gigaoctets
+        /// fige la barre pendant deux minutes, et un technicien qui voit une barre figée croit à un
+        /// plantage. L'écriture et la relecture comptent chacune pour la taille du fichier.
+        /// </remarks>
+        public Action<long>? Progressed { get; init; }
     }
 
     public enum FileCopyOutcome

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -73,6 +74,10 @@ namespace LDI12.App.ViewModels
         private string _backupDestination = string.Empty;
         private string _backupSummary = string.Empty;
         private bool _isCopying;
+        private bool _includePersonal = true;
+        private bool _includeApplications = true;
+        private bool _exportWifi;
+        private string? _lastBackupFolder;
 
         public UserDataViewModel(
             DiagnosticService diagnostics, InterventionJournal journal, ILdiLogger logger,
@@ -87,6 +92,7 @@ namespace LDI12.App.ViewModels
             CancelCommand = new RelayCommand(Cancel, () => IsRunning);
             PrepareBackupCommand = new AsyncRelayCommand(PrepareBackupAsync, () => CanPrepareBackup);
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
+            OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
         }
 
         public ObservableCollection<DataFolderItem> Folders { get; } = new ObservableCollection<DataFolderItem>();
@@ -131,14 +137,47 @@ namespace LDI12.App.ViewModels
             get => _backupDestination;
             set
             {
-                if (!Set(ref _backupDestination, value)) return;
-
                 // Le relevé porte sur une destination précise : changer de support l'invalide.
-                _backupPreview = null;
-                BackupLines.Clear();
-                BackupSummary = string.Empty;
-                RaiseBackupStates();
+                if (Set(ref _backupDestination, value)) Invalidate();
             }
+        }
+
+        /// <summary>Copier les dossiers personnels. Coché par défaut.</summary>
+        public bool IncludePersonal
+        {
+            get => _includePersonal;
+            set { if (Set(ref _includePersonal, value)) Invalidate(); }
+        }
+
+        /// <summary>Copier aussi les données des applications que le catalogue connaît. Coché par défaut.</summary>
+        public bool IncludeApplications
+        {
+            get => _includeApplications;
+            set { if (Set(ref _includeApplications, value)) Invalidate(); }
+        }
+
+        /// <summary>
+        /// Exporter les profils Wi-Fi avec leurs clés.
+        /// </summary>
+        /// <remarks>
+        /// Décoché par défaut, et jamais retenu d'une session à l'autre : les clés sortent en
+        /// clair sur le support, et ce choix se refait en connaissance de cause à chaque client.
+        /// </remarks>
+        public bool ExportWifi
+        {
+            get => _exportWifi;
+            set { if (Set(ref _exportWifi, value)) Invalidate(); }
+        }
+
+        public ICommand OpenBackupCommand { get; }
+
+        private void Invalidate()
+        {
+            _backupPreview = null;
+            BackupLines.Clear();
+            BackupSummary = string.Empty;
+            Raise(nameof(HasBackupPreview));
+            RaiseBackupStates();
         }
 
         public string BackupSummary
@@ -190,6 +229,11 @@ namespace LDI12.App.ViewModels
 
                 BackupSummary = _backupPreview.Summary;
 
+                // Les mises en garde d'abord : un navigateur ouvert se ferme avant de lancer la
+                // copie, pas après avoir lu vingt lignes.
+                foreach (var line in _backupPreview.Measurements)
+                    if (line.Kind == PreviewLineKind.Caution) BackupLines.Add("Attention. " + line.Label + " : " + line.Value);
+
                 foreach (var line in _backupPreview.WillDo) BackupLines.Add(line);
                 foreach (var line in _backupPreview.WillNotDo) BackupLines.Add(line);
 
@@ -222,10 +266,11 @@ namespace LDI12.App.ViewModels
             Status = "Copie en cours…";
 
             var progress = new Progress<ActionProgress>(report => Progress = report.Text);
+            ActionOutcome? outcome = null;
 
             try
             {
-                var outcome = await runner
+                outcome = await runner
                     .ExecuteAsync(action, preview, BackupParameters(), progress, CancellationToken.None)
                     .ConfigureAwait(true);
 
@@ -241,11 +286,20 @@ namespace LDI12.App.ViewModels
                 IsCopying = false;
                 Progress = string.Empty;
 
-                // Le relevé est consommé : le rejouer porterait sur un état qui a changé.
+                // Le relevé est consommé : le rejouer porterait sur un état qui a changé. Ce qui
+                // reste à l'écran est le compte rendu, dossier par dossier.
                 _backupPreview = null;
                 BackupLines.Clear();
                 BackupSummary = string.Empty;
 
+                if (outcome != null && preview.Plan is BackupPlan plan)
+                {
+                    _lastBackupFolder = plan.Destination;
+                    BackupSummary = "Compte rendu de la sauvegarde, déposée dans " + plan.Destination + " :";
+                    foreach (var line in outcome.Details) BackupLines.Add(line);
+                }
+
+                (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -256,7 +310,29 @@ namespace LDI12.App.ViewModels
             => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [BackupUserDataAction.DestinationParameter] = BackupDestination.Trim(),
+                [BackupUserDataAction.PersonalParameter] = IncludePersonal ? "1" : "0",
+                [BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0",
+                [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
             };
+
+        /// <summary>Ouvre la sauvegarde dans l'explorateur : la fiche de réinstallation est à sa racine.</summary>
+        private void OpenBackup()
+        {
+            if (_lastBackupFolder == null) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + _lastBackupFolder + "\"")
+                {
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Le dossier de sauvegarde n'a pas pu être ouvert.", ex);
+                Status = "Le dossier de sauvegarde n'a pas pu être ouvert : " + ex.Message;
+            }
+        }
 
         private void RaiseBackupStates()
         {

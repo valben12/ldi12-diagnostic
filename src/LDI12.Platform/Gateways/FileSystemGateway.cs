@@ -101,7 +101,11 @@ namespace LDI12.Platform.Gateways
                 DirectoryInfo[] children;
                 try
                 {
-                    var info = new DirectoryInfo(directory);
+                    // Sous sa forme étendue : sans elle, un dossier au-delà de 260 caractères lève
+                    // une exception, compte comme « refusé », et tout ce qu'il contient disparaît
+                    // du relevé. Mesuré sur une restauration d'essai : 106 fichiers d'un profil
+                    // Edge sur 425, tous rangés dans des dossiers IndexedDB profonds.
+                    var info = new DirectoryInfo(Extended(directory));
                     entries = info.GetFiles();
                     children = info.GetDirectories();
                 }
@@ -126,9 +130,10 @@ namespace LDI12.Platform.Gateways
                         continue;
                     }
 
-                    if (IsExcludedRelative(request, child.FullName)) continue;
+                    var childPath = Plain(child.FullName);
+                    if (IsExcludedRelative(request, childPath)) continue;
 
-                    pending.Push(child.FullName);
+                    pending.Push(childPath);
                 }
 
                 foreach (var file in entries)
@@ -155,7 +160,7 @@ namespace LDI12.Platform.Gateways
 
                     files.Add(new FileEntry
                     {
-                        Path = file.FullName,
+                        Path = Plain(file.FullName),
                         SizeBytes = length,
                         LastWriteUtc = lastWrite,
 
@@ -426,6 +431,26 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        public bool MoveDirectory(string source, string destination)
+        {
+            try
+            {
+                var from = Extended(source);
+                var to = Extended(destination);
+                if (!Directory.Exists(from) || Directory.Exists(to) || File.Exists(to)) return false;
+
+                Directory.Move(from, to);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                       ex is PathTooLongException || ex is ArgumentException ||
+                                       ex is NotSupportedException)
+            {
+                _log.Debug("Déplacement impossible de " + source + " vers " + destination + " : " + ex.Message);
+                return false;
+            }
+        }
+
         public Measured<long> FreeSpace(string path)
         {
             try
@@ -542,6 +567,10 @@ namespace LDI12.Platform.Gateways
                 : @"\\?\" + full;
         }
 
+        /// <summary>Le chemin tel que le reste du logiciel le manipule : jamais sous forme étendue.</summary>
+        internal static string Plain(string path)
+            => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? Ordinary(path) : path;
+
         /// <summary>Retire le préfixe étendu : <c>\\?\UNC\srv\part</c> redevient <c>\\srv\part</c>.</summary>
         internal static string Ordinary(string path)
             => path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)
@@ -618,7 +647,7 @@ namespace LDI12.Platform.Gateways
                 DirectoryInfo[] children;
                 try
                 {
-                    var info = new DirectoryInfo(pending.Pop());
+                    var info = new DirectoryInfo(Extended(pending.Pop()));
                     entries = info.GetFiles();
                     children = info.GetDirectories();
                 }
@@ -639,9 +668,10 @@ namespace LDI12.Platform.Gateways
                         continue;
                     }
 
-                    if (IsExcluded(request.Exclude, child.FullName)) continue;
+                    var childPath = Plain(child.FullName);
+                    if (IsExcluded(request.Exclude, childPath)) continue;
 
-                    pending.Push(child.FullName);
+                    pending.Push(childPath);
                 }
 
                 foreach (var file in entries)

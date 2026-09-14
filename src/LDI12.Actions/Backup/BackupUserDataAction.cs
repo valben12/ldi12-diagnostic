@@ -35,6 +35,9 @@ namespace LDI12.Actions.Backup
         /// <summary>Le relevé s'est arrêté avant la fin : la copie serait incomplète.</summary>
         public bool Truncated { get; init; }
 
+        /// <summary>Dossiers que le relevé n'a pas pu ouvrir : leur contenu ne sera pas copié.</summary>
+        public int InaccessibleDirectories { get; init; }
+
         internal string Destination => Target.Length > 0 ? Target : Label;
     }
 
@@ -166,6 +169,7 @@ namespace LDI12.Actions.Backup
             var files = 0;
             var cloud = 0;
             var truncated = false;
+            var unreadable = 0;
 
             void Take(BackupFolder? folder)
             {
@@ -175,6 +179,7 @@ namespace LDI12.Actions.Backup
                 files += folder.Files.Count;
                 cloud += folder.CloudOnlyFiles;
                 truncated |= folder.Truncated;
+                unreadable += folder.InaccessibleDirectories;
             }
 
             foreach (var folder in withPersonal ? Sources(context) : Array.Empty<(string Label, string Path)>())
@@ -288,6 +293,12 @@ namespace LDI12.Actions.Backup
                     "d'abord sur cette machine. Ils restent disponibles depuis le compte en ligne du client.");
             }
 
+            if (unreadable > 0)
+                measurements.Add(new PreviewLine(
+                    "Dossiers illisibles",
+                    unreadable + " dossier(s) n'ont pas pu être ouverts, faute de droits, leur contenu ne sera pas copié",
+                    PreviewLineKind.Caution));
+
             if (truncated)
                 measurements.Add(new PreviewLine(
                     "Relevé incomplet",
@@ -353,6 +364,7 @@ namespace LDI12.Actions.Backup
                 Bytes = size,
                 CloudOnlyFiles = cloudHere,
                 Truncated = scan.Value.Truncated,
+                InaccessibleDirectories = scan.Value.InaccessibleDirectories,
             };
         }
 

@@ -274,6 +274,33 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Un_dossier_de_plus_de_deux_cent_soixante_caracteres_est_releve_et_non_ignore()
+        {
+            // Relevé à l'essai réel d'une restauration : 106 fichiers d'un profil Edge sur 425,
+            // rangés dans des dossiers IndexedDB profonds, étaient comptés « refusés » et absents
+            // du relevé, donc de la restauration.
+            Sandbox((gateway, root) =>
+            {
+                var deep = root;
+                for (var i = 0; i < 12; i++) deep = Path.Combine(deep, new string('d', 24));
+                Directory.CreateDirectory(@"\\?\" + deep);
+                File.WriteAllText(@"\\?\" + Path.Combine(deep, "000003.log"), "x");
+                Assert.True(deep.Length > 260, "Le dossier d'essai doit dépasser la limite historique.");
+
+                var scan = gateway.Scan(new DirectoryScanRequest(root), CancellationToken.None);
+
+                Assert.Equal(0, scan.Value.InaccessibleDirectories);
+                var entry = Assert.Single(scan.Value.Files);
+
+                // Rendu sous sa forme ordinaire : le reste du logiciel compare des chemins.
+                Assert.Equal(Path.Combine(deep, "000003.log"), entry.Path);
+
+                var measure = gateway.Measure(new DirectoryMeasureRequest(root), CancellationToken.None);
+                Assert.Equal(1, measure.Value.FileCount);
+            });
+        }
+
+        [Fact]
         public void Le_manifeste_n_ecrase_jamais_celui_d_une_sauvegarde_precedente()
         {
             // Deux sauvegardes dans le même dossier : la seconde ne doit pas effacer la trace de

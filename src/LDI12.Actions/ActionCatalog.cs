@@ -28,6 +28,7 @@ namespace LDI12.Actions
                 () => new CheckDiskAction(),
                 () => new CleanupAction(),
                 () => new Backup.BackupUserDataAction(),
+                () => new Backup.RestoreUserDataAction(),
                 () => new Footprint.RemoveFootprintAction(),
                 () => new FlushDnsAction(),
                 () => new NetworkStackResetAction(),

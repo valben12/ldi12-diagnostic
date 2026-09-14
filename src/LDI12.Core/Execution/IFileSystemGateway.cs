@@ -318,6 +318,17 @@ namespace LDI12.Core.Execution
         /// <summary>Crée un dossier et ses parents. Rend faux si l'emplacement le refuse.</summary>
         bool CreateDirectory(string path);
 
+        /// <summary>
+        /// Renomme un dossier, sur le même volume. Refuse si la destination existe déjà.
+        /// </summary>
+        /// <remarks>
+        /// Ajoutée pour la restauration : un profil de navigateur créé par une installation neuve
+        /// est mis de côté avant de recevoir celui de la sauvegarde. Le mettre de côté plutôt que
+        /// le supprimer garde la décision réversible, et c'est la seule raison d'être de cette
+        /// opération : elle ne supprime rien, jamais.
+        /// </remarks>
+        bool MoveDirectory(string source, string destination);
+
         /// <summary>Place libre sur le volume qui porte ce chemin.</summary>
         Measured<long> FreeSpace(string path);
 

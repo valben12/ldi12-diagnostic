@@ -85,7 +85,8 @@ namespace LDI12.Actions
             }
             else
             {
-                preview = await action.PreviewAsync(context, cancellationToken).ConfigureAwait(false);
+                preview = await OffInterfaceThread(() => action.PreviewAsync(context, cancellationToken), cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             Journal.Record(
@@ -120,7 +121,8 @@ namespace LDI12.Actions
                     outcome = await RemoteExecuteAsync(action, preview.RemoteToken, progress, cancellationToken)
                         .ConfigureAwait(false);
                 else
-                    outcome = await action.ExecuteAsync(context, preview, progress, cancellationToken)
+                    outcome = await OffInterfaceThread(
+                            () => action.ExecuteAsync(context, preview, progress, cancellationToken), cancellationToken)
                         .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -210,6 +212,56 @@ namespace LDI12.Actions
 
         private ActionContext Scoped(IReadOnlyDictionary<string, string>? parameters)
             => parameters == null ? _context : _context.With(parameters);
+
+        /// <summary>
+        /// Fait le travail d'une action locale sur un fil à elle, jamais sur celui de l'appelant.
+        /// </summary>
+        /// <remarks>
+        /// <b>Les actions sont écrites de façon synchrone</b>, et c'est normal : copier quatre
+        /// cent mille fichiers est une boucle, pas une suite d'attentes. Mais l'appelant est
+        /// l'interface, et jusqu'à la version 1.23.0 cette boucle tournait sur son fil. La fenêtre
+        /// gelait pendant toute la copie, la progression ne pouvait pas s'afficher, et Windows
+        /// finissait par déclarer le logiciel « ne répond pas » au bout d'une sauvegarde qui, elle,
+        /// avançait. Le relevé qui précède la copie gelait de la même façon.
+        /// <para>
+        /// Un fil dédié plutôt que le pool : une sauvegarde dure une heure, et elle ne doit priver
+        /// de fil ni le canal élevé ni l'interface. En appartement STA, comme le fil d'interface
+        /// qui portait ces actions jusque-là : le vidage de la corbeille passe par le shell de
+        /// Windows, et il ne doit voir aucune différence.
+        /// </para>
+        /// </remarks>
+        internal static Task<T> OffInterfaceThread<T>(Func<Task<T>> work, CancellationToken cancellationToken)
+        {
+            if (work == null) throw new ArgumentNullException(nameof(work));
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    completion.TrySetResult(work().GetAwaiter().GetResult());
+                }
+                catch (OperationCanceledException)
+                {
+                    completion.TrySetCanceled(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "LDI12 : action",
+            };
+
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+
+            return completion.Task;
+        }
 
         private static ActionPreview Blocked(string reason, string? workaround = null)
             => new ActionPreview

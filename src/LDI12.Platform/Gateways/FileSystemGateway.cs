@@ -508,16 +508,66 @@ namespace LDI12.Platform.Gateways
         /// machine, contrairement au support des chemins longs de Windows 10, qui s'active dans
         /// le registre et que la plupart des machines de clients n'ont pas.
         /// </remarks>
-        internal static string Extended(string path)
+        internal static string Extended(string path) => Extended(path, ExtendedPathsAccepted);
+
+        /// <summary>
+        /// La forme étendue quand le processus l'accepte, la forme ordinaire sinon.
+        /// </summary>
+        /// <remarks>
+        /// <b>Ne jamais présumer que le préfixe passe.</b> Sous le traitement historique des
+        /// chemins de .NET Framework, <c>\\?\C:\…</c> lève « caractères non conformes dans le
+        /// chemin d'accès » dès la construction d'un <c>FileInfo</c>. La version 1.23.0 ne le
+        /// vérifiait pas : la sauvegarde échouait sur la création de son dossier avant d'avoir
+        /// copié un seul fichier, et le nettoyage rendait « échec » pour chaque fichier. Les tests
+        /// passaient, parce que leur hôte accepte le préfixe ; l'application, non.
+        /// <para>
+        /// Sans préfixe, un chemin ordinaire fonctionne partout, et un chemin trop long échoue
+        /// seul, signalé comme tel, au lieu de faire échouer toute l'opération.
+        /// </para>
+        /// </remarks>
+        internal static string Extended(string path, bool accepted)
         {
             if (string.IsNullOrEmpty(path)) return path;
-            if (path.StartsWith(@"\\?\", StringComparison.Ordinal)) return path;
+
+            if (path.StartsWith(@"\\?\", StringComparison.Ordinal))
+                return accepted ? path : Ordinary(path);
 
             var full = Path.GetFullPath(path);
+            if (!accepted) return full;
 
             return full.StartsWith(@"\\", StringComparison.Ordinal)
                 ? @"\\?\UNC" + full.Substring(1)
                 : @"\\?\" + full;
+        }
+
+        /// <summary>Retire le préfixe étendu : <c>\\?\UNC\srv\part</c> redevient <c>\\srv\part</c>.</summary>
+        internal static string Ordinary(string path)
+            => path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)
+                ? @"\" + path.Substring(7)
+                : path.Substring(4);
+
+        /// <summary>
+        /// Vrai si ce processus accepte les chemins préfixés par <c>\\?\</c>.
+        /// </summary>
+        /// <remarks>
+        /// Mesuré une fois, à la première utilisation de la passerelle, en construisant un
+        /// <c>DirectoryInfo</c> sur le dossier temporaire : c'est ce constructeur qui normalise le
+        /// chemin et qui refuse le préfixe sous le traitement historique. Rien n'est écrit.
+        /// </remarks>
+        internal static readonly bool ExtendedPathsAccepted = AcceptsExtendedPaths();
+
+        private static bool AcceptsExtendedPaths()
+        {
+            try
+            {
+                _ = new DirectoryInfo(@"\\?\" + Path.GetFullPath(Path.GetTempPath()));
+                return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException ||
+                                       ex is PathTooLongException)
+            {
+                return false;
+            }
         }
 
         /// <summary>

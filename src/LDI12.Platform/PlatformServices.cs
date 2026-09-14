@@ -150,6 +150,13 @@ namespace LDI12.Platform
             stopwatch.Stop();
             log.Info("Couche plateforme prête en " + stopwatch.ElapsedMilliseconds + " ms.");
 
+            // Dit une fois ce que le processus accepte : c'est la première chose à lire dans le
+            // journal d'un poste où une copie ou un nettoyage n'aboutit pas.
+            log.Info(Gateways.FileSystemGateway.ExtendedPathsAccepted
+                ? "Chemins longs : acceptés par ce processus."
+                : "Chemins longs : refusés par ce processus. Les fichiers au chemin de plus de 260 " +
+                  "caractères seront signalés un par un ; tous les autres sont traités normalement.");
+
             var info = new PlatformInfo(profile, features, elevation);
 
             return new PlatformServices(

@@ -42,6 +42,49 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void L_amorcage_ouvre_les_chemins_longs_avant_toute_lecture_de_chemin()
+        {
+            // L'hôte des tests accepte les chemins \\?\ de lui-même : aucun test de copie ou de
+            // suppression ne peut donc voir le jour où l'application les refuse. C'est
+            // exactement ce qui s'est passé en 1.23.0, où la sauvegarde ne créait pas son dossier
+            // et où le nettoyage ne supprimait rien. Faute de pouvoir reproduire ici le mode de
+            // chemins de l'application, on vérifie que ses deux commutateurs sont bien posés dans
+            // l'initialiseur de module, et avant celui du DPI, c'est-à-dire en tout premier.
+            var source = File.ReadAllText(Path.Combine(SourceRoot(), "Shared", "AssemblyBundle.cs"));
+
+            var legacy = source.IndexOf("\"Switch.System.IO.UseLegacyPathHandling\", false", StringComparison.Ordinal);
+            var block = source.IndexOf("\"Switch.System.IO.BlockLongPaths\", false", StringComparison.Ordinal);
+            var dpi = source.IndexOf("\"Switch.System.Windows.DoNotScaleForDpiChanges\"", StringComparison.Ordinal);
+
+            Assert.True(legacy > 0, "Le commutateur UseLegacyPathHandling n'est plus posé.");
+            Assert.True(block > 0, "Le commutateur BlockLongPaths n'est plus posé.");
+            Assert.True(legacy < dpi && block < dpi, "Les commutateurs de chemins doivent précéder tout le reste.");
+        }
+
+        [Fact]
+        public void Un_processus_qui_refuse_la_forme_longue_recoit_des_chemins_ordinaires()
+        {
+            var chemin = Path.Combine(Path.GetTempPath(), "LDI12-Sauvegarde-POSTE-2026-09-14-1551");
+
+            var refuse = Platform.Gateways.FileSystemGateway.Extended(chemin, accepted: false);
+            Assert.Equal(Path.GetFullPath(chemin), refuse);
+
+            Assert.Equal(@"C:\Temp\x",
+                Platform.Gateways.FileSystemGateway.Extended(@"\\?\C:\Temp\x", accepted: false));
+            Assert.Equal(@"\\serveur\partage\x",
+                Platform.Gateways.FileSystemGateway.Extended(@"\\?\UNC\serveur\partage\x", accepted: false));
+        }
+
+        [Fact]
+        public void Un_processus_qui_accepte_la_forme_longue_la_recoit()
+        {
+            Assert.StartsWith(@"\\?\C:\",
+                Platform.Gateways.FileSystemGateway.Extended(@"C:\Temp\x", accepted: true), StringComparison.Ordinal);
+            Assert.StartsWith(@"\\?\UNC\serveur\",
+                Platform.Gateways.FileSystemGateway.Extended(@"\\serveur\partage\x", accepted: true), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void Le_resolveur_ne_depend_d_aucun_projet_du_logiciel()
         {
             // Il s'exécute avant que la première bibliothèque soit chargée. La moindre référence

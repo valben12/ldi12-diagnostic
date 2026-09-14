@@ -50,6 +50,24 @@ namespace LDI12.Hosting
         {
             AppDomain.CurrentDomain.AssemblyResolve += Resolve;
 
+            // Les chemins longs, sous leur forme \\?\. Sans ces deux commutateurs, le processus
+            // garde le traitement historique des chemins et refuse le préfixe comme un
+            // « caractère non conforme ». C'est ce qui empêchait la sauvegarde de créer son
+            // dossier et le nettoyage de supprimer quoi que ce soit, alors que la suite de tests,
+            // exécutée par un autre hôte .NET, acceptait ces mêmes chemins sans broncher.
+            // Ils doivent être posés ici, avant la première lecture d'un chemin : le framework
+            // mémorise leur valeur au premier usage et ignore tout réglage ultérieur.
+            try
+            {
+                AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling", false);
+                AppContext.SetSwitch("Switch.System.IO.BlockLongPaths", false);
+            }
+            catch (Exception)
+            {
+                // La passerelle de fichiers sait se passer de la forme longue : elle vérifie au
+                // démarrage ce que le processus accepte réellement.
+            }
+
             // WPF ne suit les changements de DPI par écran que si ce commutateur est à false.
             // Il est déjà posé par le fichier de configuration voisin de l'exécutable, sauf
             // qu'un exécutable unique n'a précisément pas de fichier voisin. Le poser ici aussi

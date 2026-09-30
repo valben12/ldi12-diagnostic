@@ -61,6 +61,12 @@ namespace LDI12.Actions.Backup
         public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
 
         public int CloudOnlyFiles { get; init; }
+
+        /// <summary>
+        /// Reprise d'une sauvegarde interrompue : son dossier est réutilisé, et ce qui y porte déjà
+        /// son vrai nom, à la même taille et à la même date, n'est pas recopié.
+        /// </summary>
+        public bool Resumed { get; init; }
     }
 
     /// <summary>
@@ -133,6 +139,12 @@ namespace LDI12.Actions.Backup
         /// dépose alors son manifeste et sa fiche : c'est à eux qu'une restauration la reconnaît.
         /// </remarks>
         public const string DriversParameter = "drivers";
+
+        /// <summary>
+        /// « 0 » : toujours commencer une nouvelle sauvegarde. Absent : reprendre la dernière
+        /// sauvegarde inachevée de cette machine et de ce compte sur ce support, s'il y en a une.
+        /// </summary>
+        public const string ResumeParameter = "resume";
 
         /// <summary>
         /// Marge exigée en plus de la taille des données.
@@ -241,19 +253,35 @@ namespace LDI12.Actions.Backup
                               "de cette session.",
                 };
 
+            var resume = context.Parameter(ResumeParameter) == "0"
+                ? null
+                : BackupState.FindResumable(context.Files, destination, MachineName(context), Environment.UserName);
+
+            // À la reprise, ce qui est déjà sur le support n'a pas à y trouver de place une seconde fois.
+            long already = 0;
+            if (resume != null)
+            {
+                var measure = context.Files.Measure(new DirectoryMeasureRequest(resume.Path), cancellationToken);
+                if (measure.HasValue) already = measure.Value.TotalBytes;
+            }
+
             var free = context.Files.FreeSpace(destination);
-            var needed = (long)(bytes * SpaceMargin);
+            var needed = Math.Max(0, (long)(bytes * SpaceMargin) - already);
 
             if (free.IsReliable && free.Value < needed)
                 return Blocked(
                     "Il manque de la place sur la destination : " + ValueFormat.Bytes(bytes) +
                     " à copier, " + ValueFormat.Bytes(free.Value) + " disponibles.");
 
-            var root = Path.Combine(destination, FolderName(context));
+            var root = resume?.Path ?? Path.Combine(destination, FolderName(context));
 
             var measurements = new List<PreviewLine>
             {
                 new PreviewLine("Destination", root),
+                new PreviewLine("Reprise", resume == null
+                    ? "nouvelle sauvegarde"
+                    : "sauvegarde interrompue du " + resume.StartedText + " : les fichiers déjà copiés et vérifiés " +
+                      "(" + ValueFormat.Bytes(already) + " sur le support) ne seront pas recopiés"),
                 new PreviewLine("À copier", ValueFormat.Bytes(bytes) + " en " + files + " fichier(s)"),
                 new PreviewLine("Place disponible",
                     free.IsReliable ? ValueFormat.Bytes(free.Value) : "non lue"),
@@ -340,7 +368,8 @@ namespace LDI12.Actions.Backup
             return new ActionPreview
             {
                 Outcome = PreviewOutcome.Ready,
-                Summary = ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront copiés vers " +
+                Summary = (resume == null ? string.Empty : "Reprise de la sauvegarde interrompue du " + resume.StartedText + ". ") +
+                          ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront copiés vers " +
                           root + ", puis relus un par un.",
                 WillDo = willDo,
                 WillNotDo = willNotDo,
@@ -348,6 +377,7 @@ namespace LDI12.Actions.Backup
                 Plan = new BackupPlan
                 {
                     Destination = root,
+                    Resumed = resume != null,
                     Folders = plan,
                     Bytes = bytes,
                     Files = files,
@@ -466,7 +496,12 @@ namespace LDI12.Actions.Backup
                     Summary = "Le dossier de sauvegarde n'a pas pu être créé sur la destination.",
                 };
 
+            // Avant le premier fichier : si le support est arraché en cours de route, c'est ce
+            // « en cours » qui restera, et qui fera reconnaître la sauvegarde comme à reprendre.
+            SetState(context, plan, BackupProgressState.Running);
+
             var interrupted = false;
+            var lost = false;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Copie de");
 
             foreach (var folder in plan.Folders)
@@ -510,12 +545,27 @@ namespace LDI12.Actions.Backup
                         interrupted = true;
                         break;
                     }
+
+                    // Un support débranché fait échouer chaque fichier restant, un par un, en une
+                    // fraction de seconde. Vérifié seulement après un échec, pour ne rien coûter
+                    // aux fichiers qui passent.
+                    if (!Succeeded(result.Outcome) && !context.Files.DirectoryExists(plan.Destination))
+                    {
+                        details.Add(folder.Label + ", copie interrompue : le support de sauvegarde ne répond plus. " +
+                                    "Rebranchez-le et relancez la sauvegarde : elle reprendra où elle s'est arrêtée.");
+                        interrupted = lost = true;
+                        break;
+                    }
                 }
 
                 if (interrupted) break;
 
                 details.Add(folder.Label + " : " + Describe(here));
             }
+
+            // Support parti : plus rien ne peut s'y écrire, et chaque tentative prendrait son délai.
+            if (lost)
+                return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
 
             WifiExportResult? wifi = null;
             if (plan.ExportWifi && !interrupted)
@@ -527,10 +577,12 @@ namespace LDI12.Actions.Backup
 
             if (plan.WingetPackages.Count > 0)
             {
-                var listed = context.Files.WriteText(
+                // Sans marque d'ordre d'octets : cmd.exe ne lit pas un script qui commence par elle,
+                // et le lecteur JSON de winget n'en attend pas.
+                var listed = context.Files.ReplaceText(
                     System.IO.Path.Combine(plan.Destination, WingetApplications.FileName),
                     WingetApplications.Document(plan.WingetPackages));
-                listed &= context.Files.WriteText(
+                listed &= context.Files.ReplaceText(
                     System.IO.Path.Combine(plan.Destination, WingetApplications.ScriptName), WingetApplications.Script());
 
                 details.Add(listed
@@ -542,7 +594,33 @@ namespace LDI12.Actions.Backup
             progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));
             Sheet(context, plan, results, wifi, interrupted, details);
 
-            return Finish(context, plan, manifest, counters, details, stopwatch, interrupted);
+            var outcome = Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+            SetState(context, plan, interrupted ? BackupProgressState.Interrupted : BackupProgressState.Finished);
+            return outcome;
+        }
+
+        private void SetState(ActionContext context, BackupPlan plan, BackupProgressState state)
+            => context.Files.ReplaceText(
+                System.IO.Path.Combine(plan.Destination, BackupState.FileName),
+                BackupState.Render(state, MachineName(context), Environment.UserName));
+
+        private static bool Succeeded(FileCopyOutcome outcome)
+            => outcome == FileCopyOutcome.Copied || outcome == FileCopyOutcome.AlreadyPresent;
+
+        /// <summary>
+        /// Dépose un fichier du logiciel dans la sauvegarde : fiche, manifeste, liste des logiciels.
+        /// </summary>
+        /// <remarks>
+        /// Une première fois, il n'écrase rien, comme tout ce que cette action écrit. À la reprise,
+        /// celui du passage précédent est remplacé : il décrivait une copie inachevée. La marque
+        /// d'ordre d'octets est remise dans ce cas, sans elle Excel lirait mal les accents.
+        /// </remarks>
+        private static bool Deposit(ActionContext context, BackupPlan plan, string name, string content)
+        {
+            var path = System.IO.Path.Combine(plan.Destination, name);
+            return plan.Resumed
+                ? context.Files.ReplaceText(path, "\uFEFF" + content)
+                : context.Files.WriteText(path, content);
         }
 
         /// <summary>
@@ -576,29 +654,25 @@ namespace LDI12.Actions.Backup
                 Interrupted = interrupted,
             };
 
-            var written = context.Files.WriteText(
-                System.IO.Path.Combine(plan.Destination, ReinstallSheet.FileName), ReinstallSheet.Render(model));
+            var written = Deposit(context, plan, ReinstallSheet.FileName, ReinstallSheet.Render(model));
 
             details.Add(written
                 ? "Fiche de réinstallation déposée : " + ReinstallSheet.FileName + "."
                 : "La fiche de réinstallation n'a pas pu être écrite dans le dossier de sauvegarde.");
 
             if (software != null &&
-                !context.Files.WriteText(System.IO.Path.Combine(plan.Destination, ReinstallSheet.SoftwareFileName),
-                    ReinstallSheet.SoftwareCsv(software)))
+                !Deposit(context, plan, ReinstallSheet.SoftwareFileName, ReinstallSheet.SoftwareCsv(software)))
                 details.Add("La liste des logiciels n'a pas pu être écrite dans le dossier de sauvegarde.");
         }
 
         private static ActionOutcome Finish(
             ActionContext context, BackupPlan plan, StringBuilder manifest, Counters counters,
-            List<string> details, Stopwatch stopwatch, bool interrupted)
+            List<string> details, Stopwatch stopwatch, bool interrupted, bool lost)
         {
             stopwatch.Stop();
 
-            var written = context.Files.WriteText(
-                System.IO.Path.Combine(plan.Destination, "manifeste.csv"), manifest.ToString());
-
-            if (!written) details.Add("Le manifeste n'a pas pu être écrit dans le dossier de sauvegarde.");
+            if (!lost && !Deposit(context, plan, "manifeste.csv", manifest.ToString()))
+                details.Add("Le manifeste n'a pas pu être écrit dans le dossier de sauvegarde.");
 
             var status = interrupted || counters.Failed > 0
                 ? counters.Copied > 0 ? ActionStatus.PartiallySucceeded : ActionStatus.Failed
@@ -607,9 +681,12 @@ namespace LDI12.Actions.Backup
             var summary = counters.Copied + " fichier(s) copiés et vérifiés, " +
                           ValueFormat.Bytes(counters.Bytes) + " écrits";
 
-            if (counters.Skipped > 0) summary += ", " + counters.Skipped + " déjà présent(s)";
+            if (counters.Skipped > 0)
+                summary += ", " + counters.Skipped + (plan.Resumed ? " déjà copié(s) lors du passage précédent" : " déjà présent(s)");
             if (counters.Failed > 0) summary += ", " + counters.Failed + " non copié(s)";
-            summary += interrupted ? " : copie interrompue, la destination est pleine." : ".";
+            summary += lost
+                ? " : copie interrompue, le support ne répond plus. Rebranchez-le et relancez : elle reprendra où elle s'est arrêtée."
+                : interrupted ? " : copie interrompue, la destination est pleine." : ".";
 
             return new ActionOutcome
             {
@@ -701,7 +778,7 @@ namespace LDI12.Actions.Backup
         }
 
         private static string FolderName(ActionContext context)
-            => "LDI12-Sauvegarde-" + Sanitize(MachineName(context)) + "-" +
+            => BackupState.Prefix + Sanitize(MachineName(context)) + "-" +
                DateTimeOffset.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
 
         private static string? ToolVersion()
@@ -745,6 +822,7 @@ namespace LDI12.Actions.Backup
             FileCopyOutcome.PathTooLong => "chemin trop long pour la destination",
             FileCopyOutcome.VerificationFailed => "relecture différente de la source : copie retirée",
             FileCopyOutcome.CloudOnly => "présent seulement en ligne",
+            FileCopyOutcome.DeviceError => "support injoignable ou illisible",
             _ => "échec",
         };
 

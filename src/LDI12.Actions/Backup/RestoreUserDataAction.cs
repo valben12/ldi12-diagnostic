@@ -156,6 +156,8 @@ namespace LDI12.Actions.Backup
                 long size = 0;
                 foreach (var file in scan.Value.Files)
                 {
+                    // Le reste d'une copie interrompue pendant la sauvegarde : jamais vérifié, jamais restauré.
+                    if (file.Path.EndsWith(FileCopyRequest.PartialSuffix, StringComparison.OrdinalIgnoreCase)) continue;
                     if (item.Keep != null && !item.Keep(Path.GetFileName(file.Path))) continue;
                     kept.Add(file);
                     size += file.SizeBytes;
@@ -198,6 +200,13 @@ namespace LDI12.Actions.Backup
                 new PreviewLine("Sauvegarde", backup),
                 new PreviewLine("À restaurer", ValueFormat.Bytes(bytes) + " en " + files + " fichier(s)"),
             };
+
+            var state = BackupState.Parse(Text(context, Path.Combine(backup, BackupState.FileName)));
+            if (state != null && state.State != BackupProgressState.Finished)
+                measurements.Add(new PreviewLine("Sauvegarde incomplète",
+                    "elle s'est arrêtée avant la fin. Ce qu'elle contient a été vérifié et se restaure, mais des " +
+                    "fichiers peuvent manquer : la reprendre sur l'ancienne machine si elle est encore disponible",
+                    PreviewLineKind.Caution));
 
             if (others > 0)
                 measurements.Add(new PreviewLine("Autres sauvegardes",
@@ -369,7 +378,21 @@ namespace LDI12.Actions.Backup
                     {
                         details.Add(item.Label + " : restauration interrompue, le disque est plein.");
                         copied += here; skipped += hereSkipped; failed += hereFailed;
-                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch, true);
+                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
+                            " : restauration interrompue, le disque est plein.");
+                    }
+
+                    // Le support de la sauvegarde débranché : chaque fichier restant échouerait.
+                    // Ce qui est déjà restauré porte son vrai nom et a été vérifié : relancer la
+                    // restauration le reconnaîtra et ne refera que le reste.
+                    if (result.Outcome != FileCopyOutcome.Copied && result.Outcome != FileCopyOutcome.AlreadyPresent &&
+                        !context.Files.DirectoryExists(plan.Backup))
+                    {
+                        details.Add(item.Label + " : restauration interrompue, le support de la sauvegarde ne répond plus.");
+                        copied += here; skipped += hereSkipped; failed += hereFailed;
+                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
+                            " : restauration interrompue, le support de la sauvegarde ne répond plus. Rebranchez-le et " +
+                            "relancez : les fichiers déjà restaurés ne seront pas recopiés.");
                     }
                 }
 
@@ -392,14 +415,21 @@ namespace LDI12.Actions.Backup
             if (plan.MissingSoftware.Count > 0)
                 details.Add("Logiciels encore à réinstaller : " + string.Join(", ", plan.MissingSoftware) + ".");
 
-            return Finish(plan, copied, skipped, failed, written, itemsFailed, details, stopwatch, false);
+            return Finish(plan, copied, skipped, failed, written, itemsFailed, details, stopwatch, null);
+        }
+
+        private static string? Text(ActionContext context, string path)
+        {
+            var text = context.Files.ReadText(path);
+            return text.HasValue ? text.Value : null;
         }
 
         private static ActionOutcome Finish(
             RestorePlan plan, int copied, int skipped, int failed, long written, int itemsFailed,
-            List<string> details, Stopwatch stopwatch, bool interrupted)
+            List<string> details, Stopwatch stopwatch, string? interruption)
         {
             stopwatch.Stop();
+            var interrupted = interruption != null;
 
             var status = interrupted || failed > 0 || itemsFailed > 0
                 ? copied > 0 ? ActionStatus.PartiallySucceeded : ActionStatus.Failed
@@ -408,7 +438,7 @@ namespace LDI12.Actions.Backup
             var summary = copied + " fichier(s) restaurés et vérifiés, " + ValueFormat.Bytes(written) + " écrits";
             if (skipped > 0) summary += ", " + skipped + " déjà présent(s)";
             if (failed > 0) summary += ", " + failed + " non restauré(s)";
-            summary += interrupted ? " : restauration interrompue, le disque est plein." : ".";
+            summary += interruption ?? ".";
 
             return new ActionOutcome { Status = status, Summary = summary, Details = details, Duration = stopwatch.Elapsed };
         }

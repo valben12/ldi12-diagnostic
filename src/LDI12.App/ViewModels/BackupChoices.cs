@@ -24,6 +24,8 @@ namespace LDI12.App.ViewModels
         public string KindText => Drive.KindText;
         public string SpaceText => Drive.SpaceText;
         public string BackupsText => Drive.BackupsText;
+        public string? ResumableText => Drive.ResumableText;
+        public bool HasResumable => Drive.HasResumable;
 
         /// <summary>
         /// Ce qu'il faut savoir avant de choisir ce volume, ou nul.

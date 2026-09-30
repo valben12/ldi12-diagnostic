@@ -174,9 +174,14 @@ namespace LDI12.Actions.Backup
         }
 
         /// <summary>Le script de secours : double-cliquer dessus réinstalle tout, sans LDI12.</summary>
+        /// <remarks>
+        /// En ASCII seulement : cmd.exe lit un script dans la page de codes OEM, un accent y
+        /// deviendrait un caractère parasite. Écrit sans marque d'ordre d'octets, que cmd.exe
+        /// prendrait pour le début de la première commande.
+        /// </remarks>
         public static string Script()
             => "@echo off\r\n" +
-               "rem Réinstalle les applications de cette sauvegarde LDI12 par winget. Connexion Internet requise.\r\n" +
+               "rem Reinstalle par winget les applications de cette sauvegarde LDI12. Connexion Internet requise.\r\n" +
                "winget import -i \"%~dp0" + FileName + "\" --accept-package-agreements --accept-source-agreements --ignore-unavailable\r\n" +
                "pause\r\n";
 

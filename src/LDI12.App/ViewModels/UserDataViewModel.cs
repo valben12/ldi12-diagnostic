@@ -96,6 +96,7 @@ namespace LDI12.App.ViewModels
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
+            StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
@@ -149,14 +150,17 @@ namespace LDI12.App.ViewModels
             try
             {
                 var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
-                var drives = await Task.Run(() => DestinationDrives.Detect(services.Files)).ConfigureAwait(true);
+                var machine = BackupState.MachineOf(_snapshot);
+                var drives = await Task.Run(() => DestinationDrives.Detect(services.Files, machine, Environment.UserName))
+                    .ConfigureAwait(true);
 
                 // Rien ne bouge à l'écran tant que rien n'a changé : reconstruire les tuiles toutes
                 // les trois secondes ferait clignoter la sélection et le survol.
                 var signature = new System.Text.StringBuilder();
                 foreach (var drive in drives)
                     signature.Append(drive.Root).Append('|').Append(drive.Label).Append('|')
-                        .Append(drive.FreeBytes / (64L * 1024 * 1024)).Append('|').Append(drive.Backups).Append(';');
+                        .Append(drive.FreeBytes / (64L * 1024 * 1024)).Append('|').Append(drive.Backups).Append('|')
+                        .Append(drive.Resumable?.Path).Append(';');
 
                 if (signature.ToString() == _drivesSignature) return;
                 _drivesSignature = signature.ToString();
@@ -195,6 +199,21 @@ namespace LDI12.App.ViewModels
             => string.Equals(root.TrimEnd('\\'), (path ?? string.Empty).Trim().TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
         // ---------- pilotes et applications
+
+        private bool _resumeBackup = true;
+
+        /// <summary>
+        /// Reprendre la dernière sauvegarde inachevée de cette machine sur le support choisi. Coché par défaut.
+        /// </summary>
+        /// <remarks>
+        /// Décocher sert au cas rare où l'on veut repartir de zéro, par exemple après avoir
+        /// réorganisé les dossiers du client entre deux passages.
+        /// </remarks>
+        public bool ResumeBackup
+        {
+            get => _resumeBackup;
+            set { if (Set(ref _resumeBackup, value)) Invalidate(); }
+        }
 
         private bool _includeDrivers = true;
         private bool _includeApplicationList = true;
@@ -383,6 +402,39 @@ namespace LDI12.App.ViewModels
             Raise(nameof(ShowRestoreSection));
             Raise(nameof(ShowBackupForm));
             Raise(nameof(ShowRestoreForm));
+        }
+
+        private CancellationTokenSource? _transferCancel;
+
+        /// <summary>
+        /// Arrête la copie ou la restauration en cours, entre deux fichiers.
+        /// </summary>
+        /// <remarks>
+        /// Le fichier en cours n'est jamais laissé sous son vrai nom : sa copie provisoire est
+        /// retirée. La sauvegarde reste marquée « en cours », et la relancer la reprend.
+        /// </remarks>
+        public ICommand StopTransferCommand { get; }
+
+        private CancellationToken StartCancellable()
+        {
+            _transferCancel?.Dispose();
+            _transferCancel = new CancellationTokenSource();
+            (StopTransferCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            return _transferCancel.Token;
+        }
+
+        private void EndCancellable()
+        {
+            _transferCancel?.Dispose();
+            _transferCancel = null;
+            (StopTransferCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private void StopTransfer()
+        {
+            if (_transferCancel == null) return;
+            TransferTitle = "Arrêt demandé : la copie s'arrête après le fichier en cours…";
+            _transferCancel.Cancel();
         }
 
         private void BeginTransfer(string title)
@@ -634,7 +686,7 @@ namespace LDI12.App.ViewModels
                 if (Ready(_restorePreview) && _restore != null)
                 {
                     BeginTransfer("Préparation de la restauration…");
-                    var data = await runner.ExecuteAsync(_restore, _restorePreview!, RestoreParameters(), progress, CancellationToken.None)
+                    var data = await runner.ExecuteAsync(_restore, _restorePreview!, RestoreParameters(), progress, StartCancellable())
                         .ConfigureAwait(true);
                     summaries.Add(data.Summary);
                     Report(report, "Données", data);
@@ -644,7 +696,7 @@ namespace LDI12.App.ViewModels
                 {
                     BeginTransfer("Réinstallation des applications…");
                     var applications = await runner.ExecuteAsync(
-                            _restoreApplications, _restoreApplicationsPreview!, null, progress, CancellationToken.None)
+                            _restoreApplications, _restoreApplicationsPreview!, null, progress, StartCancellable())
                         .ConfigureAwait(true);
                     summaries.Add("Applications : " + applications.Summary);
                     Report(report, "Applications", applications);
@@ -659,6 +711,7 @@ namespace LDI12.App.ViewModels
             }
             finally
             {
+                EndCancellable();
                 _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
                 RestoreLines.Clear();
                 RestoreSummary = report.Count > 0 ? "Compte rendu de la restauration :" : string.Empty;
@@ -898,11 +951,15 @@ namespace LDI12.App.ViewModels
                 }
 
                 BeginTransfer("Préparation de la copie…");
+                var token = StartCancellable();
                 outcome = await runner
-                    .ExecuteAsync(action, preview, BackupParameters(), progress, CancellationToken.None)
+                    .ExecuteAsync(action, preview, BackupParameters(), progress, token)
                     .ConfigureAwait(true);
 
-                Status = outcome.Summary + (drivers == null ? string.Empty : " Pilotes : " + drivers.Summary);
+                Status = outcome.Summary + (outcome.Status == ActionStatus.Cancelled
+                             ? " Relancez la sauvegarde vers le même support : elle reprendra où elle s'est arrêtée."
+                             : string.Empty) +
+                         (drivers == null ? string.Empty : " Pilotes : " + drivers.Summary);
             }
             catch (Exception ex)
             {
@@ -911,6 +968,7 @@ namespace LDI12.App.ViewModels
             }
             finally
             {
+                EndCancellable();
                 IsCopying = false;
                 IsBackupTransferring = false;
 
@@ -944,6 +1002,7 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0",
                 [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
                 [BackupUserDataAction.DriversParameter] = CheckedDrivers().Count > 0 ? "1" : "0",
+                [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
             };
 
             var applications = CheckedApplications();

@@ -47,6 +47,16 @@ namespace LDI12.Actions.Backup
         /// <summary>Date de la plus récente, telle qu'elle figure dans le nom de son dossier.</summary>
         public DateTime? LatestBackup { get; init; }
 
+        /// <summary>Une sauvegarde inachevée de cette machine et de ce compte, que la prochaine copie reprendra.</summary>
+        public ResumableBackup? Resumable { get; init; }
+
+        public bool HasResumable => Resumable != null;
+
+        public string? ResumableText
+            => Resumable == null
+                ? null
+                : "Sauvegarde interrompue de cette machine, du " + Resumable.StartedText + " : la copie la reprendra.";
+
         /// <summary>« E: · Sauvegardes » : la lettre d'abord, c'est elle qu'on lit sur l'Explorateur.</summary>
         public string Title => Root.TrimEnd('\\') + (Label.Length > 0 ? " · " + Label : string.Empty);
 
@@ -95,7 +105,9 @@ namespace LDI12.Actions.Backup
     /// </remarks>
     public static class DestinationDrives
     {
-        public static IReadOnlyList<DestinationDrive> Detect(IFileSystemGateway files)
+        /// <param name="machine">Nom de la machine, pour repérer une sauvegarde à reprendre. Nul : on ne cherche pas.</param>
+        /// <param name="account">Compte ouvert, pour la même raison.</param>
+        public static IReadOnlyList<DestinationDrive> Detect(IFileSystemGateway files, string? machine = null, string? account = null)
         {
             if (files == null) throw new ArgumentNullException(nameof(files));
 
@@ -115,7 +127,7 @@ namespace LDI12.Actions.Backup
                 if (kind == null) continue;
                 if (string.Equals(drive.Name, system, StringComparison.OrdinalIgnoreCase)) continue;
 
-                var found = Describe(files, drive, kind.Value);
+                var found = Describe(files, drive, kind.Value, machine, account);
                 if (found != null) result.Add(found);
             }
 
@@ -137,7 +149,8 @@ namespace LDI12.Actions.Backup
             return (others + 1, date);
         }
 
-        private static DestinationDrive? Describe(IFileSystemGateway files, DriveInfo drive, DestinationKind kind)
+        private static DestinationDrive? Describe(
+            IFileSystemGateway files, DriveInfo drive, DestinationKind kind, string? machine, string? account)
         {
             try
             {
@@ -155,6 +168,9 @@ namespace LDI12.Actions.Backup
                     FreeBytes = drive.AvailableFreeSpace,
                     Backups = count,
                     LatestBackup = latest,
+                    Resumable = machine == null || account == null
+                        ? null
+                        : BackupState.FindResumable(files, drive.Name, machine, account),
                 };
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||

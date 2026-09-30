@@ -70,7 +70,7 @@ namespace LDI12.Tests
 
         public bool ReplaceText(string path, string content)
         {
-            if (LockedFiles.Contains(path)) return false;
+            if (LockedFiles.Contains(path) || Gone(path)) return false;
             Written[path] = content;
             Texts[path] = content;
             return true;
@@ -186,9 +186,28 @@ namespace LDI12.Tests
 
         public Measured<long> Free { get; set; } = Measured.Ok(1_000_000_000_000L, DataSource.FileSystem);
 
+        /// <summary>Le support qui sera arraché : tout chemin qui commence ainsi disparaît.</summary>
+        public string? UnplugRoot { get; set; }
+
+        /// <summary>Le fichier pendant la copie duquel le support est arraché.</summary>
+        public string? UnplugDuring { get; set; }
+
+        public bool Unplugged { get; private set; }
+
+        private bool Gone(string path)
+            => Unplugged && UnplugRoot != null && path.StartsWith(UnplugRoot, StringComparison.OrdinalIgnoreCase);
+
         public FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken)
         {
             var source = request.Source;
+
+            if (UnplugDuring != null && string.Equals(UnplugDuring, source.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                Unplugged = true;
+                Directories.RemoveWhere(Gone);
+            }
+
+            if (Gone(request.Destination) || Gone(source.Path)) return FileCopyResult.Of(FileCopyOutcome.DeviceError);
 
             if (source.CloudOnly) return FileCopyResult.Of(FileCopyOutcome.CloudOnly);
             if (LockedFiles.Contains(source.Path)) return FileCopyResult.Of(FileCopyOutcome.Locked);
@@ -212,7 +231,12 @@ namespace LDI12.Tests
 
         public bool CreateDirectory(string path)
         {
+            if (Gone(path)) return false;
             Created.Add(path);
+
+            // Comme la vraie passerelle : un dossier créé existe ensuite. La sauvegarde s'en sert
+            // pour distinguer un fichier refusé d'un support débranché.
+            Directories.Add(path);
             return true;
         }
 
@@ -236,6 +260,7 @@ namespace LDI12.Tests
 
         public bool WriteText(string path, string content)
         {
+            if (Gone(path)) return false;
             Written[path] = content;
             return true;
         }

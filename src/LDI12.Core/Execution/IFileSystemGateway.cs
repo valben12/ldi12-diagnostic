@@ -29,6 +29,19 @@ namespace LDI12.Core.Execution
     /// <summary>Une copie demandée, et ce qu'on exige d'elle.</summary>
     public sealed class FileCopyRequest
     {
+        /// <summary>
+        /// Suffixe d'une copie en cours d'écriture.
+        /// </summary>
+        /// <remarks>
+        /// <b>Le nom définitif n'apparaît qu'une fois la copie relue et reconnue identique.</b>
+        /// Jusque-là, elle s'écrit sous ce nom provisoire. Un support débranché en pleine copie ne
+        /// laisse donc jamais un fichier à moitié écrit sous le vrai nom : il laisse un fichier
+        /// provisoire, que la copie suivante du même fichier remplace, et qu'une restauration
+        /// ignore. C'est ce qui permet de reprendre une sauvegarde interrompue en se fiant à ce
+        /// qui porte déjà son vrai nom.
+        /// </remarks>
+        public const string PartialSuffix = ".ldi12tmp";
+
         public FileCopyRequest(FileEntry source, string destination)
         {
             Source = source ?? throw new ArgumentNullException(nameof(source));
@@ -94,6 +107,17 @@ namespace LDI12.Core.Execution
         CloudOnly = 10,
 
         Failed = 11,
+
+        /// <summary>
+        /// Le support ne répond plus : débranché, mis en veille, ou défaillant.
+        /// </summary>
+        /// <remarks>
+        /// Distinct d'un fichier tenu ouvert : c'est l'appelant qui décide s'il faut s'arrêter,
+        /// selon que la destination existe encore ou non. Un disque source qui a des secteurs
+        /// illisibles rend ce résultat fichier par fichier, et la copie doit alors continuer :
+        /// sauver ce qui se lit encore est précisément le travail.
+        /// </remarks>
+        DeviceError = 12,
     }
 
     public sealed class FileCopyResult

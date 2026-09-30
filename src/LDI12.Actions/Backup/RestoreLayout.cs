@@ -157,7 +157,8 @@ namespace LDI12.Actions.Backup
             => files.FileExists(Path.Combine(path, "manifeste.csv")) ||
                files.FileExists(Path.Combine(path, ReinstallSheet.FileName)) ||
                files.FileExists(Path.Combine(path, DriverBackup.Folder, DriverBackup.ListFileName)) ||
-               files.FileExists(Path.Combine(path, WingetApplications.FileName));
+               files.FileExists(Path.Combine(path, WingetApplications.FileName)) ||
+               files.FileExists(Path.Combine(path, BackupState.FileName));
 
         public static RestoreLayout Build(IFileSystemGateway files, string backup, RestoreTargets targets)
         {

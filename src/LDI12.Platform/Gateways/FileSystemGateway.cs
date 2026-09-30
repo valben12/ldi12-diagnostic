@@ -260,6 +260,13 @@ namespace LDI12.Platform.Gateways
         /// ressemble à une sauvegarde, et c'est exactement ce qui rend son existence pire que
         /// son absence.
         /// </para>
+        /// <para>
+        /// <b>Et quand l'effacer est impossible</b>, parce que le support vient d'être débranché,
+        /// la copie ne porte pas encore son vrai nom : elle s'écrit sous
+        /// <see cref="FileCopyRequest.PartialSuffix"/>, et n'est renommée qu'une fois relue
+        /// identique. Un fichier qui porte son vrai nom a donc toujours été vérifié, et une reprise
+        /// peut s'y fier.
+        /// </para>
         /// </remarks>
         public FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken)
         {
@@ -284,7 +291,7 @@ namespace LDI12.Platform.Gateways
 
                 var existing = new FileInfo(destination);
                 if (existing.Exists)
-                    return existing.Length == info.Length && existing.LastWriteTimeUtc == info.LastWriteTimeUtc
+                    return existing.Length == info.Length && SameTime(existing.LastWriteTimeUtc, info.LastWriteTimeUtc)
                         ? FileCopyResult.Of(FileCopyOutcome.AlreadyPresent)
                         : FileCopyResult.Of(FileCopyOutcome.Conflict, 0,
                             "Un fichier différent porte déjà ce nom à la destination.");
@@ -292,42 +299,49 @@ namespace LDI12.Platform.Gateways
                 var parent = Path.GetDirectoryName(destination);
                 if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
 
+                // Le reste d'une copie interrompue du même fichier : il est à nous, à son nom.
+                var partial = destination + FileCopyRequest.PartialSuffix;
+                Discard(partial);
+
                 byte[] expected;
                 long written;
 
                 try
                 {
-                    expected = Write(info, destination, out written, request.Progressed, cancellationToken);
+                    expected = Write(info, partial, out written, request.Progressed, cancellationToken);
                 }
                 catch
                 {
-                    Discard(destination);
+                    Discard(partial);
                     throw;
                 }
 
                 // La date de la source est reportée : sans elle, une reprise de sauvegarde
                 // reverrait chaque fichier comme différent et recopierait tout.
-                try { File.SetLastWriteTimeUtc(destination, info.LastWriteTimeUtc); }
+                try { File.SetLastWriteTimeUtc(partial, info.LastWriteTimeUtc); }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
 
-                if (!request.Verify) return FileCopyResult.Of(FileCopyOutcome.Copied, written);
-
-                byte[] actual;
                 try
                 {
-                    actual = Fingerprint(destination, written, request.Progressed, cancellationToken);
+                    if (request.Verify)
+                    {
+                        var actual = Fingerprint(partial, written, request.Progressed, cancellationToken);
+                        if (!Same(expected, actual))
+                        {
+                            Discard(partial);
+                            return FileCopyResult.Of(FileCopyOutcome.VerificationFailed, 0,
+                                "La copie ne se relit pas identique à la source. Elle a été retirée.");
+                        }
+                    }
+
+                    // Le renommage garde la date posée plus haut. Il échoue si un fichier du même
+                    // nom est apparu entre-temps : rien n'est écrasé, même dans ce cas.
+                    File.Move(partial, destination);
                 }
                 catch
                 {
-                    Discard(destination);
+                    Discard(partial);
                     throw;
-                }
-
-                if (!Same(expected, actual))
-                {
-                    Discard(destination);
-                    return FileCopyResult.Of(FileCopyOutcome.VerificationFailed, 0,
-                        "La copie ne se relit pas identique à la source. Elle a été retirée.");
                 }
 
                 return FileCopyResult.Of(FileCopyOutcome.Copied, written);
@@ -349,6 +363,10 @@ namespace LDI12.Platform.Gateways
                 if (code == 0x27 || code == 0x70)
                     return FileCopyResult.Of(FileCopyOutcome.NoSpace, 0, "La destination est pleine.");
 
+                if (IsDeviceError(code))
+                    return FileCopyResult.Of(FileCopyOutcome.DeviceError, 0,
+                        "Le support ne répond plus : débranché, ou défaillant. " + ex.Message);
+
                 return FileCopyResult.Of(FileCopyOutcome.Locked, 0, ex.Message);
             }
             catch (Exception ex)
@@ -357,6 +375,29 @@ namespace LDI12.Platform.Gateways
                 return FileCopyResult.Of(FileCopyOutcome.Failed, 0, ex.Message);
             }
         }
+
+        /// <summary>
+        /// Deux dates d'écriture tenues pour égales.
+        /// </summary>
+        /// <remarks>
+        /// FAT32, format d'origine de la plupart des clés USB, ne retient les dates qu'à deux
+        /// secondes près. Comparées à l'exacte, aucune copie n'y était jamais reconnue comme déjà
+        /// faite : chaque reprise signalait tout en conflit.
+        /// </remarks>
+        internal static bool SameTime(DateTime left, DateTime right)
+            => Math.Abs((left - right).TotalSeconds) <= 2;
+
+        /// <summary>
+        /// Les erreurs Windows d'un support qui ne répond plus.
+        /// </summary>
+        /// <remarks>
+        /// 21 : pas prêt. 23 : erreur de lecture (CRC). 31 : défaillance générale. 55 : ressource
+        /// disparue. 483 : erreur matérielle. 1006 : volume modifié de l'extérieur, ce que rend un
+        /// support arraché. 1117 : erreur d'entrée-sortie. 1167 : périphérique déconnecté.
+        /// </remarks>
+        internal static bool IsDeviceError(int code)
+            => code == 21 || code == 23 || code == 31 || code == 55 || code == 483 ||
+               code == 1006 || code == 1117 || code == 1167;
 
         /// <summary>Taille d'un bloc de copie.</summary>
         private const int Block = 1024 * 1024;

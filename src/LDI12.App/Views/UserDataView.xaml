@@ -55,6 +55,9 @@
                     <TextBlock Text="{Binding KindText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" />
                     <TextBlock Text="{Binding SpaceText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding BackupsText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ResumableText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.StatusInfo}"
+                               Visibility="{Binding HasResumable, Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding Warning}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.StatusWarning}"
                                Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibility}}" />
@@ -220,6 +223,17 @@
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
                                      Text="{Binding BackupDestination, UpdateSourceTrigger=PropertyChanged}" />
 
+                            <!-- Reprise : une sauvegarde arrêtée en route (support débranché, plein, ou arrêt
+                                 demandé) repart où elle s'était arrêtée, dans le même dossier. -->
+                            <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0" IsChecked="{Binding ResumeBackup}">
+                                <StackPanel>
+                                    <TextBlock Text="Reprendre une sauvegarde interrompue" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="S'il y a sur ce support une sauvegarde inachevée de cette machine, la copie la continue : les fichiers déjà copiés et vérifiés ne sont pas recopiés. Décocher pour repartir de zéro dans un nouveau dossier." />
+                                </StackPanel>
+                            </CheckBox>
+
                             <!-- Les trois options. La dernière est décochée à chaque ouverture : les clés
                                  Wi-Fi sortent en clair, et ce choix se refait pour chaque client. -->
                             <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
@@ -345,9 +359,12 @@
                             </DockPanel>
                             <TextBlock Text="{Binding TransferRemaining}" Style="{StaticResource Text.Body}" Margin="0,14,0,0" />
                             <TextBlock Text="{Binding TransferElapsed}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                            <!-- Arrêt entre deux fichiers : rien n'est laissé à moitié écrit, et relancer reprend. -->
+                            <Button Style="{StaticResource Button.Ghost}" Content="Arrêter" HorizontalAlignment="Left"
+                                    Command="{Binding StopTransferCommand}" Margin="0,14,0,0" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="880"
                                        HorizontalAlignment="Left"
-                                       Text="Chaque fichier est relu après son écriture, c'est compté dans l'avancement. Le compte rendu, dossier par dossier, s'affichera à la fin." />
+                                       Text="Chaque fichier est relu après son écriture, c'est compté dans l'avancement. Si le support est débranché ou si vous arrêtez, rien n'est perdu : relancer reprend où la copie s'était arrêtée." />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -444,9 +461,12 @@
                             </DockPanel>
                             <TextBlock Text="{Binding TransferRemaining}" Style="{StaticResource Text.Body}" Margin="0,14,0,0" />
                             <TextBlock Text="{Binding TransferElapsed}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                            <!-- Arrêt entre deux fichiers : rien n'est laissé à moitié écrit, et relancer reprend. -->
+                            <Button Style="{StaticResource Button.Ghost}" Content="Arrêter" HorizontalAlignment="Left"
+                                    Command="{Binding StopTransferCommand}" Margin="0,14,0,0" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="880"
                                        HorizontalAlignment="Left"
-                                       Text="Chaque fichier est relu après son écriture, c'est compté dans l'avancement. Le compte rendu, dossier par dossier, s'affichera à la fin." />
+                                       Text="Chaque fichier est relu après son écriture, c'est compté dans l'avancement. Si le support est débranché ou si vous arrêtez, rien n'est perdu : relancer reprend où la copie s'était arrêtée." />
                         </StackPanel>
                     </StackPanel>
                 </Border>

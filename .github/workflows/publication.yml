@@ -1,0 +1,56 @@
+# Compilation et publication de l'exécutable unique, sur une machine Windows.
+#
+# Le logiciel est une application WPF pour .NET Framework : il ne se compile que sous Windows,
+# avec MSBuild 17. Ce flux fait ce que ferait build\publish.ps1 sur le poste de l'atelier,
+# tests compris.
+#
+# - Poussée sur une branche : compilation et tests, l'exécutable est joint à l'exécution.
+# - Poussée d'une étiquette « v… » : même chose, puis publication en release GitHub. Une
+#   étiquette qui contient un tiret (v1.28.0-beta.1) part en pré-version : à essayer, pas à
+#   distribuer.
+#
+# Les releases GitHub ne sont pas lues par la vérification de mise à jour du logiciel, qui
+# interroge ldi12.fr : publier ici ne pousse rien sur les clés déjà en service.
+name: Publication
+
+on:
+  push:
+    branches: ['main', 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publier:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compiler, tester, rassembler en un seul fichier
+        shell: powershell
+        run: .\build\publish.ps1
+
+      - name: Joindre l'exécutable à l'exécution
+        uses: actions/upload-artifact@v4
+        with:
+          name: LDI12-Diagnostic
+          path: artifacts/*
+
+      - name: Publier la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $flags = @()
+          if ($tag.Contains('-')) { $flags += '--prerelease' }
+          $notes = 'docs/releases/' + $tag + '.md'
+          if (Test-Path $notes) { $flags += @('--notes-file', $notes) } else { $flags += @('--notes', $tag) }
+          gh release create $tag (Get-ChildItem artifacts/* | ForEach-Object FullName) --title "LDI12 Diagnostic $($tag.TrimStart('v'))" @flags

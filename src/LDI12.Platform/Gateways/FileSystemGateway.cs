@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -11,6 +12,7 @@ using LDI12.Core.Diagnostics;
 using LDI12.Core.Execution;
 using LDI12.Core.Logging;
 using LDI12.Platform.Native;
+using Microsoft.Win32.SafeHandles;
 
 namespace LDI12.Platform.Gateways
 {
@@ -313,7 +315,7 @@ namespace LDI12.Platform.Gateways
                 byte[] actual;
                 try
                 {
-                    actual = Fingerprint(destination, request.Progressed, cancellationToken);
+                    actual = Fingerprint(destination, written, request.Progressed, cancellationToken);
                 }
                 catch
                 {
@@ -399,7 +401,7 @@ namespace LDI12.Platform.Gateways
             if (expected > Block) output.SetLength(expected);
 
             written = Pump(
-                input,
+                block => input.Read(block, 0, block.Length),
                 (block, count) => output.Write(block, 0, count),
                 (block, count) => hash.TransformBlock(block, 0, count, null, 0),
                 progressed, cancellationToken);
@@ -412,13 +414,78 @@ namespace LDI12.Platform.Gateways
             return hash.Hash;
         }
 
-        private static byte[] Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
+        /// <summary>
+        /// Relit la copie sur le support lui-même, et rend son empreinte.
+        /// </summary>
+        /// <remarks>
+        /// <b>Une relecture ordinaire ne relit rien.</b> Juste après l'écriture, les pages du
+        /// fichier sont encore dans le cache de Windows : une lecture ordinaire les y reprend, et
+        /// compare la mémoire vive à elle-même. Un disque externe qui accepte les écritures et
+        /// rend autre chose à la relecture passait donc la vérification, c'est-à-dire exactement
+        /// le cas pour lequel elle existe.
+        /// <para>
+        /// La relecture se fait donc sans mémoire tampon, comme la mesure de disque. Pour servir
+        /// une telle lecture, le système de fichiers commence par écrire sur le support ce que
+        /// son cache garde encore du fichier : les octets relus sont ceux du support. Seul le
+        /// cache interne du disque peut encore s'intercaler, et aucun logiciel n'y a la main.
+        /// </para>
+        /// <para>
+        /// <b>Pas de <c>FlushFileBuffers</c> à chaque fichier.</b> Il écrirait sur le support ce
+        /// que la relecture sans tampon y fait déjà écrire, et ordonnerait en plus au disque de
+        /// vider son propre cache sans pour autant empêcher la relecture d'y puiser : un aller-retour
+        /// de plus par fichier, soit des minutes sur un profil de navigateur, pour aucune preuve
+        /// supplémentaire.
+        /// </para>
+        /// <para>
+        /// <b>Le prix.</b> La copie ne profite plus de l'écriture différée : chaque fichier est
+        /// réellement sur le support avant de passer au suivant, et la relecture se fait à la
+        /// vitesse du support au lieu de celle de la mémoire. Sur un support externe, c'est à peu
+        /// près une lecture complète de la sauvegarde en plus, puisque c'est précisément ce que
+        /// la vérification prétendait faire. Le coût réel sur un support donné se mesure avec
+        /// <c>CopyReadBackMeasureTests</c>, qui copie les mêmes fichiers relus des deux façons.
+        /// </para>
+        /// <para>
+        /// Un support qui refuse la lecture sans tampon (secteurs de plus de quatre kilo-octets,
+        /// certains partages réseau) est relu par le cache, et le journal le dit une fois : mieux
+        /// vaut une vérification plus faible, annoncée, qu'une sauvegarde impossible.
+        /// </para>
+        /// </remarks>
+        private byte[] Fingerprint(string path, long length, Action<long>? progressed, CancellationToken cancellationToken)
         {
+            if (!ReadBackThroughCache)
+            {
+                try
+                {
+                    using var reader = UnbufferedReader.Open(path, length);
+                    if (reader != null)
+                    {
+                        var direct = Sha256();
+                        Pump(reader.Read, (block, count) => direct.TransformBlock(block, 0, count, null, 0), null,
+                            progressed, cancellationToken);
+
+                        direct.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                        return direct.Hash;
+                    }
+                }
+                catch (UnbufferedReadRefusedException)
+                {
+                    // Refusée dès le premier bloc : rien n'a encore été compté, on reprend par le cache.
+                }
+
+                if (!_cachedReadBackLogged)
+                {
+                    _cachedReadBackLogged = true;
+                    _log.Warn("Relecture sans mémoire tampon refusée par la destination de " + path +
+                              " : la vérification des copies passe par le cache de Windows.");
+                }
+            }
+
             var hash = Sha256();
             using var stream = new FileStream(
                 path, FileMode.Open, FileAccess.Read, FileShare.Read, NoStreamBuffer, FileOptions.SequentialScan);
 
-            Pump(stream, (block, count) => hash.TransformBlock(block, 0, count, null, 0), null,
+            Pump(block => stream.Read(block, 0, block.Length),
+                (block, count) => hash.TransformBlock(block, 0, count, null, 0), null,
                 progressed, cancellationToken);
 
             hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
@@ -426,9 +493,119 @@ namespace LDI12.Platform.Gateways
         }
 
         /// <summary>
-        /// Lit un flux bloc par bloc, et traite chaque bloc pendant que le suivant se lit.
+        /// Relire les copies par le cache de Windows, comme avant.
         /// </summary>
         /// <remarks>
+        /// N'existe que pour mesurer ce que coûte la relecture sur le support : l'application ne
+        /// le règle jamais.
+        /// </remarks>
+        internal bool ReadBackThroughCache { get; set; }
+
+        private bool _cachedReadBackLogged;
+
+        /// <summary>
+        /// Lecture séquentielle sans mémoire tampon, bloc par bloc.
+        /// </summary>
+        /// <remarks>
+        /// Les conditions sont celles de <see cref="DiskIoNative"/> : tampon aligné sur une page,
+        /// transferts multiples de quatre kilo-octets. Le dernier secteur d'un fichier n'est
+        /// généralement pas plein : la lecture demande un secteur entier et Windows ne rend que
+        /// les octets du fichier. Après elle, la position n'est plus alignée, et une lecture de
+        /// plus serait refusée au lieu de rendre zéro : la fin est donc retenue ici.
+        /// </remarks>
+        private sealed class UnbufferedReader : IDisposable
+        {
+            private readonly SafeFileHandle _file;
+            private readonly DiskIoNative.AlignedBuffer _buffer;
+            private bool _started;
+            private bool _ended;
+
+            private UnbufferedReader(SafeFileHandle file, DiskIoNative.AlignedBuffer buffer)
+            {
+                _file = file;
+                _buffer = buffer;
+            }
+
+            /// <summary>Ouvre le fichier, ou rend nul si ce support ne sait pas lire sans tampon.</summary>
+            internal static UnbufferedReader? Open(string path, long length)
+            {
+                SafeFileHandle file;
+                try
+                {
+                    file = DiskIoNative.CreateFile(
+                        path, DiskIoNative.GenericRead, DiskIoNative.ShareRead, IntPtr.Zero,
+                        DiskIoNative.OpenExisting, DiskIoNative.FlagNoBuffering | DiskIoNative.FlagSequentialScan,
+                        IntPtr.Zero);
+                }
+                catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
+                {
+                    return null;
+                }
+
+                if (file.IsInvalid)
+                {
+                    var code = (uint)Marshal.GetLastWin32Error();
+                    file.Dispose();
+                    if (code == DiskIoNative.ErrorInvalidParameter || code == DiskIoNative.ErrorNotSupported)
+                        return null;
+                    throw Failure(code, path);
+                }
+
+                // Un petit fichier n'a pas besoin d'un mégaoctet : un tampon à sa taille, arrondie
+                // à la page, suffit à le lire en une fois.
+                var pages = Math.Max(1, Math.Min(Block, length + DiskIoNative.Alignment - 1) / DiskIoNative.Alignment);
+                return new UnbufferedReader(file, new DiskIoNative.AlignedBuffer((int)pages * DiskIoNative.Alignment));
+            }
+
+            internal int Read(byte[] block)
+            {
+                if (_ended) return 0;
+
+                var wanted = Math.Min(block.Length, _buffer.Size);
+                if (!DiskIoNative.ReadFile(_file, _buffer.Address, wanted, out var read, IntPtr.Zero))
+                {
+                    var code = (uint)Marshal.GetLastWin32Error();
+                    if (!_started && code == DiskIoNative.ErrorInvalidParameter)
+                        throw new UnbufferedReadRefusedException();
+                    throw Failure(code, null);
+                }
+
+                _started = true;
+                if (read < wanted) _ended = true;
+
+                Marshal.Copy(_buffer.Address, block, 0, read);
+                return read;
+            }
+
+            public void Dispose()
+            {
+                _file.Dispose();
+                _buffer.Dispose();
+            }
+
+            /// <summary>
+            /// L'erreur Windows sous la forme que <see cref="Copy"/> sait classer : refus d'accès,
+            /// ou entrée-sortie portant son code, qui distingue un disque plein d'un fichier tenu.
+            /// </summary>
+            private static Exception Failure(uint code, string? path)
+            {
+                var message = new Win32Exception((int)code).Message + (path == null ? string.Empty : " : " + path);
+                return code == DiskIoNative.ErrorAccessDenied
+                    ? new UnauthorizedAccessException(message)
+                    : new IOException(message, unchecked((int)0x80070000) | (int)code);
+            }
+        }
+
+        /// <summary>Le support refuse la lecture sans tampon, avant qu'un seul octet ait été lu.</summary>
+        private sealed class UnbufferedReadRefusedException : Exception
+        {
+        }
+
+        /// <summary>
+        /// Lit bloc par bloc, et traite chaque bloc pendant que le suivant se lit.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="read"/> remplit un bloc et rend le nombre d'octets lus, zéro à la fin.
         /// <paramref name="background"/> part sur un autre fil pendant que la lecture suivante
         /// avance ; <paramref name="alongside"/>, s'il est donné, s'exécute sur ce fil-ci en même
         /// temps que lui, sur le même bloc, que ni l'un ni l'autre ne modifie. Deux blocs
@@ -441,7 +618,7 @@ namespace LDI12.Platform.Gateways
         /// </para>
         /// </remarks>
         private static long Pump(
-            Stream input, Action<byte[], int> background, Action<byte[], int>? alongside,
+            Func<byte[], int> read, Action<byte[], int> background, Action<byte[], int>? alongside,
             Action<long>? progressed, CancellationToken cancellationToken)
         {
             var blocks = _blocks ??= new[] { new byte[Block], new byte[Block] };
@@ -458,7 +635,7 @@ namespace LDI12.Platform.Gateways
                     cancellationToken.ThrowIfCancellationRequested();
 
                     var block = blocks[current];
-                    var read = input.Read(block, 0, block.Length);
+                    var count = read(block);
 
                     if (pending != null)
                     {
@@ -471,20 +648,20 @@ namespace LDI12.Platform.Gateways
                         progressed?.Invoke(pendingCount);
                     }
 
-                    if (read == 0) return total;
-                    total += read;
+                    if (count == 0) return total;
+                    total += count;
 
-                    if (read < block.Length)
+                    if (count < block.Length)
                     {
-                        background(block, read);
-                        alongside?.Invoke(block, read);
-                        progressed?.Invoke(read);
+                        background(block, count);
+                        alongside?.Invoke(block, count);
+                        progressed?.Invoke(count);
                         continue;
                     }
 
-                    pendingCount = read;
-                    pending = Task.Run(() => background(block, read));
-                    alongside?.Invoke(block, read);
+                    pendingCount = count;
+                    pending = Task.Run(() => background(block, count));
+                    alongside?.Invoke(block, count);
                     current ^= 1;
                 }
             }

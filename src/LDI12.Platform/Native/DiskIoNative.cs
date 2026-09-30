@@ -28,10 +28,15 @@ namespace LDI12.Platform.Native
         /// <summary>Partage complet, suppression comprise : exigée par la suppression à la fermeture.</summary>
         internal const uint ShareAll = 0x00000007;
 
+        /// <summary>Partage en lecture seule : personne n'écrit dans un fichier qu'on est en train de relire.</summary>
+        internal const uint ShareRead = 0x00000001;
+
         internal const uint CreateAlways = 2;
+        internal const uint OpenExisting = 3;
 
         internal const uint FlagNoBuffering = 0x20000000;
         internal const uint FlagWriteThrough = 0x80000000;
+        internal const uint FlagSequentialScan = 0x08000000;
 
         /// <summary>
         /// Le fichier de mesure disparaît à la fermeture du descripteur, plantage compris.
@@ -46,6 +51,10 @@ namespace LDI12.Platform.Native
 
         internal const uint ErrorAccessDenied = 5;
         internal const uint ErrorDiskFull = 112;
+        internal const uint ErrorNotSupported = 50;
+
+        /// <summary>Rendu par une lecture sans mémoire tampon qui ne respecte pas la taille de secteur.</summary>
+        internal const uint ErrorInvalidParameter = 87;
 
         /// <summary>Alignement d'une page : couvre les secteurs de 512 comme ceux de 4096 octets.</summary>
         internal const int Alignment = 4096;

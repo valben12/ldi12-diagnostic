@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using LDI12.Core.Diagnostics;
 using LDI12.Core.Execution;
 using LDI12.Core.Logging;
@@ -355,53 +356,177 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        /// <summary>Taille d'un bloc de copie.</summary>
+        private const int Block = 1024 * 1024;
+
+        /// <summary>
+        /// Tampon interne des flux : aucun. Chaque lecture et chaque écriture porte un bloc
+        /// entier, qu'un tampon de <see cref="FileStream"/> ne ferait que recopier ; et sous .NET
+        /// Framework, un dernier bloc incomplet lui ferait allouer un mégaoctet par fichier.
+        /// </summary>
+        private const int NoStreamBuffer = 1;
+
+        // Deux blocs par fil d'exécution, gardés d'un fichier à l'autre : les allouer à chaque
+        // copie coûtait deux mégaoctets par fichier sur le tas des gros objets, jamais compacté,
+        // soit des centaines de gigaoctets d'allocations pour un profil de navigateur.
+        [ThreadStatic] private static byte[][]? _blocks;
+
+        [ThreadStatic] private static HashAlgorithm? _sha256;
+
         /// <summary>Écrit la copie et rend l'empreinte de ce qui a été lu à la source.</summary>
+        /// <remarks>
+        /// L'écriture d'un bloc se fait pendant que le suivant se lit et que l'empreinte se
+        /// calcule : source et destination sont presque toujours deux supports différents, et
+        /// les faire attendre l'un l'autre revenait à additionner leurs temps au lieu de ne payer
+        /// que celui du plus lent.
+        /// </remarks>
         private static byte[] Write(
             FileInfo source, string destination, out long written, Action<long>? progressed,
             CancellationToken cancellationToken)
         {
-            const int Buffer = 1024 * 1024;
-
-            written = 0;
-            using var hash = SHA256.Create();
+            var hash = Sha256();
             using var input = new FileStream(
-                source.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, Buffer);
+                source.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, NoStreamBuffer,
+                FileOptions.SequentialScan);
             using var output = new FileStream(
-                destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, Buffer);
+                destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, NoStreamBuffer);
 
-            var buffer = new byte[Buffer];
-            int read;
-            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                output.Write(buffer, 0, read);
-                hash.TransformBlock(buffer, 0, read, null, 0);
-                written += read;
-                progressed?.Invoke(read);
-            }
+            // Réserver la taille d'emblée, comme robocopy : le système de fichiers alloue le
+            // fichier d'un seul tenant au lieu de l'étendre à chaque bloc, ce qui compte sur les
+            // clés et disques externes en FAT32 ou exFAT. Un support plein le dit dès ici, et
+            // non au dernier bloc.
+            var expected = source.Length;
+            if (expected > Block) output.SetLength(expected);
 
-            hash.TransformFinalBlock(buffer, 0, 0);
+            written = Pump(
+                input,
+                (block, count) => output.Write(block, 0, count),
+                (block, count) => hash.TransformBlock(block, 0, count, null, 0),
+                progressed, cancellationToken);
+
+            // Une source raccourcie pendant la copie ne doit pas laisser de zéros en queue :
+            // la relecture la rejettera, mais la copie sans vérification, elle, la garderait.
+            if (written != expected && expected > Block) output.SetLength(written);
+
+            hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return hash.Hash;
         }
 
         private static byte[] Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
         {
-            const int Buffer = 1024 * 1024;
+            var hash = Sha256();
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.Read, NoStreamBuffer, FileOptions.SequentialScan);
 
-            using var hash = SHA256.Create();
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, Buffer);
+            Pump(stream, (block, count) => hash.TransformBlock(block, 0, count, null, 0), null,
+                progressed, cancellationToken);
 
-            var buffer = new byte[Buffer];
-            int read;
-            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                hash.TransformBlock(buffer, 0, read, null, 0);
-                progressed?.Invoke(read);
-            }
-
-            hash.TransformFinalBlock(buffer, 0, 0);
+            hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return hash.Hash;
+        }
+
+        /// <summary>
+        /// Lit un flux bloc par bloc, et traite chaque bloc pendant que le suivant se lit.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="background"/> part sur un autre fil pendant que la lecture suivante
+        /// avance ; <paramref name="alongside"/>, s'il est donné, s'exécute sur ce fil-ci en même
+        /// temps que lui, sur le même bloc, que ni l'un ni l'autre ne modifie. Deux blocs
+        /// alternent : celui qu'on lit n'est jamais celui qu'on traite. Un bloc incomplet, qui
+        /// est le dernier ou le seul d'un petit fichier, est traité sur place : il n'y a plus
+        /// rien à lire en parallèle, et changer de fil coûterait plus qu'il ne rapporte.
+        /// <para>
+        /// L'avancement n'est annoncé qu'une fois le bloc traité, et toujours depuis ce fil :
+        /// celui qui le reçoit n'a pas à être prêt à être appelé de deux endroits à la fois.
+        /// </para>
+        /// </remarks>
+        private static long Pump(
+            Stream input, Action<byte[], int> background, Action<byte[], int>? alongside,
+            Action<long>? progressed, CancellationToken cancellationToken)
+        {
+            var blocks = _blocks ??= new[] { new byte[Block], new byte[Block] };
+            var current = 0;
+            long total = 0;
+
+            Task? pending = null;
+            var pendingCount = 0;
+
+            try
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var block = blocks[current];
+                    var read = input.Read(block, 0, block.Length);
+
+                    if (pending != null)
+                    {
+                        var finished = pending;
+                        pending = null;
+
+                        // GetResult et non Wait : l'exception d'origine remonte telle quelle,
+                        // avec son code, et un disque plein reste reconnu comme tel.
+                        finished.GetAwaiter().GetResult();
+                        progressed?.Invoke(pendingCount);
+                    }
+
+                    if (read == 0) return total;
+                    total += read;
+
+                    if (read < block.Length)
+                    {
+                        background(block, read);
+                        alongside?.Invoke(block, read);
+                        progressed?.Invoke(read);
+                        continue;
+                    }
+
+                    pendingCount = read;
+                    pending = Task.Run(() => background(block, read));
+                    alongside?.Invoke(block, read);
+                    current ^= 1;
+                }
+            }
+            finally
+            {
+                // Jamais de bloc encore en cours d'écriture quand le flux se ferme, ni quand
+                // le tampon repart servir au fichier suivant.
+                if (pending != null)
+                    try { pending.Wait(); }
+                    catch (AggregateException) { }
+            }
+        }
+
+        /// <summary>
+        /// L'empreinte SHA-256, par l'implémentation de Windows quand elle est disponible.
+        /// </summary>
+        /// <remarks>
+        /// Sous .NET Framework, <c>SHA256.Create()</c> rend l'implémentation managée, plusieurs
+        /// fois plus lente que celle de Windows et plus lente qu'un SSD externe en USB 3 : chaque
+        /// octet copié passant deux fois par l'empreinte, c'était elle, et non le disque, qui
+        /// fixait la vitesse de la sauvegarde. Elle est en outre refusée sur une machine
+        /// configurée en mode FIPS. L'instance est gardée d'un fichier à l'autre et remise à zéro
+        /// avant chaque usage.
+        /// </remarks>
+        private static HashAlgorithm Sha256()
+        {
+            var hash = _sha256 ??= CreateSha256();
+            hash.Initialize();
+            return hash;
+        }
+
+        private static HashAlgorithm CreateSha256()
+        {
+            try
+            {
+                return new SHA256Cng();
+            }
+            catch (Exception ex) when (ex is PlatformNotSupportedException || ex is CryptographicException ||
+                                       ex is NotImplementedException)
+            {
+                return SHA256.Create();
+            }
         }
 
         private static bool Same(byte[] left, byte[] right)

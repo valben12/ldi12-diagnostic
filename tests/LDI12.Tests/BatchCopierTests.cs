@@ -36,9 +36,10 @@ namespace LDI12.Tests
         [Fact]
         public void Quand_le_support_sert_plusieurs_fichiers_a_la_fois_le_parallele_est_retenu()
         {
-            // Un SSD : chaque copie attend, mais les attentes se recouvrent.
-            var files = Files(400, 4096);
-            files.CopyDelay = TimeSpan.FromMilliseconds(4);
+            // Un SSD : chaque copie attend, mais les attentes se recouvrent. Seize millisecondes :
+            // Windows ne sait pas dormir moins longtemps qu'un battement de son horloge.
+            var files = Files(240, 4096);
+            files.CopyDelay = TimeSpan.FromMilliseconds(16);
             var copier = Copier(files);
 
             copier.Run(Items(files), (_, _) => { }, CancellationToken.None);
@@ -52,8 +53,8 @@ namespace LDI12.Tests
         public void Quand_le_parallele_ne_gagne_rien_la_copie_reste_sequentielle()
         {
             // Un disque dur : une seule tête, les copies attendent leur tour.
-            var files = Files(400, 4096);
-            files.CopyDelay = TimeSpan.FromMilliseconds(4);
+            var files = Files(240, 4096);
+            files.CopyDelay = TimeSpan.FromMilliseconds(16);
             files.SerializeDelay = true;
             var copier = Copier(files);
 

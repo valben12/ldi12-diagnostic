@@ -55,6 +55,7 @@ namespace LDI12.Actions.Backup
         private double? _sequentialRate;
         private double? _parallelRate;
         private int _batchesSinceReview;
+        private bool _warmedUp;
 
         /// <param name="isFatal">
         /// Vrai si ce résultat doit tout arrêter : support plein, support disparu. Appelé depuis
@@ -191,6 +192,15 @@ namespace LDI12.Actions.Backup
                 if (result?.Outcome == FileCopyOutcome.Copied) copied++;
 
             if (copied < results.Length / 2 || results.Length < 8 || elapsed <= TimeSpan.Zero) return;
+
+            // Le premier lot paie la mise en route : premiers dossiers créés, code chargé, cache de
+            // l'antivirus à froid. Retenu, il ferait paraître la copie séquentielle plus lente
+            // qu'elle n'est, et ferait choisir le parallèle à tort sur un disque dur.
+            if (!_warmedUp)
+            {
+                _warmedUp = true;
+                return;
+            }
 
             var rate = (results.Length + bytes / (256.0 * 1024)) / elapsed.TotalSeconds;
             if (degree == 1) _sequentialRate = rate;

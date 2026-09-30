@@ -41,21 +41,12 @@ namespace LDI12.Actions.Backup
 
         internal const int Parallel = 4;
 
-        /// <summary>Le parallèle doit faire au moins 15 % mieux pour être retenu.</summary>
-        private const double RequiredGain = 1.15;
-
-        /// <summary>Après ce nombre de lots, les deux façons sont de nouveau comparées.</summary>
-        private const int ReviewEvery = 40;
-
         private readonly IFileSystemGateway _files;
         private readonly CopyProgress _tracker;
         private readonly Func<FileCopyResult, bool> _isFatal;
         private readonly object _gate = new object();
 
-        private double? _sequentialRate;
-        private double? _parallelRate;
-        private int _batchesSinceReview;
-        private bool _warmedUp;
+        private readonly ParallelTuner _tuner = new ParallelTuner();
 
         /// <param name="isFatal">
         /// Vrai si ce résultat doit tout arrêter : support plein, support disparu. Appelé depuis
@@ -69,15 +60,7 @@ namespace LDI12.Actions.Backup
         }
 
         /// <summary>Le degré retenu pour le prochain lot : 1, ou <see cref="Parallel"/>.</summary>
-        internal int Degree
-        {
-            get
-            {
-                if (_sequentialRate == null) return 1;
-                if (_parallelRate == null) return Parallel;
-                return _parallelRate.Value >= _sequentialRate.Value * RequiredGain ? Parallel : 1;
-            }
-        }
+        internal int Degree => _tuner.Degree;
 
         /// <summary>Combien de lots sont partis en parallèle : de quoi le dire dans le journal.</summary>
         internal int ParallelBatches { get; private set; }
@@ -193,25 +176,81 @@ namespace LDI12.Actions.Backup
 
             if (copied < results.Length / 2 || results.Length < 8 || elapsed <= TimeSpan.Zero) return;
 
-            // Le premier lot paie la mise en route : premiers dossiers créés, code chargé, cache de
-            // l'antivirus à froid. Retenu, il ferait paraître la copie séquentielle plus lente
-            // qu'elle n'est, et ferait choisir le parallèle à tort sur un disque dur.
+            _tuner.Record(degree, results.Length + bytes / (256.0 * 1024), elapsed);
+        }
+    }
+
+    /// <summary>
+    /// Choisit, lot après lot, entre copier un par un et copier à plusieurs.
+    /// </summary>
+    /// <remarks>
+    /// <b>Deux mesures de chaque, en alternance.</b> Une seule mesure par façon se laissait
+    /// tromper par un passage de l'antivirus ou de l'indexation au mauvais moment : un disque dur
+    /// pouvait alors passer pour un SSD. Alterner un par un, à plusieurs, un par un, à plusieurs,
+    /// et comparer les totaux, étale ces aléas sur les deux côtés.
+    /// <para>
+    /// Le premier lot n'est jamais retenu : il paie la mise en route, dossiers créés, code chargé,
+    /// antivirus à froid, et ferait paraître la copie un par un plus lente qu'elle n'est. Le
+    /// parallèle doit gagner d'au moins 15 % : à égalité, la copie reste séquentielle, qui ne
+    /// dérange rien. Le choix est revu tous les quarante lots.
+    /// </para>
+    /// </remarks>
+    internal sealed class ParallelTuner
+    {
+        private const double RequiredGain = 1.15;
+        private const int ReviewEvery = 40;
+
+        private static readonly int[] Exploration = { 1, BatchCopier.Parallel, 1, BatchCopier.Parallel };
+
+        private bool _warmedUp;
+        private int _step;
+        private int? _decided;
+        private int _sinceDecision;
+        private double _sequentialUnits, _sequentialSeconds, _parallelUnits, _parallelSeconds;
+
+        public int Degree => _decided ?? (_warmedUp ? Exploration[_step] : 1);
+
+        /// <summary>Un lot mené à <paramref name="degree"/>, et le travail qu'il représentait.</summary>
+        public void Record(int degree, double units, TimeSpan elapsed)
+        {
             if (!_warmedUp)
             {
                 _warmedUp = true;
                 return;
             }
 
-            var rate = (results.Length + bytes / (256.0 * 1024)) / elapsed.TotalSeconds;
-            if (degree == 1) _sequentialRate = rate;
-            else _parallelRate = rate;
-
-            if (++_batchesSinceReview >= ReviewEvery)
+            if (_decided != null)
             {
-                _batchesSinceReview = 0;
-                _sequentialRate = null;
-                _parallelRate = null;
+                if (++_sinceDecision >= ReviewEvery) Review();
+                return;
             }
+
+            if (degree != Exploration[_step] || elapsed <= TimeSpan.Zero) return;
+
+            if (degree == 1)
+            {
+                _sequentialUnits += units;
+                _sequentialSeconds += elapsed.TotalSeconds;
+            }
+            else
+            {
+                _parallelUnits += units;
+                _parallelSeconds += elapsed.TotalSeconds;
+            }
+
+            if (++_step < Exploration.Length) return;
+
+            var sequential = _sequentialUnits / _sequentialSeconds;
+            var parallel = _parallelUnits / _parallelSeconds;
+            _decided = parallel >= sequential * RequiredGain ? BatchCopier.Parallel : 1;
+            _sinceDecision = 0;
+        }
+
+        private void Review()
+        {
+            _decided = null;
+            _step = 0;
+            _sequentialUnits = _sequentialSeconds = _parallelUnits = _parallelSeconds = 0;
         }
     }
 }

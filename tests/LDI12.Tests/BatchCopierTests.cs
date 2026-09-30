@@ -49,20 +49,62 @@ namespace LDI12.Tests
             Assert.True(copier.ParallelBatches > 1);
         }
 
-        [Fact]
-        public void Quand_le_parallele_ne_gagne_rien_la_copie_reste_sequentielle()
+        // ============================================================ le choix, sans chronomètre
+
+        [Theory]
+        [InlineData(100, 100, 1)]   // disque dur : aucun gain
+        [InlineData(100, 110, 1)]   // gain trop faible pour valoir le dérangement
+        [InlineData(100, 150, 4)]   // SSD : le parallèle l'emporte
+        [InlineData(100, 80, 1)]    // clé USB bas de gamme : le parallèle la ralentit
+        public void Le_parallele_n_est_retenu_que_s_il_gagne_nettement(double sequential, double parallel, int expected)
         {
-            // Un disque dur : une seule tête, les copies attendent leur tour.
-            var files = Files(240, 4096);
-            files.CopyDelay = TimeSpan.FromMilliseconds(16);
-            files.SerializeDelay = true;
-            var copier = Copier(files);
+            var tuner = new ParallelTuner();
 
-            copier.Run(Items(files), (_, _) => { }, CancellationToken.None);
+            // Échauffement, puis un par un, à plusieurs, un par un, à plusieurs.
+            Record(tuner, 500);
+            Record(tuner, sequential);
+            Record(tuner, parallel);
+            Record(tuner, sequential);
+            Record(tuner, parallel);
 
-            Assert.Equal(1, copier.Degree);
-            Assert.Equal(1, copier.ParallelBatches);
+            Assert.Equal(expected, tuner.Degree);
         }
+
+        [Fact]
+        public void Le_premier_lot_ne_compte_pas()
+        {
+            // Un premier lot lent, comme toujours à froid, ne doit pas faire choisir le parallèle.
+            var tuner = new ParallelTuner();
+
+            Record(tuner, 20);
+            Record(tuner, 100);
+            Record(tuner, 100);
+            Record(tuner, 100);
+            Record(tuner, 100);
+
+            Assert.Equal(1, tuner.Degree);
+        }
+
+        [Fact]
+        public void Le_choix_est_revu_regulierement()
+        {
+            var tuner = new ParallelTuner();
+            Record(tuner, 100);
+            Record(tuner, 100);
+            Record(tuner, 200);
+            Record(tuner, 100);
+            Record(tuner, 200);
+            Assert.Equal(BatchCopier.Parallel, tuner.Degree);
+
+            for (var i = 0; i < 40; i++) Record(tuner, 200);
+
+            // Nouvelle comparaison : on repart d'un lot un par un.
+            Assert.Equal(1, tuner.Degree);
+        }
+
+        /// <summary>Un lot de 100 unités de travail, mené au rythme donné en unités par seconde.</summary>
+        private static void Record(ParallelTuner tuner, double rate)
+            => tuner.Record(tuner.Degree, 100, TimeSpan.FromSeconds(100 / rate));
 
         [Fact]
         public void Un_support_plein_arrete_tout_meme_en_plein_lot()

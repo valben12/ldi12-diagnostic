@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 using LDI12.Actions;
 using LDI12.Actions.Backup;
 using LDI12.Actions.Repairs;
@@ -95,6 +96,241 @@ namespace LDI12.App.ViewModels
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
+            AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
+            NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
+            ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
+            AllApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, true));
+            NoApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, false));
+
+            StartDriveWatch();
+        }
+
+        // ---------- supports branchés
+
+        private DispatcherTimer? _drivesTimer;
+        private bool _refreshingDrives;
+        private string _drivesSignature = string.Empty;
+
+        /// <summary>Les volumes où déposer une sauvegarde, en tuiles.</summary>
+        public ObservableCollection<DriveTile> BackupDrives { get; } = new ObservableCollection<DriveTile>();
+
+        /// <summary>Les volumes qui portent au moins une sauvegarde LDI12.</summary>
+        public ObservableCollection<DriveTile> RestoreDrives { get; } = new ObservableCollection<DriveTile>();
+
+        public bool HasBackupDrives => BackupDrives.Count > 0;
+        public bool HasNoBackupDrive => BackupDrives.Count == 0;
+        public bool HasRestoreDrives => RestoreDrives.Count > 0;
+        public bool HasNoRestoreDrive => RestoreDrives.Count == 0;
+
+        /// <summary>
+        /// Relit les volumes toutes les trois secondes.
+        /// </summary>
+        /// <remarks>
+        /// <b>Brancher le disque doit suffire.</b> Le technicien branche son disque après avoir
+        /// ouvert l'écran, presque toujours : il le voit apparaître sans rien toucher. La lecture
+        /// se fait hors du fil d'interface, parce qu'un lecteur réseau déconnecté peut mettre
+        /// plusieurs secondes à répondre, et elle n'est pas relancée tant que la précédente dure.
+        /// </remarks>
+        private void StartDriveWatch()
+        {
+            if (Dispatcher.FromThread(System.Threading.Thread.CurrentThread) == null) return;
+
+            _drivesTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _drivesTimer.Tick += async (_, _) => await RefreshDrivesAsync().ConfigureAwait(true);
+            _drivesTimer.Start();
+            _ = RefreshDrivesAsync();
+        }
+
+        private async Task RefreshDrivesAsync()
+        {
+            if (_refreshingDrives || IsBackupTransferring || IsRestoreTransferring) return;
+            _refreshingDrives = true;
+
+            try
+            {
+                var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
+                var drives = await Task.Run(() => DestinationDrives.Detect(services.Files)).ConfigureAwait(true);
+
+                // Rien ne bouge à l'écran tant que rien n'a changé : reconstruire les tuiles toutes
+                // les trois secondes ferait clignoter la sélection et le survol.
+                var signature = new System.Text.StringBuilder();
+                foreach (var drive in drives)
+                    signature.Append(drive.Root).Append('|').Append(drive.Label).Append('|')
+                        .Append(drive.FreeBytes / (64L * 1024 * 1024)).Append('|').Append(drive.Backups).Append(';');
+
+                if (signature.ToString() == _drivesSignature) return;
+                _drivesSignature = signature.ToString();
+
+                BackupDrives.Clear();
+                RestoreDrives.Clear();
+                foreach (var drive in drives)
+                {
+                    BackupDrives.Add(new DriveTile(drive, tile => BackupDestination = tile.Root));
+                    if (drive.Backups > 0) RestoreDrives.Add(new DriveTile(drive, tile => RestoreSource = tile.Root));
+                }
+
+                MarkSelection();
+                Raise(nameof(HasBackupDrives));
+                Raise(nameof(HasNoBackupDrive));
+                Raise(nameof(HasRestoreDrives));
+                Raise(nameof(HasNoRestoreDrive));
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Les supports branchés n'ont pas pu être relus.", ex);
+            }
+            finally
+            {
+                _refreshingDrives = false;
+            }
+        }
+
+        private void MarkSelection()
+        {
+            foreach (var tile in BackupDrives) tile.IsSelected = SameRoot(tile.Root, BackupDestination);
+            foreach (var tile in RestoreDrives) tile.IsSelected = SameRoot(tile.Root, RestoreSource);
+        }
+
+        private static bool SameRoot(string root, string path)
+            => string.Equals(root.TrimEnd('\\'), (path ?? string.Empty).Trim().TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
+        // ---------- pilotes et applications
+
+        private bool _includeDrivers = true;
+        private bool _includeApplicationList = true;
+        private bool _isListingApplications;
+        private string _driversNote = "Les pilotes se listent à partir d'une analyse : lancez-en une depuis l'accueil.";
+        private string _applicationsNote = "Cliquez sur « Rechercher les applications » : winget dit lesquelles il sait réinstaller.";
+
+        /// <summary>Les pilotes tiers de la machine, un par paquet. Tous cochés au départ.</summary>
+        public ObservableCollection<ChoiceItem> DriverChoices { get; } = new ObservableCollection<ChoiceItem>();
+
+        /// <summary>Les applications que winget sait réinstaller. Toutes cochées au départ.</summary>
+        public ObservableCollection<ChoiceItem> ApplicationChoices { get; } = new ObservableCollection<ChoiceItem>();
+
+        public bool HasDriverChoices => DriverChoices.Count > 0;
+        public bool HasApplicationChoices => ApplicationChoices.Count > 0;
+
+        public string DriversNote { get => _driversNote; private set => Set(ref _driversNote, value); }
+        public string ApplicationsNote { get => _applicationsNote; private set => Set(ref _applicationsNote, value); }
+
+        public bool IncludeDrivers
+        {
+            get => _includeDrivers;
+            set { if (Set(ref _includeDrivers, value)) Invalidate(); }
+        }
+
+        public bool IncludeApplicationList
+        {
+            get => _includeApplicationList;
+            set { if (Set(ref _includeApplicationList, value)) Invalidate(); }
+        }
+
+        public bool IsListingApplications
+        {
+            get => _isListingApplications;
+            private set
+            {
+                if (Set(ref _isListingApplications, value))
+                    (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public ICommand AllDriversCommand { get; }
+        public ICommand NoDriversCommand { get; }
+        public ICommand ListApplicationsCommand { get; }
+        public ICommand AllApplicationsCommand { get; }
+        public ICommand NoApplicationsCommand { get; }
+
+        private void CheckAll(IEnumerable<ChoiceItem> items, bool value)
+        {
+            foreach (var item in items) item.SetSilently(value);
+            Invalidate();
+        }
+
+        private List<DriverChoice> CheckedDrivers()
+        {
+            var result = new List<DriverChoice>();
+            if (!IncludeDrivers) return result;
+            foreach (var item in DriverChoices)
+                if (item.IsChecked && item.Driver != null) result.Add(item.Driver);
+            return result;
+        }
+
+        private List<string> CheckedApplications()
+        {
+            var result = new List<string>();
+            if (!IncludeApplicationList) return result;
+            foreach (var item in ApplicationChoices)
+                if (item.IsChecked) result.Add(item.Key);
+            return result;
+        }
+
+        private void LoadDrivers(SystemSnapshot? snapshot)
+        {
+            DriverChoices.Clear();
+
+            foreach (var driver in DriverBackup.Choices(snapshot))
+            {
+                var detail = new List<string>();
+                if (!string.IsNullOrEmpty(driver.DeviceClass)) detail.Add(driver.DeviceClass!);
+                if (!string.IsNullOrEmpty(driver.Manufacturer)) detail.Add(driver.Manufacturer!);
+                if (!string.IsNullOrEmpty(driver.Version)) detail.Add("version " + driver.Version);
+                detail.Add(driver.InfName);
+
+                DriverChoices.Add(new ChoiceItem(driver.InfName, driver.Label, string.Join(" · ", detail), true, Invalidate)
+                {
+                    Driver = driver,
+                });
+            }
+
+            DriversNote = snapshot == null
+                ? "Les pilotes se listent à partir d'une analyse : lancez-en une depuis l'accueil."
+                : DriverChoices.Count == 0
+                    ? "L'analyse n'a relevé aucun pilote tiers : tout ce que cette machine utilise revient avec Windows."
+                    : DriverChoices.Count + " pilote(s) tiers relevés par l'analyse. Ceux fournis avec Windows reviennent avec lui " +
+                      "et ne sont pas listés.";
+
+            Raise(nameof(HasDriverChoices));
+            Invalidate();
+        }
+
+        private async Task ListApplicationsAsync()
+        {
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (runner == null) return;
+
+            IsListingApplications = true;
+            ApplicationsNote = "winget relève les applications installées. Compter une trentaine de secondes…";
+            var export = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ldi12-winget-" + Guid.NewGuid().ToString("N") + ".json");
+
+            try
+            {
+                var listing = await Task.Run(() => WingetApplications.ListAsync(
+                    runner.Context.Processes, runner.Context.Files, export, CancellationToken.None)).ConfigureAwait(true);
+
+                ApplicationChoices.Clear();
+                foreach (var id in listing.Packages)
+                    ApplicationChoices.Add(new ChoiceItem(id, id, null, true, Invalidate));
+
+                ApplicationsNote = listing.Failure ??
+                    listing.Packages.Count + " application(s) que winget sait réinstaller, depuis leur éditeur et dans leur " +
+                    "dernière version. Les autres restent dans la fiche de réinstallation, à remettre à la main.";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La liste des applications n'a pas pu être établie.", ex);
+                ApplicationsNote = "La liste des applications n'a pas pu être établie : " + ex.Message;
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(export)) System.IO.File.Delete(export); }
+                catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException) { }
+
+                IsListingApplications = false;
+                Raise(nameof(HasApplicationChoices));
+                Invalidate();
+            }
         }
 
         // ---------- avancement d'un transfert
@@ -198,6 +434,26 @@ namespace LDI12.App.ViewModels
         private string _restoreSource = string.Empty;
         private string _restoreSummary = string.Empty;
         private bool _restoreWifi = true;
+        private bool _restoreDriversChecked = true;
+        private bool _restoreApplicationsChecked = true;
+        private IRepairAction? _restoreDrivers;
+        private IRepairAction? _restoreApplications;
+        private ActionPreview? _restoreDriversPreview;
+        private ActionPreview? _restoreApplicationsPreview;
+
+        /// <summary>Réinstaller les pilotes que la sauvegarde contient. Demande une invite Windows.</summary>
+        public bool RestoreDriversChecked
+        {
+            get => _restoreDriversChecked;
+            set { if (Set(ref _restoreDriversChecked, value)) InvalidateRestore(); }
+        }
+
+        /// <summary>Réinstaller par winget les applications que la sauvegarde liste. Demande Internet.</summary>
+        public bool RestoreApplicationsChecked
+        {
+            get => _restoreApplicationsChecked;
+            set { if (Set(ref _restoreApplicationsChecked, value)) InvalidateRestore(); }
+        }
 
         /// <summary>Lignes du relevé de restauration, puis du compte rendu.</summary>
         public ObservableCollection<string> RestoreLines { get; } = new ObservableCollection<string>();
@@ -206,7 +462,12 @@ namespace LDI12.App.ViewModels
         public string RestoreSource
         {
             get => _restoreSource;
-            set { if (Set(ref _restoreSource, value)) InvalidateRestore(); }
+            set
+            {
+                if (!Set(ref _restoreSource, value)) return;
+                InvalidateRestore();
+                MarkSelection();
+            }
         }
 
         /// <summary>Réimporter les profils Wi-Fi que la sauvegarde contient. Coché par défaut : ils ont été exportés exprès.</summary>
@@ -226,7 +487,10 @@ namespace LDI12.App.ViewModels
 
         public bool CanPrepareRestore => !IsRunning && !IsCopying && !string.IsNullOrWhiteSpace(RestoreSource);
 
-        public bool CanRestore => !IsCopying && _restorePreview != null && _restorePreview.CanExecute;
+        public bool CanRestore
+            => !IsCopying && (Ready(_restorePreview) || Ready(_restoreDriversPreview) || Ready(_restoreApplicationsPreview));
+
+        private static bool Ready(ActionPreview? preview) => preview != null && preview.CanExecute;
 
         public ICommand PrepareRestoreCommand { get; }
         public ICommand RunRestoreCommand { get; }
@@ -234,6 +498,8 @@ namespace LDI12.App.ViewModels
         private void InvalidateRestore()
         {
             _restorePreview = null;
+            _restoreDriversPreview = null;
+            _restoreApplicationsPreview = null;
             RestoreLines.Clear();
             RestoreSummary = string.Empty;
             Raise(nameof(HasRestorePreview));
@@ -257,6 +523,7 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             RestoreLines.Clear();
+            _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
             Status = "Relevé de la sauvegarde en cours. Rien n'est encore écrit sur cette machine.";
 
             try
@@ -266,20 +533,51 @@ namespace LDI12.App.ViewModels
                     .ConfigureAwait(true);
 
                 RestoreSummary = _restorePreview.Summary;
+                Show(RestoreLines, _restorePreview);
 
-                foreach (var line in _restorePreview.Measurements)
-                    if (line.Kind == PreviewLineKind.Caution) RestoreLines.Add("Attention. " + line.Label + " : " + line.Value);
-                foreach (var line in _restorePreview.WillDo) RestoreLines.Add(line);
-                foreach (var line in _restorePreview.WillNotDo) RestoreLines.Add(line);
+                // Les pilotes et les applications ne sont préparés que si la sauvegarde en contient :
+                // demander une invite Windows pour découvrir qu'il n'y a rien à installer serait
+                // une invite de trop.
+                var backup = RestoreCatalog.Find(runner.Context.Files, RestoreSource.Trim(), out _);
+                var source = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [RestoreDriversAction.SourceParameter] = RestoreSource.Trim(),
+                };
 
-                Status = _restorePreview.Outcome == PreviewOutcome.Blocked
-                    ? _restorePreview.Blocker ?? "La restauration ne peut pas être préparée."
-                    : "Relevé de la sauvegarde terminé. Rien n'a encore été restauré.";
+                if (RestoreDriversChecked && backup != null &&
+                    runner.Context.Files.DirectoryExists(System.IO.Path.Combine(backup, DriverBackup.Folder)))
+                {
+                    _restoreDrivers ??= ActionCatalog.Find(ActionIds.RestoreDrivers, _logger);
+                    if (_restoreDrivers != null)
+                    {
+                        _restoreDriversPreview = await runner.PreviewAsync(_restoreDrivers, source, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        RestoreLines.Add("Pilotes. " + _restoreDriversPreview.Summary);
+                        Show(RestoreLines, _restoreDriversPreview);
+                    }
+                }
+
+                if (RestoreApplicationsChecked && backup != null &&
+                    runner.Context.Files.FileExists(System.IO.Path.Combine(backup, WingetApplications.FileName)))
+                {
+                    _restoreApplications ??= ActionCatalog.Find(ActionIds.RestoreApplications, _logger);
+                    if (_restoreApplications != null)
+                    {
+                        _restoreApplicationsPreview = await runner.PreviewAsync(_restoreApplications, source, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        RestoreLines.Add("Applications. " + _restoreApplicationsPreview.Summary);
+                        Show(RestoreLines, _restoreApplicationsPreview);
+                    }
+                }
+
+                Status = CanRestore
+                    ? "Relevé de la sauvegarde terminé. Rien n'a encore été restauré."
+                    : _restorePreview.Blocker ?? _restorePreview.Summary;
             }
             catch (Exception ex)
             {
                 _logger.Error(Category, "Le relevé de la restauration a échoué.", ex);
-                _restorePreview = null;
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
                 Status = "Le relevé de la restauration a échoué : " + ex.Message;
             }
             finally
@@ -290,45 +588,94 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        /// <summary>Les lignes d'une prévisualisation, mises en garde d'abord.</summary>
+        private static void Show(ICollection<string> lines, ActionPreview preview)
+        {
+            foreach (var line in preview.Measurements)
+                if (line.Kind == PreviewLineKind.Caution) lines.Add("Attention. " + line.Label + " : " + line.Value);
+            foreach (var line in preview.WillDo) lines.Add(line);
+            foreach (var line in preview.WillNotDo) lines.Add(line);
+            if (preview.Outcome == PreviewOutcome.Blocked && preview.Blocker != null) lines.Add("Impossible : " + preview.Blocker);
+        }
+
+        /// <summary>
+        /// Pilotes, puis données, puis applications.
+        /// </summary>
+        /// <remarks>
+        /// <b>L'ordre n'est pas indifférent.</b> Les pilotes d'abord : l'hôte élevé qui les a
+        /// préparés se ferme après un quart d'heure d'inactivité, et une restauration de données
+        /// dure bien plus. Ils ramènent aussi la carte Wi-Fi, sans laquelle les profils Wi-Fi des
+        /// données ne se réimportent pas. Les applications en dernier : elles se téléchargent, et
+        /// le réseau est alors revenu.
+        /// </remarks>
         private async Task RestoreAsync()
         {
-            var preview = _restorePreview;
-            var action = _restore;
             var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
-            if (preview == null || action == null || runner == null) return;
+            if (runner == null || !CanRestore) return;
 
             IsCopying = true;
             Status = "Restauration en cours…";
-            BeginTransfer("Préparation de la restauration…");
             IsRestoreTransferring = true;
             var progress = new Progress<ActionProgress>(OnTransfer);
+            var report = new List<string>();
+            var summaries = new List<string>();
 
             try
             {
-                var outcome = await runner
-                    .ExecuteAsync(action, preview, RestoreParameters(), progress, CancellationToken.None)
-                    .ConfigureAwait(true);
+                if (Ready(_restoreDriversPreview) && _restoreDrivers != null)
+                {
+                    BeginTransfer("Réinstallation des pilotes…");
+                    var drivers = await runner.ExecuteAsync(_restoreDrivers, _restoreDriversPreview!, null, progress, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    summaries.Add("Pilotes : " + drivers.Summary);
+                    Report(report, "Pilotes", drivers);
+                }
 
-                Status = outcome.Summary;
-                _restorePreview = null;
-                RestoreLines.Clear();
-                RestoreSummary = "Compte rendu de la restauration :";
-                foreach (var line in outcome.Details) RestoreLines.Add(line);
+                if (Ready(_restorePreview) && _restore != null)
+                {
+                    BeginTransfer("Préparation de la restauration…");
+                    var data = await runner.ExecuteAsync(_restore, _restorePreview!, RestoreParameters(), progress, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    summaries.Add(data.Summary);
+                    Report(report, "Données", data);
+                }
+
+                if (Ready(_restoreApplicationsPreview) && _restoreApplications != null)
+                {
+                    BeginTransfer("Réinstallation des applications…");
+                    var applications = await runner.ExecuteAsync(
+                            _restoreApplications, _restoreApplicationsPreview!, null, progress, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    summaries.Add("Applications : " + applications.Summary);
+                    Report(report, "Applications", applications);
+                }
+
+                Status = string.Join(" ", summaries);
             }
             catch (Exception ex)
             {
                 _logger.Error(Category, "La restauration a échoué.", ex);
                 Status = "La restauration a échoué : " + ex.Message;
-                _restorePreview = null;
             }
             finally
             {
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+                RestoreLines.Clear();
+                RestoreSummary = report.Count > 0 ? "Compte rendu de la restauration :" : string.Empty;
+                foreach (var line in report) RestoreLines.Add(line);
+
                 IsCopying = false;
                 IsRestoreTransferring = false;
                 Raise(nameof(HasRestorePreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private static void Report(ICollection<string> lines, string part, ActionOutcome outcome)
+        {
+            lines.Add(part + " : " + outcome.Summary);
+            foreach (var line in outcome.Details) lines.Add(line);
         }
 
         public ObservableCollection<DataFolderItem> Folders { get; } = new ObservableCollection<DataFolderItem>();
@@ -374,7 +721,9 @@ namespace LDI12.App.ViewModels
             set
             {
                 // Le relevé porte sur une destination précise : changer de support l'invalide.
-                if (Set(ref _backupDestination, value)) Invalidate();
+                if (!Set(ref _backupDestination, value)) return;
+                Invalidate();
+                MarkSelection();
             }
         }
 
@@ -410,6 +759,7 @@ namespace LDI12.App.ViewModels
         private void Invalidate()
         {
             _backupPreview = null;
+            _driversPreview = null;
             BackupLines.Clear();
             BackupSummary = string.Empty;
             Raise(nameof(HasBackupPreview));
@@ -445,6 +795,9 @@ namespace LDI12.App.ViewModels
         public ICommand PrepareBackupCommand { get; }
         public ICommand RunBackupCommand { get; }
 
+        private IRepairAction? _exportDrivers;
+        private ActionPreview? _driversPreview;
+
         private async Task PrepareBackupAsync()
         {
             var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
@@ -455,6 +808,7 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             BackupLines.Clear();
+            _backupPreview = _driversPreview = null;
             Status = "Relevé de la copie en cours. Aucun fichier n'est encore écrit.";
 
             try
@@ -467,20 +821,40 @@ namespace LDI12.App.ViewModels
 
                 // Les mises en garde d'abord : un navigateur ouvert se ferme avant de lancer la
                 // copie, pas après avoir lu vingt lignes.
-                foreach (var line in _backupPreview.Measurements)
-                    if (line.Kind == PreviewLineKind.Caution) BackupLines.Add("Attention. " + line.Label + " : " + line.Value);
+                Show(BackupLines, _backupPreview);
 
-                foreach (var line in _backupPreview.WillDo) BackupLines.Add(line);
-                foreach (var line in _backupPreview.WillNotDo) BackupLines.Add(line);
+                // Les pilotes vont dans le dossier que la copie vient d'établir : sans lui, pas de pilotes.
+                var drivers = CheckedDrivers();
+                if (drivers.Count > 0 && _backupPreview.CanExecute && _backupPreview.Plan is BackupPlan plan)
+                {
+                    _exportDrivers ??= ActionCatalog.Find(ActionIds.ExportDrivers, _logger);
+                    if (_exportDrivers != null)
+                    {
+                        _driversPreview = await runner.PreviewAsync(_exportDrivers,
+                                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    [ExportDriversAction.DestinationParameter] = plan.Destination,
+                                    [ExportDriversAction.DriversParameter] = DriverBackup.Encode(drivers),
+                                },
+                                CancellationToken.None)
+                            .ConfigureAwait(true);
+
+                        BackupLines.Add("Pilotes. " + _driversPreview.Summary);
+                        Show(BackupLines, _driversPreview);
+                    }
+                }
 
                 Status = _backupPreview.Outcome == PreviewOutcome.Blocked
                     ? _backupPreview.Blocker ?? "La copie ne peut pas être préparée."
-                    : "Relevé terminé. Rien n'a encore été copié.";
+                    : _driversPreview != null && !_driversPreview.CanExecute
+                        ? "Relevé terminé, mais les pilotes ne seront pas exportés : " +
+                          (_driversPreview.Blocker ?? _driversPreview.Summary)
+                        : "Relevé terminé. Rien n'a encore été copié.";
             }
             catch (Exception ex)
             {
                 _logger.Error(Category, "Le relevé de la copie a échoué.", ex);
-                _backupPreview = null;
+                _backupPreview = _driversPreview = null;
                 Status = "Le relevé de la copie a échoué : " + ex.Message;
             }
             finally
@@ -491,6 +865,14 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// Les pilotes d'abord, puis la copie.
+        /// </summary>
+        /// <remarks>
+        /// L'export des pilotes a été préparé par l'hôte élevé, qui se ferme après un quart d'heure
+        /// sans requête : après une heure de copie, il n'aurait plus rien à exécuter. L'export ne
+        /// prend que quelques minutes, il passe donc devant.
+        /// </remarks>
         private async Task CopyAsync()
         {
             var preview = _backupPreview;
@@ -500,19 +882,27 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             Status = "Copie en cours…";
-            BeginTransfer("Préparation de la copie…");
             IsBackupTransferring = true;
 
             var progress = new Progress<ActionProgress>(OnTransfer);
             ActionOutcome? outcome = null;
+            ActionOutcome? drivers = null;
 
             try
             {
+                if (Ready(_driversPreview) && _exportDrivers != null)
+                {
+                    BeginTransfer("Export des pilotes…");
+                    drivers = await runner.ExecuteAsync(_exportDrivers, _driversPreview!, null, progress, CancellationToken.None)
+                        .ConfigureAwait(true);
+                }
+
+                BeginTransfer("Préparation de la copie…");
                 outcome = await runner
                     .ExecuteAsync(action, preview, BackupParameters(), progress, CancellationToken.None)
                     .ConfigureAwait(true);
 
-                Status = outcome.Summary;
+                Status = outcome.Summary + (drivers == null ? string.Empty : " Pilotes : " + drivers.Summary);
             }
             catch (Exception ex)
             {
@@ -526,7 +916,7 @@ namespace LDI12.App.ViewModels
 
                 // Le relevé est consommé : le rejouer porterait sur un état qui a changé. Ce qui
                 // reste à l'écran est le compte rendu, dossier par dossier.
-                _backupPreview = null;
+                _backupPreview = _driversPreview = null;
                 BackupLines.Clear();
                 BackupSummary = string.Empty;
 
@@ -535,6 +925,7 @@ namespace LDI12.App.ViewModels
                     _lastBackupFolder = plan.Destination;
                     BackupSummary = "Compte rendu de la sauvegarde, déposée dans " + plan.Destination + " :";
                     foreach (var line in outcome.Details) BackupLines.Add(line);
+                    if (drivers != null) Report(BackupLines, "Pilotes", drivers);
                 }
 
                 (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -545,13 +936,22 @@ namespace LDI12.App.ViewModels
         }
 
         private IReadOnlyDictionary<string, string> BackupParameters()
-            => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [BackupUserDataAction.DestinationParameter] = BackupDestination.Trim(),
                 [BackupUserDataAction.PersonalParameter] = IncludePersonal ? "1" : "0",
                 [BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0",
                 [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
+                [BackupUserDataAction.DriversParameter] = CheckedDrivers().Count > 0 ? "1" : "0",
             };
+
+            var applications = CheckedApplications();
+            if (applications.Count > 0)
+                parameters[BackupUserDataAction.WingetParameter] = WingetApplications.Encode(applications);
+
+            return parameters;
+        }
 
         /// <summary>Ouvre la sauvegarde dans l'explorateur : la fiche de réinstallation est à sa racine.</summary>
         private void OpenBackup()
@@ -582,6 +982,7 @@ namespace LDI12.App.ViewModels
             (RunBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
 
         public event EventHandler? JournalChanged;
@@ -590,6 +991,7 @@ namespace LDI12.App.ViewModels
         public void Update(SystemSnapshot snapshot)
         {
             _snapshot = snapshot;
+            LoadDrivers(snapshot);
             _ = DescribePlanAsync();
         }
 
@@ -711,6 +1113,9 @@ namespace LDI12.App.ViewModels
         /// <summary>Arrêt à la fermeture : un parcours de profil n'a pas à survivre à la fenêtre.</summary>
         public void Shutdown()
         {
+            _drivesTimer?.Stop();
+            _drivesTimer = null;
+
             _running?.Cancel();
             _running?.Dispose();
             _running = null;

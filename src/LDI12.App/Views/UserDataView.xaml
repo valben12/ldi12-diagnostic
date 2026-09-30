@@ -3,6 +3,82 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LDI12.App">
 
+    <UserControl.Resources>
+        <!-- Une tuile par support branché. Un bouton plutôt qu'une case : on choisit un disque
+             comme on l'ouvrirait dans l'Explorateur, d'un clic. Le cadre rouge dit lequel est
+             retenu ; l'épaisseur ne change pas, pour que la grille ne bouge pas au clic. -->
+        <Style x:Key="DriveTile" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Frame" Width="260" Margin="0,0,10,10" Padding="14,12"
+                                Background="{DynamicResource Brush.Surface}"
+                                BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="2"
+                                CornerRadius="{DynamicResource Radius.Card}" SnapsToDevicePixels="True">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                                <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                            </DataTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Frame" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="DriveTileTemplate">
+            <Button Style="{StaticResource DriveTile}" Command="{Binding SelectCommand}" ToolTip="{Binding Root}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Path Grid.Column="0" Style="{StaticResource Icon}" Width="16" Height="16" Data="{StaticResource Icon.HardDrive}"
+                              Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" Margin="8,0,0,0"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="{Binding KindText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" />
+                    <TextBlock Text="{Binding SpaceText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding BackupsText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Warning}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.StatusWarning}"
+                               Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
+        <ItemsPanelTemplate x:Key="TilePanel">
+            <WrapPanel Orientation="Horizontal" />
+        </ItemsPanelTemplate>
+
+        <!-- Une case par pilote ou par application : le nom, puis ce qui permet de le reconnaître. -->
+        <DataTemplate x:Key="ChoiceTemplate">
+            <CheckBox Style="{StaticResource Check}" Margin="0,0,0,8" IsChecked="{Binding IsChecked}">
+                <StackPanel>
+                    <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" TextWrapping="Wrap" MaxWidth="820"
+                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="820"
+                               Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </CheckBox>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
@@ -125,8 +201,20 @@
                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                        Text="Les dossiers personnels du compte ouvert sont copiés vers le support choisi, puis chaque fichier est relu et comparé à sa source. Rien n'est déplacé ni effacé à la source, rien n'est écrasé à la destination. Un manifeste de la copie et une fiche de réinstallation, avec les logiciels installés et leurs versions, sont déposés dans le dossier de sauvegarde." />
 
-                            <TextBlock Text="Dossier de destination" Style="{StaticResource Text.Muted}"
-                                       Margin="0,16,0,6" />
+                            <TextBlock Text="Support de destination" Style="{StaticResource Text.Muted}"
+                                       Margin="0,16,0,8" />
+                            <!-- Les supports branchés, relus toutes les trois secondes : brancher le disque
+                                 suffit à le voir apparaître. Le disque de Windows n'y figure jamais. -->
+                            <ItemsControl ItemsSource="{Binding BackupDrives}" ItemsPanel="{StaticResource TilePanel}"
+                                          ItemTemplate="{StaticResource DriveTileTemplate}"
+                                          Visibility="{Binding HasBackupDrives, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="0,0,0,10" TextWrapping="Wrap" MaxWidth="880"
+                                       HorizontalAlignment="Left"
+                                       Text="Aucun support externe n'est branché. Branchez le disque ou la clé : il apparaîtra ici de lui-même."
+                                       Visibility="{Binding HasNoBackupDrive, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock Text="Ou un dossier précis, sur un disque ou un partage réseau" Style="{StaticResource Text.Muted}"
+                                       Margin="0,4,0,6" />
                             <!-- Largeur posée : un champ vide aligné à gauche se réduit à son contenu,
                                  c'est-à-dire à rien, et étiré il se centre au milieu de la carte. -->
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
@@ -161,6 +249,61 @@
                                                Text="Les codes des réseaux enregistrés sont écrits en clair sur le support de sauvegarde. À effacer une fois la machine rendue." />
                                 </StackPanel>
                             </CheckBox>
+
+                            <!-- Pilotes : ceux que la réinstallation perdrait, un par paquet. -->
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding IncludeDrivers}">
+                                <StackPanel>
+                                    <TextBlock Text="Pilotes" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="{Binding DriversNote}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="L'export lit le magasin de pilotes de Windows : une invite administrateur s'affichera à la préparation." />
+                                </StackPanel>
+                            </CheckBox>
+                            <Border Style="{StaticResource Card}" Padding="14,10" Margin="28,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                    IsEnabled="{Binding IncludeDrivers}"
+                                    Visibility="{Binding HasDriverChoices, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllDriversCommand}" />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoDriversCommand}"
+                                                Margin="10,0,0,0" />
+                                    </StackPanel>
+                                    <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                                        <ItemsControl ItemsSource="{Binding DriverChoices}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Applications : leur liste, pas leurs fichiers. winget les réinstalle depuis leur éditeur. -->
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding IncludeApplicationList}">
+                                <StackPanel>
+                                    <TextBlock Text="Applications à réinstaller automatiquement" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="{Binding ApplicationsNote}" />
+                                </StackPanel>
+                            </CheckBox>
+                            <Border Style="{StaticResource Card}" Padding="14,10" Margin="28,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                    IsEnabled="{Binding IncludeApplicationList}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Rechercher les applications"
+                                                Command="{Binding ListApplicationsCommand}" />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllApplicationsCommand}"
+                                                Margin="10,0,0,0"
+                                                Visibility="{Binding HasApplicationChoices, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoApplicationsCommand}"
+                                                Margin="10,0,0,0"
+                                                Visibility="{Binding HasApplicationChoices, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                    <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"
+                                                  Visibility="{Binding HasApplicationChoices, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl ItemsSource="{Binding ApplicationChoices}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
 
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
@@ -224,8 +367,18 @@
                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                        Text="Remet dans ce compte les dossiers personnels, les données d'applications et les profils Wi-Fi d'une sauvegarde LDI12. Indiquez le disque ou le dossier : la sauvegarde la plus récente qu'il contient est retrouvée. Rien n'est supprimé sur la machine, rien n'est écrasé, et la sauvegarde n'est pas modifiée. Fermez les navigateurs et la messagerie avant de lancer." />
 
-                            <TextBlock Text="Disque ou dossier de la sauvegarde" Style="{StaticResource Text.Muted}"
-                                       Margin="0,16,0,6" />
+                            <TextBlock Text="Support de la sauvegarde" Style="{StaticResource Text.Muted}"
+                                       Margin="0,16,0,8" />
+                            <!-- Seuls les supports qui portent une sauvegarde LDI12 : la plus récente est retenue. -->
+                            <ItemsControl ItemsSource="{Binding RestoreDrives}" ItemsPanel="{StaticResource TilePanel}"
+                                          ItemTemplate="{StaticResource DriveTileTemplate}"
+                                          Visibility="{Binding HasRestoreDrives, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="0,0,0,10" TextWrapping="Wrap" MaxWidth="880"
+                                       HorizontalAlignment="Left"
+                                       Text="Aucun support branché ne porte de sauvegarde LDI12. Branchez le disque de la sauvegarde : il apparaîtra ici de lui-même."
+                                       Visibility="{Binding HasNoRestoreDrive, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock Text="Ou un dossier précis" Style="{StaticResource Text.Muted}" Margin="0,4,0,6" />
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
                                      Text="{Binding RestoreSource, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -235,6 +388,22 @@
                                                Foreground="{DynamicResource Brush.TextPrimary}" />
                                     <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
                                                Text="Seulement si la sauvegarde en contient. Ils sont ajoutés pour ce compte." />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding RestoreDriversChecked}">
+                                <StackPanel>
+                                    <TextBlock Text="Réinstaller les pilotes" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="Seulement si la sauvegarde en contient. Installés en premier, avant les données : ils ramènent la carte Wi-Fi. Une invite administrateur s'affichera à la préparation." />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding RestoreApplicationsChecked}">
+                                <StackPanel>
+                                    <TextBlock Text="Réinstaller les applications" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="Par winget, dans leur dernière version, après les données. Connexion Internet requise, et Windows 10 1809 ou plus récent." />
                                 </StackPanel>
                             </CheckBox>
 

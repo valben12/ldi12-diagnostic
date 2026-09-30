@@ -57,6 +57,9 @@ namespace LDI12.Actions.Backup
 
         public bool ExportWifi { get; init; }
 
+        /// <summary>Applications cochées, à réinstaller par winget. Vide : aucune liste déposée.</summary>
+        public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
+
         public int CloudOnlyFiles { get; init; }
     }
 
@@ -113,6 +116,25 @@ namespace LDI12.Actions.Backup
         public const string WifiParameter = "wifi";
 
         /// <summary>
+        /// Les applications à réinstaller, une par ligne, en identifiants winget. Absent : aucune.
+        /// </summary>
+        /// <remarks>
+        /// Seule leur liste est déposée : un logiciel installé ne se copie pas, voir
+        /// <see cref="WingetApplications"/>.
+        /// </remarks>
+        public const string WingetParameter = "winget";
+
+        /// <summary>
+        /// « 1 » : des pilotes accompagnent cette sauvegarde. Absent : non.
+        /// </summary>
+        /// <remarks>
+        /// Ils sont exportés par <see cref="ExportDriversAction"/>, avec les droits administrateur,
+        /// dans le dossier que celle-ci établit. Même sans aucune donnée à copier, la sauvegarde
+        /// dépose alors son manifeste et sa fiche : c'est à eux qu'une restauration la reconnaît.
+        /// </remarks>
+        public const string DriversParameter = "drivers";
+
+        /// <summary>
         /// Marge exigée en plus de la taille des données.
         /// </summary>
         /// <remarks>
@@ -163,6 +185,8 @@ namespace LDI12.Actions.Backup
             var withPersonal = context.Parameter(PersonalParameter) != "0";
             var withApplications = context.Parameter(ApplicationsParameter) != "0";
             var withWifi = context.Parameter(WifiParameter) == "1";
+            var winget = WingetApplications.Decode(context.Parameter(WingetParameter));
+            var withDrivers = context.Parameter(DriversParameter) == "1";
 
             var plan = new List<BackupFolder>();
             long bytes = 0;
@@ -209,7 +233,7 @@ namespace LDI12.Actions.Backup
                     }, source.Keep, source.Target, application.Name, cancellationToken));
                 }
 
-            if (files == 0 && !withWifi)
+            if (files == 0 && !withWifi && winget.Count == 0 && !withDrivers)
                 return new ActionPreview
                 {
                     Outcome = PreviewOutcome.NothingToDo,
@@ -263,6 +287,14 @@ namespace LDI12.Actions.Backup
                            "en clair quand Windows les livre : le support de sauvegarde devra être gardé en conséquence");
             else
                 willNotDo.Add("N'exporte pas les profils Wi-Fi : l'option n'est pas cochée.");
+
+            if (withDrivers)
+                willDo.Add("Recevoir les pilotes cochés dans « " + DriverBackup.Folder + " », exportés à part avec les " +
+                           "droits administrateur, avant la copie des fichiers");
+
+            if (winget.Count > 0)
+                willDo.Add("Déposer la liste des " + winget.Count + " application(s) cochée(s), à réinstaller par winget " +
+                           "(« " + WingetApplications.FileName + " »), et un script qui les réinstalle d'un double clic");
 
             var software = Inventory(context);
             willDo.Add(software == null
@@ -321,6 +353,7 @@ namespace LDI12.Actions.Backup
                     Files = files,
                     Applications = applications,
                     ExportWifi = withWifi,
+                    WingetPackages = winget,
                     CloudOnlyFiles = cloud,
                 },
             };
@@ -490,6 +523,20 @@ namespace LDI12.Actions.Backup
                 progress?.Report(new ActionProgress("Export des profils Wi-Fi…", 1));
                 wifi = await WifiExport.RunAsync(context, plan.Destination, cancellationToken).ConfigureAwait(false);
                 details.Add("Wi-Fi : " + wifi.Describe());
+            }
+
+            if (plan.WingetPackages.Count > 0)
+            {
+                var listed = context.Files.WriteText(
+                    System.IO.Path.Combine(plan.Destination, WingetApplications.FileName),
+                    WingetApplications.Document(plan.WingetPackages));
+                listed &= context.Files.WriteText(
+                    System.IO.Path.Combine(plan.Destination, WingetApplications.ScriptName), WingetApplications.Script());
+
+                details.Add(listed
+                    ? "Applications : " + plan.WingetPackages.Count + " à réinstaller par winget, listées dans " +
+                      WingetApplications.FileName + "."
+                    : "La liste des applications à réinstaller n'a pas pu être écrite dans le dossier de sauvegarde.");
             }
 
             progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));

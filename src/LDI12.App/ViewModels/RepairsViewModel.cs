@@ -369,7 +369,8 @@ namespace LDI12.App.ViewModels
                 // l'écran Données : seuls, ils n'ont ni sauvegarde ni support à qui s'adresser.
                 if (action.Descriptor.Id == ActionIds.ExportDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreDrivers ||
-                    action.Descriptor.Id == ActionIds.RestoreApplications) continue;
+                    action.Descriptor.Id == ActionIds.RestoreApplications ||
+                    action.Descriptor.Id == ActionIds.CopyOpenFiles) continue;
 
                 Items.Add(new RepairActionItem(this, action));
             }

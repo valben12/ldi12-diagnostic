@@ -1297,6 +1297,7 @@ namespace LDI12.App.ViewModels
             var progress = new Progress<ActionProgress>(OnTransfer);
             ActionOutcome? outcome = null;
             ActionOutcome? drivers = null;
+            ActionOutcome? openFiles = null;
 
             try
             {
@@ -1313,7 +1314,13 @@ namespace LDI12.App.ViewModels
                     .ExecuteAsync(action, preview, BackupParameters(), progress, token)
                     .ConfigureAwait(true);
 
-                Status = outcome.Summary + (outcome.Status == ActionStatus.Cancelled
+                // Des fichiers tenus ouverts par un programme : récupérés par un cliché instantané,
+                // sans rien fermer. Une invite administrateur, seulement dans ce cas.
+                if (outcome.Status != ActionStatus.Cancelled && preview.Plan is BackupPlan copied && copied.OpenFiles.Count > 0)
+                    openFiles = await CopyOpenFilesAsync(runner, copied, progress).ConfigureAwait(true);
+
+                Status = outcome.Summary + (openFiles == null ? string.Empty : " Fichiers ouverts : " + openFiles.Summary) +
+                         (outcome.Status == ActionStatus.Cancelled
                              ? " Relancez la sauvegarde vers le même support : elle reprendra où elle s'est arrêtée."
                              : string.Empty) +
                          (drivers == null ? string.Empty : " Pilotes : " + drivers.Summary);
@@ -1340,6 +1347,7 @@ namespace LDI12.App.ViewModels
                     _lastBackupFolder = plan.Destination;
                     BackupSummary = "Compte rendu de la sauvegarde, déposée dans " + plan.Destination + " :";
                     foreach (var line in outcome.Details) BackupLines.Add(line);
+                    if (openFiles != null) Report(BackupLines, "Fichiers ouverts", openFiles);
                     if (drivers != null) Report(BackupLines, "Pilotes", drivers);
                 }
 
@@ -1348,6 +1356,29 @@ namespace LDI12.App.ViewModels
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private IRepairAction? _openFiles;
+
+        private async Task<ActionOutcome?> CopyOpenFilesAsync(ActionRunner runner, BackupPlan plan, IProgress<ActionProgress> progress)
+        {
+            _openFiles ??= ActionCatalog.Find(ActionIds.CopyOpenFiles, _logger);
+            if (_openFiles == null) return null;
+
+            BeginTransfer("Fichiers ouverts : préparation d'un cliché instantané…");
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [OpenFilesAction.DestinationParameter] = plan.Destination,
+                [OpenFilesAction.FilesParameter] = OpenFilesAction.Encode(plan.OpenFiles),
+            };
+
+            var preview = await runner.PreviewAsync(_openFiles, parameters, CancellationToken.None).ConfigureAwait(true);
+            if (!preview.CanExecute)
+                return preview.Outcome == PreviewOutcome.NothingToDo
+                    ? null
+                    : ActionOutcome.Simple(ActionStatus.Failed, preview.Blocker ?? preview.Summary);
+
+            return await runner.ExecuteAsync(_openFiles, preview, parameters, progress, CancellationToken.None).ConfigureAwait(true);
         }
 
         private IReadOnlyDictionary<string, string> BackupParameters()

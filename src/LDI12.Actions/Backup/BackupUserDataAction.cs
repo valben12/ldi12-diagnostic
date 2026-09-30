@@ -70,6 +70,15 @@ namespace LDI12.Actions.Backup
 
         /// <summary>À la reprise, ce que le dossier contient déjà : la durée ne compte que le reste.</summary>
         public long AlreadyBytes { get; init; }
+
+        /// <summary>
+        /// Les fichiers refusés parce qu'un programme les tenait ouverts, relevés pendant la copie.
+        /// </summary>
+        /// <remarks>
+        /// Remplie par l'exécution, lue ensuite par l'écran : c'est elle qui décide s'il faut un
+        /// cliché instantané, et de quoi.
+        /// </remarks>
+        public List<OpenFile> OpenFiles { get; } = new List<OpenFile>();
     }
 
     /// <summary>
@@ -604,6 +613,9 @@ namespace LDI12.Actions.Backup
                         .AppendLine(Describe(result.Outcome));
 
                     noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+
+                    if (result.Outcome == FileCopyOutcome.Locked)
+                        plan.OpenFiles.Add(new OpenFile { Source = items[index].File.Path, Target = items[index].Target });
                 }, cancellationToken);
 
                 if (!completed)

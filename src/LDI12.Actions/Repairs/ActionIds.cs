@@ -56,6 +56,9 @@
         /// <summary>Réinstallation des applications d'une sauvegarde, par winget.</summary>
         public const string RestoreApplications = "RESTORE-APPLICATIONS";
 
+        /// <summary>Copie, depuis un cliché instantané, des fichiers qu'un programme tenait ouverts.</summary>
+        public const string CopyOpenFiles = "BACKUP-OPEN-FILES";
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

@@ -1050,7 +1050,7 @@ namespace LDI12.Platform.Gateways
             if (string.IsNullOrEmpty(path)) return path;
 
             if (path.StartsWith(@"\\?\", StringComparison.Ordinal))
-                return accepted ? path : Ordinary(path);
+                return accepted || IsDevicePath(path) ? path : Ordinary(path);
 
             var full = Path.GetFullPath(path);
             if (!accepted) return full;
@@ -1062,7 +1062,18 @@ namespace LDI12.Platform.Gateways
 
         /// <summary>Le chemin tel que le reste du logiciel le manipule : jamais sous forme étendue.</summary>
         internal static string Plain(string path)
-            => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? Ordinary(path) : path;
+            => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !IsDevicePath(path) ? Ordinary(path) : path;
+
+        /// <summary>
+        /// Un chemin de périphérique, comme celui d'un cliché instantané
+        /// (<c>\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy3\…</c>).
+        /// </summary>
+        /// <remarks>
+        /// Il n'a pas de forme ordinaire : sans son préfixe, il ne désigne plus rien. Il reste donc
+        /// tel quel d'un bout à l'autre, relevé comme copie.
+        /// </remarks>
+        internal static bool IsDevicePath(string path)
+            => path.StartsWith(@"\\?\GLOBALROOT\", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Retire le préfixe étendu : <c>\\?\UNC\srv\part</c> redevient <c>\\srv\part</c>.</summary>
         internal static string Ordinary(string path)

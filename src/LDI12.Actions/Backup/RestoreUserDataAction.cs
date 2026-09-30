@@ -344,6 +344,13 @@ namespace LDI12.Actions.Backup
             var itemsFailed = 0;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Restauration de");
 
+            // Plein, ou sauvegarde disparue : chaque fichier restant échouerait. Vérifié sur les fils
+            // de copie, seulement après un échec.
+            var copier = new BatchCopier(context.Files, tracker, result =>
+                result.Outcome == FileCopyOutcome.NoSpace ||
+                (result.Outcome != FileCopyOutcome.Copied && result.Outcome != FileCopyOutcome.AlreadyPresent &&
+                 !context.Files.DirectoryExists(plan.Backup)));
+
             foreach (var folder in plan.Folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -384,19 +391,19 @@ namespace LDI12.Actions.Backup
                 }
 
                 int here = 0, hereSkipped = 0, hereFailed = 0;
+                var noSpace = false;
+
+                var items = new List<(FileEntry File, string Target)>(folder.Files.Count);
                 foreach (var file in folder.Files)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     var relative = file.Path.Length > item.Source.Length
                         ? file.Path.Substring(item.Source.Length).TrimStart('\\', '/')
                         : Path.GetFileName(file.Path);
+                    items.Add((file, Path.Combine(item.Destination, relative)));
+                }
 
-                    var result = context.Files.Copy(
-                        new FileCopyRequest(file, Path.Combine(item.Destination, relative)) { Progressed = tracker.Bytes },
-                        cancellationToken);
-                    tracker.FileDone(file.SizeBytes);
-
+                var completed = copier.Run(items, (_, result) =>
+                {
                     switch (result.Outcome)
                     {
                         case FileCopyOutcome.Copied: here++; written += result.Bytes; break;
@@ -404,10 +411,16 @@ namespace LDI12.Actions.Backup
                         default: hereFailed++; break;
                     }
 
-                    if (result.Outcome == FileCopyOutcome.NoSpace)
+                    noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+                }, cancellationToken);
+
+                if (!completed)
+                {
+                    copied += here; skipped += hereSkipped; failed += hereFailed;
+
+                    if (noSpace)
                     {
                         details.Add(item.Label + " : restauration interrompue, le disque est plein.");
-                        copied += here; skipped += hereSkipped; failed += hereFailed;
                         return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
                             " : restauration interrompue, le disque est plein.");
                     }
@@ -415,15 +428,10 @@ namespace LDI12.Actions.Backup
                     // Le support de la sauvegarde débranché : chaque fichier restant échouerait.
                     // Ce qui est déjà restauré porte son vrai nom et a été vérifié : relancer la
                     // restauration le reconnaîtra et ne refera que le reste.
-                    if (result.Outcome != FileCopyOutcome.Copied && result.Outcome != FileCopyOutcome.AlreadyPresent &&
-                        !context.Files.DirectoryExists(plan.Backup))
-                    {
-                        details.Add(item.Label + " : restauration interrompue, le support de la sauvegarde ne répond plus.");
-                        copied += here; skipped += hereSkipped; failed += hereFailed;
-                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
-                            " : restauration interrompue, le support de la sauvegarde ne répond plus. Rebranchez-le et " +
-                            "relancez : les fichiers déjà restaurés ne seront pas recopiés.");
-                    }
+                    details.Add(item.Label + " : restauration interrompue, le support de la sauvegarde ne répond plus.");
+                    return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
+                        " : restauration interrompue, le support de la sauvegarde ne répond plus. Rebranchez-le et " +
+                        "relancez : les fichiers déjà restaurés ne seront pas recopiés.");
                 }
 
                 copied += here;

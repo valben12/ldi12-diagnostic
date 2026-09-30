@@ -538,6 +538,14 @@ namespace LDI12.Actions.Backup
             var lost = false;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Copie de");
 
+            // Un support plein n'a aucune chance de se libérer pendant la copie, un support
+            // débranché fait échouer chaque fichier restant en une fraction de seconde : dans les
+            // deux cas, continuer produirait des milliers d'échecs identiques. La présence du
+            // dossier n'est vérifiée qu'après un échec, pour ne rien coûter aux fichiers qui passent.
+            var copier = new BatchCopier(context.Files, tracker, result =>
+                result.Outcome == FileCopyOutcome.NoSpace ||
+                (!Succeeded(result.Outcome) && !context.Files.DirectoryExists(plan.Destination)));
+
             foreach (var folder in plan.Folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -551,44 +559,41 @@ namespace LDI12.Actions.Backup
                 };
                 results.Add(here);
 
+                var items = new List<(FileEntry File, string Target)>(folder.Files.Count);
+                var relatives = new List<string>(folder.Files.Count);
                 foreach (var file in folder.Files)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     var relative = Relative(folder.Path, file.Path);
-                    var target = System.IO.Path.Combine(plan.Destination, folder.Destination, relative);
+                    relatives.Add(relative);
+                    items.Add((file, System.IO.Path.Combine(plan.Destination, folder.Destination, relative)));
+                }
 
-                    var result = context.Files.Copy(
-                        new FileCopyRequest(file, target) { Progressed = tracker.Bytes }, cancellationToken);
-
-                    tracker.FileDone(file.SizeBytes);
+                var noSpace = false;
+                var completed = copier.Run(items, (index, result) =>
+                {
                     Count(here, result);
                     counters.Add(result);
 
                     manifest.Append(Csv(folder.Destination)).Append(';')
-                        .Append(Csv(relative)).Append(';')
-                        .Append(file.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
+                        .Append(Csv(relatives[index])).Append(';')
+                        .Append(items[index].File.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
                         .AppendLine(Describe(result.Outcome));
 
-                    // Un support plein n'a aucune chance de se libérer pendant la copie :
-                    // continuer produirait des milliers d'échecs identiques et ferait perdre une
-                    // heure avant de le dire.
-                    if (result.Outcome == FileCopyOutcome.NoSpace)
+                    noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+                }, cancellationToken);
+
+                if (!completed)
+                {
+                    interrupted = true;
+                    if (noSpace)
                     {
                         details.Add(folder.Label + ", copie interrompue : la destination est pleine.");
-                        interrupted = true;
-                        break;
                     }
-
-                    // Un support débranché fait échouer chaque fichier restant, un par un, en une
-                    // fraction de seconde. Vérifié seulement après un échec, pour ne rien coûter
-                    // aux fichiers qui passent.
-                    if (!Succeeded(result.Outcome) && !context.Files.DirectoryExists(plan.Destination))
+                    else
                     {
                         details.Add(folder.Label + ", copie interrompue : le support de sauvegarde ne répond plus. " +
                                     "Rebranchez-le et relancez la sauvegarde : elle reprendra où elle s'est arrêtée.");
-                        interrupted = lost = true;
-                        break;
+                        lost = true;
                     }
                 }
 

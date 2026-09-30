@@ -197,7 +197,44 @@ namespace LDI12.Tests
         private bool Gone(string path)
             => Unplugged && UnplugRoot != null && path.StartsWith(UnplugRoot, StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>Durée simulée d'une copie : de quoi voir ce que gagne le parallèle.</summary>
+        public TimeSpan CopyDelay { get; set; }
+
+        /// <summary>
+        /// Un seul accès au support à la fois, comme la tête d'un disque dur : copier à plusieurs
+        /// n'y gagne rien.
+        /// </summary>
+        public bool SerializeDelay { get; set; }
+
+        /// <summary>Le plus grand nombre de copies menées en même temps.</summary>
+        public int MaxConcurrentCopies { get; private set; }
+
+        private readonly object _copyGate = new object();
+        private readonly object _deviceGate = new object();
+        private int _concurrent;
+
         public FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken)
+        {
+            var now = Interlocked.Increment(ref _concurrent);
+            try
+            {
+                lock (_copyGate) MaxConcurrentCopies = Math.Max(MaxConcurrentCopies, now);
+
+                if (CopyDelay > TimeSpan.Zero)
+                {
+                    if (SerializeDelay) lock (_deviceGate) Thread.Sleep(CopyDelay);
+                    else Thread.Sleep(CopyDelay);
+                }
+
+                lock (_copyGate) return CopyCore(request);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrent);
+            }
+        }
+
+        private FileCopyResult CopyCore(FileCopyRequest request)
         {
             var source = request.Source;
 

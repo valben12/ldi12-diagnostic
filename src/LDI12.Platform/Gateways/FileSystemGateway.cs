@@ -289,6 +289,12 @@ namespace LDI12.Platform.Gateways
 
                 var destination = Extended(request.Destination);
 
+                // FAT32 refuse tout fichier de 4 Go ou plus : le dire d'emblée, sous son vrai nom,
+                // plutôt que d'écrire des gigaoctets pour échouer sur un motif trompeur.
+                if (source.SizeBytes >= Fat32Limit && IsFat(destination))
+                    return FileCopyResult.Of(FileCopyOutcome.FileTooLarge, 0,
+                        "Fichier de 4 Go ou plus : le format FAT32 du support ne peut pas le recevoir.");
+
                 var existing = new FileInfo(destination);
                 if (existing.Exists)
                     return existing.Length == info.Length && SameTime(existing.LastWriteTimeUtc, info.LastWriteTimeUtc)
@@ -296,19 +302,30 @@ namespace LDI12.Platform.Gateways
                         : FileCopyResult.Of(FileCopyOutcome.Conflict, 0,
                             "Un fichier différent porte déjà ce nom à la destination.");
 
-                var parent = Path.GetDirectoryName(destination);
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
-
-                // Le reste d'une copie interrompue du même fichier : il est à nous, à son nom.
+                // Le reste d'une copie interrompue du même fichier est écrasé : il est à nous, à son
+                // nom, et le vérifier d'abord coûterait un appel au support par fichier.
                 var partial = destination + FileCopyRequest.PartialSuffix;
-                Discard(partial);
 
                 byte[] expected;
                 long written;
+                bool dated;
 
                 try
                 {
-                    expected = Write(info, partial, out written, request.Progressed, cancellationToken);
+                    try
+                    {
+                        expected = Write(info, partial, out written, out dated, request.Progressed, cancellationToken);
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        // Le dossier n'est créé qu'au premier fichier qui en a besoin : le demander
+                        // pour chaque fichier coûtait un aller-retour au support, cent mille fois
+                        // sur un profil de navigateur.
+                        var parent = Path.GetDirectoryName(destination);
+                        if (string.IsNullOrEmpty(parent)) throw;
+                        Directory.CreateDirectory(parent);
+                        expected = Write(info, partial, out written, out dated, request.Progressed, cancellationToken);
+                    }
                 }
                 catch
                 {
@@ -317,9 +334,13 @@ namespace LDI12.Platform.Gateways
                 }
 
                 // La date de la source est reportée : sans elle, une reprise de sauvegarde
-                // reverrait chaque fichier comme différent et recopierait tout.
-                try { File.SetLastWriteTimeUtc(partial, info.LastWriteTimeUtc); }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+                // reverrait chaque fichier comme différent et recopierait tout. Posée d'ordinaire
+                // pendant l'écriture ; sinon ici.
+                if (!dated)
+                {
+                    try { File.SetLastWriteTimeUtc(partial, info.LastWriteTimeUtc); }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+                }
 
                 try
                 {
@@ -367,6 +388,11 @@ namespace LDI12.Platform.Gateways
                     return FileCopyResult.Of(FileCopyOutcome.DeviceError, 0,
                         "Le support ne répond plus : débranché, ou défaillant. " + ex.Message);
 
+                // 223 : fichier trop gros pour le système de fichiers de la destination.
+                if (code == 223)
+                    return FileCopyResult.Of(FileCopyOutcome.FileTooLarge, 0,
+                        "Fichier trop gros pour le format du support de destination.");
+
                 return FileCopyResult.Of(FileCopyOutcome.Locked, 0, ex.Message);
             }
             catch (Exception ex)
@@ -386,6 +412,35 @@ namespace LDI12.Platform.Gateways
         /// </remarks>
         internal static bool SameTime(DateTime left, DateTime right)
             => Math.Abs((left - right).TotalSeconds) <= 2;
+
+        /// <summary>4 Gio : au-delà, FAT32 refuse le fichier.</summary>
+        internal const long Fat32Limit = 4L * 1024 * 1024 * 1024 - 1;
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _fat =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Vrai si la destination est en FAT ou FAT32. Lu une fois par volume.</summary>
+        private bool IsFat(string destination)
+        {
+            string root;
+            try { root = Path.GetPathRoot(Plain(destination)) ?? string.Empty; }
+            catch (ArgumentException) { return false; }
+            if (root.Length == 0) return false;
+
+            return _fat.GetOrAdd(root, key =>
+            {
+                try
+                {
+                    var format = new DriveInfo(key).DriveFormat;
+                    return format.StartsWith("FAT", StringComparison.OrdinalIgnoreCase) &&
+                           !format.Equals("exFAT", StringComparison.OrdinalIgnoreCase);
+                }
+                catch (Exception ex) when (ex is IOException || ex is ArgumentException || ex is UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            });
+        }
 
         /// <summary>
         /// Les erreurs Windows d'un support qui ne répond plus.
@@ -424,15 +479,13 @@ namespace LDI12.Platform.Gateways
         /// que celui du plus lent.
         /// </remarks>
         private static byte[] Write(
-            FileInfo source, string destination, out long written, Action<long>? progressed,
+            FileInfo source, string destination, out long written, out bool dated, Action<long>? progressed,
             CancellationToken cancellationToken)
         {
             var hash = Sha256();
-            using var input = new FileStream(
-                source.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, NoStreamBuffer,
-                FileOptions.SequentialScan);
+            using var input = OpenSource(source.FullName);
             using var output = new FileStream(
-                destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, NoStreamBuffer);
+                destination, FileMode.Create, FileAccess.Write, FileShare.None, NoStreamBuffer);
 
             // Réserver la taille d'emblée, comme robocopy : le système de fichiers alloue le
             // fichier d'un seul tenant au lieu de l'étendre à chaque bloc, ce qui compte sur les
@@ -451,8 +504,88 @@ namespace LDI12.Platform.Gateways
             // la relecture la rejettera, mais la copie sans vérification, elle, la garderait.
             if (written != expected && expected > Block) output.SetLength(written);
 
+            dated = SetDate(output, source.LastWriteTimeUtc);
+
             hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return hash.Hash;
+        }
+
+        /// <summary>
+        /// Pose la date de la source sur la copie encore ouverte.
+        /// </summary>
+        /// <remarks>
+        /// La poser après coup rouvrait chaque fichier, soit une ouverture, une fermeture et un
+        /// passage de l'antivirus de plus par fichier. Posée par le descripteur, après la dernière
+        /// écriture, elle n'est plus modifiée à la fermeture.
+        /// </remarks>
+        private static bool SetDate(FileStream output, DateTime lastWriteUtc)
+        {
+            try
+            {
+                var time = lastWriteUtc.ToFileTimeUtc();
+                return DiskIoNative.SetFileTime(output.SafeFileHandle, IntPtr.Zero, IntPtr.Zero, ref time);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException ||
+                                       ex is ArgumentOutOfRangeException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Ouvre la source en lecture.
+        /// </summary>
+        /// <remarks>
+        /// En mode sauvegarde, quand le processus en a le privilège (voir
+        /// <see cref="EnableBackupSemantics"/>), l'ouverture passe outre les droits du fichier sans
+        /// les modifier, comme robocopy /B : c'est ce qui permet de lire les comptes d'un autre
+        /// Windows, protégés par des droits qui ne connaissent pas le technicien.
+        /// </remarks>
+        private static Stream OpenSource(string path)
+        {
+            if (!BackupSemantics)
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, NoStreamBuffer,
+                    FileOptions.SequentialScan);
+
+            var handle = DiskIoNative.CreateFile(
+                path, DiskIoNative.GenericRead, DiskIoNative.ShareAll, IntPtr.Zero, DiskIoNative.OpenExisting,
+                DiskIoNative.FlagBackupSemantics | DiskIoNative.FlagSequentialScan, IntPtr.Zero);
+
+            if (handle.IsInvalid)
+            {
+                var code = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                if (code == 5) throw new UnauthorizedAccessException(new System.ComponentModel.Win32Exception(code).Message);
+                if (code == 2 || code == 3) throw new FileNotFoundException(new System.ComponentModel.Win32Exception(code).Message, path);
+                throw new IOException(new System.ComponentModel.Win32Exception(code).Message, unchecked((int)0x80070000) | code);
+            }
+
+            return new FileStream(handle, FileAccess.Read, NoStreamBuffer);
+        }
+
+        /// <summary>Lecture en mode sauvegarde, activée par <see cref="EnableBackupSemantics"/>.</summary>
+        internal static bool BackupSemantics { get; private set; }
+
+        /// <summary>
+        /// Donne au processus le privilège de sauvegarde et fait lire toutes les sources avec lui.
+        /// </summary>
+        /// <remarks>
+        /// Réservé à l'hôte élevé : un administrateur détient ce privilège, désactivé par défaut.
+        /// Rend faux si Windows le refuse ; la copie se fait alors avec les droits ordinaires, et un
+        /// fichier protégé est compté comme refusé.
+        /// </remarks>
+        public static bool EnableBackupSemantics()
+        {
+            try
+            {
+                BackupSemantics = PrivilegeNative.Enable("SeBackupPrivilege");
+            }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
+            {
+                BackupSemantics = false;
+            }
+
+            return BackupSemantics;
         }
 
         /// <summary>
@@ -759,6 +892,20 @@ namespace LDI12.Platform.Gateways
         {
             try { if (File.Exists(path)) File.Delete(path); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+        }
+
+        public string? VolumeFormat(string path)
+        {
+            try
+            {
+                var root = Path.GetPathRoot(Path.GetFullPath(Plain(path)));
+                return string.IsNullOrEmpty(root) ? null : new DriveInfo(root).DriveFormat;
+            }
+            catch (Exception ex) when (ex is IOException || ex is ArgumentException || ex is UnauthorizedAccessException ||
+                                       ex is NotSupportedException)
+            {
+                return null;
+            }
         }
 
         public bool CreateDirectory(string path)

@@ -118,6 +118,11 @@ namespace LDI12.Core.Execution
         /// sauver ce qui se lit encore est précisément le travail.
         /// </remarks>
         DeviceError = 12,
+
+        /// <summary>
+        /// Trop gros pour le format du support : FAT32 refuse tout fichier de 4 Go ou plus.
+        /// </summary>
+        FileTooLarge = 13,
     }
 
     public sealed class FileCopyResult
@@ -390,6 +395,9 @@ namespace LDI12.Core.Execution
         /// de l'opération.
         /// </remarks>
         bool ReplaceText(string path, string content);
+
+        /// <summary>Le système de fichiers du volume qui porte ce chemin (« NTFS », « FAT32 »…), ou nul.</summary>
+        string? VolumeFormat(string path);
 
         /// <summary>Supprime les dossiers devenus vides sous la racine. Ne touche jamais la racine.</summary>
         int RemoveEmptyDirectories(string root, CancellationToken cancellationToken);

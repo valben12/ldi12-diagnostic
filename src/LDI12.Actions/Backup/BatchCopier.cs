@@ -81,7 +81,7 @@ namespace LDI12.Actions.Backup
                 if (items[index].File.SizeBytes >= SmallFileBytes)
                 {
                     var (file, target) = items[index];
-                    var result = _files.Copy(new FileCopyRequest(file, target) { Progressed = _tracker.Bytes }, cancellationToken);
+                    var result = CopyWithRetry(new FileCopyRequest(file, target) { Progressed = _tracker.Bytes }, cancellationToken);
                     _tracker.FileDone(file.SizeBytes);
                     onResult(index, result);
                     index++;
@@ -99,6 +99,35 @@ namespace LDI12.Actions.Backup
 
             return true;
         }
+
+        /// <summary>
+        /// Copie, et recommence une fois sur une erreur qui peut être passagère.
+        /// </summary>
+        /// <remarks>
+        /// Une relecture différente de la source, ou un support qui a manqué une réponse : sur une
+        /// clé USB fatiguée ou un câble qui bouge, le second essai passe le plus souvent. La copie
+        /// ratée a déjà été retirée, rien n'est écrasé. Un support parti ou plein n'est pas
+        /// réessayé : c'est à l'appelant de s'arrêter.
+        /// </remarks>
+        private FileCopyResult CopyWithRetry(FileCopyRequest request, CancellationToken cancellationToken)
+        {
+            var result = _files.Copy(request, cancellationToken);
+            if (result.Outcome != FileCopyOutcome.VerificationFailed && result.Outcome != FileCopyOutcome.DeviceError)
+                return result;
+            if (_isFatal(result)) return result;
+
+            cancellationToken.WaitHandle.WaitOne(RetryPause);
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref _retries);
+            return _files.Copy(request, cancellationToken);
+        }
+
+        private static readonly TimeSpan RetryPause = TimeSpan.FromMilliseconds(500);
+
+        /// <summary>Combien de fichiers ont eu droit à un second essai.</summary>
+        internal int Retries => Volatile.Read(ref _retries);
+
+        private int _retries;
 
         private bool Batch(
             IReadOnlyList<(FileEntry File, string Target)> items, int start, int end,
@@ -120,7 +149,7 @@ namespace LDI12.Actions.Backup
 
                 // Pas d'avancement octet par octet : l'avancement compte un fichier à la fois, et un
                 // fichier de moins d'un mégaoctet se compte très bien d'un coup, à la fin.
-                var result = _files.Copy(new FileCopyRequest(file, target), cancellationToken);
+                var result = CopyWithRetry(new FileCopyRequest(file, target), cancellationToken);
                 results[offset] = result;
 
                 lock (_gate) _tracker.FileDone(file.SizeBytes);

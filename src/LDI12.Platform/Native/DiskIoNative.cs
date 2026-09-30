@@ -38,6 +38,9 @@ namespace LDI12.Platform.Native
         internal const uint FlagWriteThrough = 0x80000000;
         internal const uint FlagSequentialScan = 0x08000000;
 
+        /// <summary>Ouverture en mode sauvegarde : avec le privilège, passe outre les droits du fichier.</summary>
+        internal const uint FlagBackupSemantics = 0x02000000;
+
         /// <summary>
         /// Le fichier de mesure disparaît à la fermeture du descripteur, plantage compris.
         /// </summary>
@@ -82,6 +85,11 @@ namespace LDI12.Platform.Native
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool FlushFileBuffers(SafeFileHandle file);
+
+        /// <summary>Date de dernière écriture posée sur un fichier ouvert, sans le rouvrir.</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetFileTime(SafeFileHandle file, IntPtr creation, IntPtr access, ref long lastWrite);
 
         /// <summary>Tampon non managé aligné sur une page, seul acceptable sans mémoire tampon.</summary>
         internal sealed class AlignedBuffer : IDisposable

@@ -147,11 +147,35 @@ namespace LDI12.Actions.Backup
         }
 
         /// <summary>« yyyy-MM-dd-HHmm » à la fin du nom, le nom de machine pouvant contenir des tirets.</summary>
+        /// <remarks>
+        /// Deux sauvegardes lancées dans la même minute prennent un suffixe (« …-1400-2 ») : il est
+        /// gardé dans l'horodatage rendu, sur deux chiffres, pour que la seconde se classe après la
+        /// première.
+        /// </remarks>
         internal static string Stamp(string name)
+        {
+            if (Parses(name)) return name.Substring(name.Length - 15);
+
+            var dash = name.LastIndexOf('-');
+            if (dash <= 0 || dash < name.Length - 3) return string.Empty;
+
+            var suffix = name.Substring(dash + 1);
+            if (suffix.Length == 0 || !int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out var rank)) return string.Empty;
+
+            var stem = name.Substring(0, dash);
+            return Parses(stem) ? stem.Substring(stem.Length - 15) + "-" + rank.ToString("00", CultureInfo.InvariantCulture) : string.Empty;
+        }
+
+        /// <summary>La date d'un horodatage rendu par <see cref="Stamp"/>.</summary>
+        internal static DateTime? StampDate(string stamp)
+            => stamp.Length >= 15 && DateTime.TryParseExact(stamp.Substring(0, 15), "yyyy-MM-dd-HHmm",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                ? date
+                : (DateTime?)null;
+
+        private static bool Parses(string name)
             => name.Length >= 15 && DateTime.TryParseExact(name.Substring(name.Length - 15), "yyyy-MM-dd-HHmm",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
-                ? name.Substring(name.Length - 15)
-                : string.Empty;
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
         private static bool IsBackup(IFileSystemGateway files, string path)
             => files.FileExists(Path.Combine(path, "manifeste.csv")) ||

@@ -331,6 +331,8 @@
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
                                         Command="{Binding PrepareBackupCommand}" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
+                                        Command="{Binding CancelPreparationCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Primary}" Content="Copier et vérifier"
                                         Command="{Binding RunBackupCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir la sauvegarde"
@@ -445,6 +447,8 @@
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la restauration"
                                         Command="{Binding PrepareRestoreCommand}" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
+                                        Command="{Binding CancelPreparationCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Primary}" Content="Restaurer"
                                         Command="{Binding RunRestoreCommand}" Margin="10,0,0,0" />
                             </StackPanel>

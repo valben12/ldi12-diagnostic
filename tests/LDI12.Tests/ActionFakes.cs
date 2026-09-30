@@ -234,9 +234,19 @@ namespace LDI12.Tests
             }
         }
 
+        /// <summary>Fichiers qui échouent une fois, avec ce résultat, puis passent : une erreur passagère.</summary>
+        public Dictionary<string, FileCopyOutcome> FailOnce { get; } =
+            new Dictionary<string, FileCopyOutcome>(StringComparer.OrdinalIgnoreCase);
+
         private FileCopyResult CopyCore(FileCopyRequest request)
         {
             var source = request.Source;
+
+            if (FailOnce.TryGetValue(source.Path, out var transient))
+            {
+                FailOnce.Remove(source.Path);
+                return FileCopyResult.Of(transient);
+            }
 
             if (UnplugDuring != null && string.Equals(UnplugDuring, source.Path, StringComparison.OrdinalIgnoreCase))
             {
@@ -294,6 +304,11 @@ namespace LDI12.Tests
         }
 
         public Measured<long> FreeSpace(string path) => Free;
+
+        /// <summary>Format annoncé pour tout volume : NTFS, sauf réglage contraire.</summary>
+        public string? Format { get; set; } = "NTFS";
+
+        public string? VolumeFormat(string path) => Format;
 
         public bool WriteText(string path, string content)
         {

@@ -141,12 +141,7 @@ namespace LDI12.Actions.Backup
             if (latest == null) return (0, null);
 
             var stamp = RestoreCatalog.Stamp(Path.GetFileName(latest.TrimEnd('\\')));
-            DateTime? date = DateTime.TryParseExact(stamp, "yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out var parsed)
-                ? parsed
-                : (DateTime?)null;
-
-            return (others + 1, date);
+            return (others + 1, RestoreCatalog.StampDate(stamp));
         }
 
         private static DestinationDrive? Describe(

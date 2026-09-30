@@ -149,8 +149,7 @@ namespace LDI12.Actions.Backup
                 best = new ResumableBackup
                 {
                     Path = directory,
-                    Started = DateTime.TryParseExact(stamp, "yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture,
-                        DateTimeStyles.None, out var started) ? started : (DateTime?)null,
+                    Started = RestoreCatalog.StampDate(stamp),
                 };
                 bestStamp = stamp;
             }

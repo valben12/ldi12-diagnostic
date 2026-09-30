@@ -18,6 +18,7 @@ using LDI12.Core.Execution;
 using LDI12.Core.Logging;
 using LDI12.Core.Model;
 using LDI12.Platform.Gateways;
+using LDI12.Platform.Native;
 
 namespace LDI12.App.ViewModels
 {
@@ -100,6 +101,7 @@ namespace LDI12.App.ViewModels
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
+            CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
@@ -693,6 +695,31 @@ namespace LDI12.App.ViewModels
         }
 
         private CancellationTokenSource? _transferCancel;
+        private CancellationTokenSource? _prepareCancel;
+
+        /// <summary>
+        /// Arrête une préparation en cours.
+        /// </summary>
+        /// <remarks>
+        /// Sur un gros profil ou un disque lent, le relevé prend plusieurs minutes : il doit pouvoir
+        /// s'arrêter, quand on s'aperçoit qu'on s'est trompé de support ou d'option.
+        /// </remarks>
+        public ICommand CancelPreparationCommand { get; }
+
+        private CancellationToken StartPreparation()
+        {
+            _prepareCancel?.Dispose();
+            _prepareCancel = new CancellationTokenSource();
+            (CancelPreparationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            return _prepareCancel.Token;
+        }
+
+        private void EndPreparation()
+        {
+            _prepareCancel?.Dispose();
+            _prepareCancel = null;
+            (CancelPreparationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
 
         /// <summary>
         /// Arrête la copie ou la restauration en cours, entre deux fichiers.
@@ -877,11 +904,12 @@ namespace LDI12.App.ViewModels
             RestoreLines.Clear();
             _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
             Status = "Relevé de la sauvegarde en cours. Rien n'est encore écrit sur cette machine.";
+            var preparing = StartPreparation();
 
             try
             {
                 _restorePreview = await runner
-                    .PreviewAsync(_restore, RestoreParameters(), CancellationToken.None)
+                    .PreviewAsync(_restore, RestoreParameters(), preparing)
                     .ConfigureAwait(true);
 
                 RestoreSummary = _restorePreview.Summary;
@@ -926,6 +954,12 @@ namespace LDI12.App.ViewModels
                     ? "Relevé de la sauvegarde terminé. Rien n'a encore été restauré."
                     : _restorePreview.Blocker ?? _restorePreview.Summary;
             }
+            catch (OperationCanceledException)
+            {
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+                RestoreLines.Clear();
+                Status = "Préparation annulée. Rien n'a été écrit.";
+            }
             catch (Exception ex)
             {
                 _logger.Error(Category, "Le relevé de la restauration a échoué.", ex);
@@ -934,6 +968,7 @@ namespace LDI12.App.ViewModels
             }
             finally
             {
+                EndPreparation();
                 IsCopying = false;
                 Raise(nameof(HasRestorePreview));
                 RaiseBackupStates();
@@ -970,6 +1005,7 @@ namespace LDI12.App.ViewModels
             if (runner == null || !CanRestore) return;
 
             await StopMeasuresAsync().ConfigureAwait(true);
+            using var awake = KeepAwake.Start();
 
             IsCopying = true;
             Status = "Restauration en cours…";
@@ -1171,11 +1207,12 @@ namespace LDI12.App.ViewModels
             BackupLines.Clear();
             _backupPreview = _driversPreview = null;
             Status = "Relevé de la copie en cours. Aucun fichier n'est encore écrit.";
+            var preparing = StartPreparation();
 
             try
             {
                 _backupPreview = await runner
-                    .PreviewAsync(_backup, BackupParameters(), CancellationToken.None)
+                    .PreviewAsync(_backup, BackupParameters(), preparing)
                     .ConfigureAwait(true);
 
                 BackupSummary = _backupPreview.Summary;
@@ -1212,6 +1249,12 @@ namespace LDI12.App.ViewModels
                           (_driversPreview.Blocker ?? _driversPreview.Summary)
                         : "Relevé terminé. Rien n'a encore été copié.";
             }
+            catch (OperationCanceledException)
+            {
+                _backupPreview = _driversPreview = null;
+                BackupLines.Clear();
+                Status = "Préparation annulée. Rien n'a été copié.";
+            }
             catch (Exception ex)
             {
                 _logger.Error(Category, "Le relevé de la copie a échoué.", ex);
@@ -1220,6 +1263,7 @@ namespace LDI12.App.ViewModels
             }
             finally
             {
+                EndPreparation();
                 IsCopying = false;
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
@@ -1242,6 +1286,9 @@ namespace LDI12.App.ViewModels
             if (preview == null || action == null || runner == null) return;
 
             await StopMeasuresAsync().ConfigureAwait(true);
+
+            // La machine reste éveillée jusqu'à la fin : une mise en veille couperait le disque USB.
+            using var awake = KeepAwake.Start();
 
             IsCopying = true;
             Status = "Copie en cours…";

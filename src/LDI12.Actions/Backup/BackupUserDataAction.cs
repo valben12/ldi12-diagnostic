@@ -282,7 +282,13 @@ namespace LDI12.Actions.Backup
                     "Il manque de la place sur la destination : " + ValueFormat.Bytes(bytes) +
                     " à copier, " + ValueFormat.Bytes(free.Value) + " disponibles.");
 
-            var root = resume?.Path ?? Path.Combine(destination, FolderName(context));
+            // Une destination à l'intérieur d'une source se recopierait dans elle-même.
+            foreach (var folder in plan)
+                if (IsInside(destination, folder.Path))
+                    return Blocked("La destination « " + destination + " » est à l'intérieur de « " + folder.Label +
+                                   " », qui fait partie de la sauvegarde : choisissez un autre support.");
+
+            var root = resume?.Path ?? Unique(context, Path.Combine(destination, FolderName(context)));
 
             var measurements = new List<PreviewLine>
             {
@@ -383,6 +389,24 @@ namespace LDI12.Actions.Backup
                 willNotDo.Add(
                     cloud + " fichier(s) ne sont présents que dans le nuage : les copier les téléchargerait " +
                     "d'abord sur cette machine. Ils restent disponibles depuis le compte en ligne du client.");
+            }
+
+            // FAT32, le format d'origine de la plupart des clés, refuse les fichiers de 4 Go et plus.
+            var format = context.Files.VolumeFormat(destination);
+            if (format != null && format.StartsWith("FAT", StringComparison.OrdinalIgnoreCase) &&
+                !format.Equals("exFAT", StringComparison.OrdinalIgnoreCase))
+            {
+                var huge = 0;
+                foreach (var folder in plan)
+                    foreach (var file in folder.Files)
+                        if (file.SizeBytes >= FourGigabytes) huge++;
+
+                if (huge > 0)
+                    measurements.Add(new PreviewLine(
+                        "Fichiers trop gros pour ce support",
+                        huge + " fichier(s) de 4 Go ou plus ne peuvent pas aller sur un support en " + format +
+                        ". Choisir un support en NTFS ou exFAT, ou les copier à part",
+                        PreviewLineKind.Caution));
             }
 
             if (unreadable > 0)
@@ -820,6 +844,39 @@ namespace LDI12.Actions.Backup
             => BackupState.Prefix + Sanitize(MachineName(context)) + "-" +
                DateTimeOffset.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
 
+        private const long FourGigabytes = 4L * 1024 * 1024 * 1024 - 1;
+
+        /// <summary>Vrai si <paramref name="path"/> est <paramref name="folder"/> ou se trouve dedans.</summary>
+        internal static bool IsInside(string path, string folder)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(folder)) return false;
+
+            var inner = path.Trim().TrimEnd('\\') + "\\";
+            var outer = folder.Trim().TrimEnd('\\') + "\\";
+            return inner.StartsWith(outer, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Un nom de dossier libre.
+        /// </summary>
+        /// <remarks>
+        /// Le nom porte la minute : deux sauvegardes lancées dans la même minute auraient partagé
+        /// le même dossier, et la seconde aurait refusé d'y écrire son manifeste. La date reste en
+        /// fin de nom, avant le suffixe, pour que la sauvegarde se reconnaisse toujours.
+        /// </remarks>
+        private static string Unique(ActionContext context, string path)
+        {
+            if (!context.Files.DirectoryExists(path)) return path;
+
+            for (var index = 2; index < 100; index++)
+            {
+                var candidate = path + "-" + index.ToString(CultureInfo.InvariantCulture);
+                if (!context.Files.DirectoryExists(candidate)) return candidate;
+            }
+
+            return path;
+        }
+
         private static string? ToolVersion()
         {
             var version = typeof(BackupUserDataAction).Assembly.GetName().Version;
@@ -862,6 +919,7 @@ namespace LDI12.Actions.Backup
             FileCopyOutcome.VerificationFailed => "relecture différente de la source : copie retirée",
             FileCopyOutcome.CloudOnly => "présent seulement en ligne",
             FileCopyOutcome.DeviceError => "support injoignable ou illisible",
+            FileCopyOutcome.FileTooLarge => "4 Go ou plus : refusé par le format FAT32 du support",
             _ => "échec",
         };
 

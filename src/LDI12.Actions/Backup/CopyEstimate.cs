@@ -46,6 +46,38 @@ namespace LDI12.Actions.Backup
             return TimeSpan.FromSeconds(Math.Max(0, seconds));
         }
 
+        /// <summary>
+        /// La durée d'une restauration.
+        /// </summary>
+        /// <remarks>
+        /// Les rôles s'inversent : la sauvegarde est lue pendant que la machine écrit, et c'est le
+        /// plus lent des deux qui fixe le rythme ; puis la machine relit ce qu'elle a écrit. Chaque
+        /// fichier paie son prix des deux côtés : ouvert sur la sauvegarde, créé, renommé et relu
+        /// sur la machine.
+        /// </remarks>
+        public static TimeSpan RestoreDuration(long bytes, int files, ReadSpeed source, CopySpeed target)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (target == null) throw new ArgumentNullException(nameof(target));
+
+            var seconds = bytes / Math.Min(source.ReadBytesPerSecond, target.WriteBytesPerSecond) +
+                          bytes / target.ReadBytesPerSecond +
+                          files * (source.PerFile.TotalSeconds + target.PerFile.TotalSeconds);
+            return TimeSpan.FromSeconds(Math.Max(0, seconds));
+        }
+
+        /// <summary>La lecture de la sauvegarde, comme on la lit sur une tuile.</summary>
+        public static string Speeds(ReadSpeed speed)
+            => "lecture " + Rate(speed.ReadBytesPerSecond) + ", " +
+               speed.PerFile.TotalMilliseconds.ToString("0", CultureInfo.GetCultureInfo("fr-FR")) + " ms par fichier";
+
+        /// <summary>Ce qu'il faut dire d'un support de sauvegarde lent à lire, ou nul.</summary>
+        public static string? Advice(ReadSpeed speed)
+            => speed.ReadBytesPerSecond < SlowWriteBytesPerSecond
+                ? "Support de sauvegarde lent à lire : clé USB 2, ou branché sur un port USB 2. Le brancher sur un " +
+                  "port USB 3 (souvent bleu) peut beaucoup raccourcir la restauration."
+                : null;
+
         /// <summary>« environ 3 h 40 (entre 2 h 20 et 5 h) ».</summary>
         public static string Describe(TimeSpan duration)
         {

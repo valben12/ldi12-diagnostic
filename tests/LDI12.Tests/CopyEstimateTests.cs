@@ -112,6 +112,73 @@ namespace LDI12.Tests
             }
         }
 
+        // ============================================================ restauration
+
+        [Fact]
+        public void La_restauration_va_au_rythme_du_plus_lent_des_deux_disques()
+        {
+            // Sauvegarde lue à 30 Mo/s, machine qui écrit à 500 et relit à 1 000 : c'est la clé
+            // qui fixe le rythme. 30 Go et 10 000 fichiers : 1 000 s + 30 s + 10 000 × 3 ms.
+            var source = new ReadSpeed { ReadBytesPerSecond = 30e6, PerFile = TimeSpan.FromMilliseconds(2) };
+            var machine = new CopySpeed
+            {
+                WriteBytesPerSecond = 500e6,
+                ReadBytesPerSecond = 1000e6,
+                PerFile = TimeSpan.FromMilliseconds(1),
+            };
+
+            var duration = CopyEstimate.RestoreDuration(30_000_000_000, 10_000, source, machine);
+
+            Assert.InRange(duration.TotalSeconds, 1_059, 1_061);
+            Assert.Contains("USB 3", CopyEstimate.Advice(source));
+        }
+
+        [Fact]
+        public void La_mesure_de_la_sauvegarde_traverse_les_parametres_sans_perte()
+        {
+            var speed = new ReadSpeed { ReadBytesPerSecond = 123.5e6, PerFile = TimeSpan.FromMilliseconds(4.5) };
+
+            var decoded = ReadSpeed.Decode(speed.Encode());
+
+            Assert.Equal(speed.ReadBytesPerSecond, decoded!.ReadBytesPerSecond);
+            Assert.Equal(speed.PerFile, decoded.PerFile);
+            Assert.Null(ReadSpeed.Decode("1;2;3"));
+        }
+
+        [Fact]
+        public void La_mesure_d_une_sauvegarde_la_lit_sans_rien_y_changer()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "LDI12-lecture-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "Bureau"));
+
+            try
+            {
+                var random = new Random(5);
+                var big = new byte[3 * 1024 * 1024 + 100];
+                random.NextBytes(big);
+                File.WriteAllBytes(Path.Combine(root, "Bureau", "gros.bin"), big);
+                for (var i = 0; i < 20; i++)
+                    File.WriteAllBytes(Path.Combine(root, "Bureau", "petit" + i + ".txt"), new byte[1000 + i]);
+
+                var before = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                    .Select(path => path + "|" + File.GetLastWriteTimeUtc(path).Ticks).OrderBy(x => x).ToArray();
+
+                var speed = new CopySpeedProbe(NullLogger.Instance).MeasureSource(root, CancellationToken.None);
+
+                Assert.True(speed.IsValid, speed.Failure);
+                Assert.True(speed.ReadBytesPerSecond > 0);
+
+                var after = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                    .Select(path => path + "|" + File.GetLastWriteTimeUtc(path).Ticks).OrderBy(x => x).ToArray();
+                Assert.Equal(before, after);
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); }
+                catch (IOException) { }
+            }
+        }
+
         private static Task<ActionPreview> Preview(CopySpeed? speed)
         {
             var files = new FakeFileSystemGateway()

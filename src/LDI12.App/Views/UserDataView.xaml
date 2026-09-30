@@ -417,6 +417,19 @@
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
                                      Text="{Binding RestoreSource, UpdateSourceTrigger=PropertyChanged}" />
 
+                            <!-- La durée avant de lancer : la sauvegarde est lue sans rien y écrire, le
+                                 disque de cette machine est mesuré avec des fichiers d'essai effacés ensuite. -->
+                            <Grid Margin="0,12,0,0" MaxWidth="960" HorizontalAlignment="Left">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Style="{StaticResource Button.Ghost}" Content="Mesurer la vitesse"
+                                        Command="{Binding MeasureRestoreSpeedCommand}" VerticalAlignment="Top" />
+                                <TextBlock Grid.Column="1" Text="{Binding RestoreSpeedNote}" Style="{StaticResource Text.Muted}"
+                                           Margin="14,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </Grid>
+
                             <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0" IsChecked="{Binding RestoreWifi}">
                                 <StackPanel>
                                     <TextBlock Text="Réimporter les profils Wi-Fi" Style="{StaticResource Text.Body}"

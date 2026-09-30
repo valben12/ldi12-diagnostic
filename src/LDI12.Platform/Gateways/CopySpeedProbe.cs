@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -197,6 +198,155 @@ namespace LDI12.Platform.Gateways
             var transfer = SmallFileBytes / write + SmallFileBytes / read;
             return TimeSpan.FromSeconds(Math.Max(0, each - transfer));
         }
+
+        /// <summary>
+        /// Mesure la lecture d'une sauvegarde, sans y écrire un octet.
+        /// </summary>
+        /// <remarks>
+        /// La restauration s'engage à ne jamais modifier la sauvegarde : sa mesure non plus. Elle
+        /// lit donc les fichiers de la sauvegarde elle-même, sans mémoire tampon pour lire le
+        /// support et non le cache de Windows : les plus gros pour le débit continu, les plus
+        /// petits pour le prix fixe d'un fichier, cinq secondes au plus pour chacun.
+        /// </remarks>
+        public ReadSpeed MeasureSource(string backup, CancellationToken cancellationToken)
+        {
+            List<FileInfo> files;
+            try
+            {
+                files = Inventory(backup, cancellationToken);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+            {
+                return new ReadSpeed { Failure = "La sauvegarde n'a pas pu être parcourue : " + ex.Message };
+            }
+
+            if (files.Count == 0) return new ReadSpeed { Failure = "La sauvegarde ne contient aucun fichier à lire." };
+
+            try
+            {
+                files.Sort((a, b) => b.Length.CompareTo(a.Length));
+                var read = SequentialRead(files, cancellationToken);
+                if (read <= 0) return new ReadSpeed { Failure = "Aucun fichier de la sauvegarde n'a pu être lu." };
+
+                files.Reverse();
+                var perFile = SmallReads(files, read, cancellationToken);
+
+                _log.Info("Lecture de la sauvegarde " + backup + " : " + (int)(read / 1e6) + " Mo/s, " +
+                          perFile.TotalMilliseconds.ToString("0.0") + " ms par fichier.");
+
+                return new ReadSpeed { ReadBytesPerSecond = read, PerFile = perFile };
+            }
+            catch (OperationCanceledException)
+            {
+                return new ReadSpeed { Failure = "Mesure annulée." };
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                return new ReadSpeed { Failure = "La mesure a échoué : " + ex.Message };
+            }
+        }
+
+        /// <summary>Les fichiers de la sauvegarde, jusqu'à quelques milliers : de quoi choisir les plus gros et les plus petits.</summary>
+        private static List<FileInfo> Inventory(string root, CancellationToken cancellationToken)
+        {
+            const int Limit = 5000;
+            var result = new List<FileInfo>();
+            var pending = new Stack<DirectoryInfo>();
+            pending.Push(new DirectoryInfo(root));
+
+            while (pending.Count > 0 && result.Count < Limit)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var directory = pending.Pop();
+
+                try
+                {
+                    foreach (var file in directory.GetFiles())
+                    {
+                        if ((file.Attributes & FileAttributes.ReparsePoint) != 0 || file.Length == 0) continue;
+                        if (file.Name.EndsWith(FileCopyRequest.PartialSuffix, StringComparison.OrdinalIgnoreCase)) continue;
+                        result.Add(file);
+                        if (result.Count >= Limit) break;
+                    }
+
+                    foreach (var child in directory.GetDirectories())
+                        if ((child.Attributes & FileAttributes.ReparsePoint) == 0) pending.Push(child);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                           ex is PathTooLongException || ex is System.Security.SecurityException)
+                {
+                    // Un dossier illisible n'empêche pas de mesurer les autres.
+                }
+            }
+
+            return result;
+        }
+
+        private static double SequentialRead(IReadOnlyList<FileInfo> largestFirst, CancellationToken cancellationToken)
+        {
+            using var buffer = new DiskIoNative.AlignedBuffer(Block);
+            var stopwatch = Stopwatch.StartNew();
+            long total = 0;
+
+            foreach (var file in largestFirst)
+            {
+                if (total >= (long)MaxBlocks * Block || stopwatch.Elapsed >= PhaseBudget) break;
+
+                using var handle = OpenForRead(file.FullName);
+                if (handle.IsInvalid) continue;
+
+                while (total < (long)MaxBlocks * Block && stopwatch.Elapsed < PhaseBudget)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!DiskIoNative.ReadFile(handle, buffer.Address, Block, out var moved, IntPtr.Zero))
+                        throw Error("La lecture de la sauvegarde s'est interrompue");
+
+                    total += moved;
+                    if (moved < Block) break;
+                }
+            }
+
+            return total / Math.Max(stopwatch.Elapsed.TotalSeconds, 1e-3);
+        }
+
+        private static TimeSpan SmallReads(IReadOnlyList<FileInfo> smallestFirst, double read, CancellationToken cancellationToken)
+        {
+            const int Largest = 64 * 1024;
+            using var buffer = new DiskIoNative.AlignedBuffer(Largest);
+
+            var stopwatch = Stopwatch.StartNew();
+            var count = 0;
+            long bytes = 0;
+
+            foreach (var file in smallestFirst)
+            {
+                if (file.Length > Largest || count >= MaxSmallFiles || stopwatch.Elapsed >= PhaseBudget) break;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                _ = file.Exists;
+                using var handle = OpenForRead(file.FullName);
+                if (handle.IsInvalid) continue;
+
+                // Sans mémoire tampon, une lecture porte des secteurs entiers : la taille du fichier,
+                // arrondie à la page. Windows ne rend que les octets du fichier.
+                var wanted = (int)((file.Length + DiskIoNative.Alignment - 1) / DiskIoNative.Alignment * DiskIoNative.Alignment);
+                if (!DiskIoNative.ReadFile(handle, buffer.Address, wanted, out var moved, IntPtr.Zero))
+                    throw Error("La lecture de la sauvegarde s'est interrompue");
+
+                bytes += moved;
+                count++;
+            }
+
+            if (count == 0) return TimeSpan.Zero;
+
+            var each = stopwatch.Elapsed.TotalSeconds / count;
+            return TimeSpan.FromSeconds(Math.Max(0, each - (double)bytes / count / read));
+        }
+
+        private static SafeFileHandle OpenForRead(string path)
+            => DiskIoNative.CreateFile(
+                path, DiskIoNative.GenericRead, DiskIoNative.ShareRead, IntPtr.Zero, DiskIoNative.OpenExisting,
+                DiskIoNative.FlagNoBuffering | DiskIoNative.FlagSequentialScan, IntPtr.Zero);
 
         private static IOException Error(string what)
         {

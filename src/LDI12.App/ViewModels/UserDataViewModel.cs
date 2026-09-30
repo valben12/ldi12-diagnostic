@@ -100,6 +100,8 @@ namespace LDI12.App.ViewModels
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
+            MeasureRestoreSpeedCommand = new AsyncRelayCommand(MeasureRestoreSpeedAsync,
+                () => !IsCopying && !IsMeasuringSpeed && !string.IsNullOrWhiteSpace(RestoreSource));
             MeasureSpeedCommand = new AsyncRelayCommand(MeasureSpeedAsync,
                 () => !IsCopying && !IsMeasuringSpeed && !string.IsNullOrWhiteSpace(BackupDestination));
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
@@ -177,7 +179,12 @@ namespace LDI12.App.ViewModels
                     var backupTile = new DriveTile(drive, tile => BackupDestination = tile.Root);
                     ShowSpeed(backupTile, _speeds.TryGetValue(RootOf(drive.Root), out var known) ? known : null);
                     BackupDrives.Add(backupTile);
-                    if (drive.Backups > 0) RestoreDrives.Add(new DriveTile(drive, tile => RestoreSource = tile.Root));
+                    if (drive.Backups > 0)
+                    {
+                        var restoreTile = new DriveTile(drive, tile => RestoreSource = tile.Root);
+                        ShowSpeed(restoreTile, _sourceSpeeds.TryGetValue(RootOf(drive.Root), out var read) ? read : null);
+                        RestoreDrives.Add(restoreTile);
+                    }
                 }
 
                 MarkSelection();
@@ -218,7 +225,9 @@ namespace LDI12.App.ViewModels
             get => _isMeasuringSpeed;
             private set
             {
-                if (Set(ref _isMeasuringSpeed, value)) (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                if (!Set(ref _isMeasuringSpeed, value)) return;
+                (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                (MeasureRestoreSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 
@@ -274,6 +283,97 @@ namespace LDI12.App.ViewModels
 
             Invalidate();
             if (prepared && CanPrepareBackup) await PrepareBackupAsync().ConfigureAwait(true);
+        }
+
+        // ---------- vitesse de la restauration
+
+        private readonly Dictionary<string, ReadSpeed> _sourceSpeeds = new Dictionary<string, ReadSpeed>(StringComparer.OrdinalIgnoreCase);
+        private CopySpeed? _machineSpeed;
+        private string _restoreSpeedNote =
+            "Mesurer la sauvegarde et ce disque, une quinzaine de secondes, donne la durée de la restauration avant de la lancer.";
+
+        public ICommand MeasureRestoreSpeedCommand { get; }
+
+        public string RestoreSpeedNote { get => _restoreSpeedNote; private set => Set(ref _restoreSpeedNote, value); }
+
+        /// <summary>
+        /// Mesure les deux disques d'une restauration : la sauvegarde qu'on lit, et cette machine qui écrit.
+        /// </summary>
+        /// <remarks>
+        /// La sauvegarde est mesurée en lecture seule, sur ses propres fichiers : rien n'y est écrit,
+        /// comme la restauration s'y engage. Le disque de cette machine est mesuré une fois par
+        /// session, dans le dossier temporaire de Windows, avec des fichiers d'essai effacés à la fin.
+        /// </remarks>
+        private async Task MeasureRestoreSpeedAsync()
+        {
+            var source = RestoreSource.Trim();
+            var root = RootOf(source);
+            if (root.Length == 0) return;
+
+            var prepared = _restorePreview != null;
+            IsMeasuringSpeed = true;
+
+            try
+            {
+                var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
+                var backup = RestoreCatalog.Find(services.Files, source, out _);
+                if (backup == null)
+                {
+                    RestoreSpeedNote = "Aucune sauvegarde LDI12 n'a été trouvée dans « " + source + " » : rien à mesurer.";
+                    return;
+                }
+
+                var probe = new CopySpeedProbe(_logger);
+
+                RestoreSpeedNote = "Lecture de la sauvegarde en cours, sans rien y écrire…";
+                var read = await Task.Run(() => probe.MeasureSource(backup, CancellationToken.None)).ConfigureAwait(true);
+                if (!read.IsValid)
+                {
+                    RestoreSpeedNote = "La mesure de la sauvegarde n'a pas abouti : " + (read.Failure ?? "cause inconnue") + ".";
+                    return;
+                }
+
+                _sourceSpeeds[root] = read;
+                foreach (var tile in RestoreDrives)
+                    if (string.Equals(RootOf(tile.Root), root, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, read);
+
+                if (_machineSpeed == null)
+                {
+                    RestoreSpeedNote = "Mesure du disque de cette machine, avec des fichiers d'essai effacés ensuite…";
+                    var machine = await Task.Run(() => probe.Measure(Path.GetTempPath(), null, CancellationToken.None))
+                        .ConfigureAwait(true);
+                    if (!machine.IsValid)
+                    {
+                        RestoreSpeedNote = "La mesure du disque de cette machine n'a pas abouti : " +
+                                           (machine.Failure ?? "cause inconnue") + ".";
+                        return;
+                    }
+
+                    _machineSpeed = machine;
+                }
+
+                RestoreSpeedNote = "Sauvegarde : " + CopyEstimate.Speeds(read) + ". Cette machine : " +
+                                   CopyEstimate.Speeds(_machineSpeed) + "." +
+                                   (CopyEstimate.Advice(read) is string advice ? " " + advice : string.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La vitesse de la restauration n'a pas pu être mesurée.", ex);
+                RestoreSpeedNote = "La mesure n'a pas abouti : " + ex.Message;
+            }
+            finally
+            {
+                IsMeasuringSpeed = false;
+            }
+
+            InvalidateRestore();
+            if (prepared && CanPrepareRestore) await PrepareRestoreAsync().ConfigureAwait(true);
+        }
+
+        private static void ShowSpeed(DriveTile tile, ReadSpeed? speed)
+        {
+            tile.SpeedText = speed == null ? null : "Mesuré : " + CopyEstimate.Speeds(speed) + ".";
+            tile.SpeedAdvice = speed == null ? null : CopyEstimate.Advice(speed);
         }
 
         private static void ShowSpeed(DriveTile tile, CopySpeed? speed)
@@ -656,11 +756,21 @@ namespace LDI12.App.ViewModels
         }
 
         private IReadOnlyDictionary<string, string> RestoreParameters()
-            => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [RestoreUserDataAction.SourceParameter] = RestoreSource.Trim(),
                 [RestoreUserDataAction.WifiParameter] = RestoreWifi ? "1" : "0",
             };
+
+            if (_sourceSpeeds.TryGetValue(RootOf(RestoreSource), out var source) && _machineSpeed != null)
+            {
+                parameters[RestoreUserDataAction.SourceSpeedParameter] = source.Encode();
+                parameters[RestoreUserDataAction.TargetSpeedParameter] = _machineSpeed.Encode();
+            }
+
+            return parameters;
+        }
 
         private async Task PrepareRestoreAsync()
         {
@@ -1145,6 +1255,7 @@ namespace LDI12.App.ViewModels
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (MeasureRestoreSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
 
         public event EventHandler? JournalChanged;

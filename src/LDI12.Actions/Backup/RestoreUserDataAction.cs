@@ -66,6 +66,12 @@ namespace LDI12.Actions.Backup
         /// <summary>« 0 » : ne pas réimporter les profils Wi-Fi. Absent : ils sont réimportés.</summary>
         public const string WifiParameter = "wifi";
 
+        /// <summary>La lecture mesurée du support de la sauvegarde, voir <see cref="ReadSpeed.Encode"/>.</summary>
+        public const string SourceSpeedParameter = "source-speed";
+
+        /// <summary>La vitesse mesurée du disque de cette machine, voir <see cref="CopySpeed.Encode"/>.</summary>
+        public const string TargetSpeedParameter = "target-speed";
+
         private const double SpaceMargin = 1.05;
 
         private const int MaxFilesPerFolder = 400_000;
@@ -222,6 +228,30 @@ namespace LDI12.Actions.Backup
                     string.Join(", ", blockedByProcess) + ". Leurs données ne seront pas restaurées tant qu'ils ne sont " +
                     "pas fermés : les fermer, puis préparer de nouveau", PreviewLineKind.Caution));
 
+            // La durée : les deux supports doivent avoir été mesurés, la sauvegarde qu'on lit et le
+            // disque qui reçoit. Les pilotes et les applications n'y figurent pas : les premiers
+            // prennent quelques minutes, les secondes dépendent de la connexion.
+            var sourceSpeed = ReadSpeed.Decode(context.Parameter(SourceSpeedParameter));
+            var targetSpeed = CopySpeed.Decode(context.Parameter(TargetSpeedParameter));
+            string? duration = null;
+            if (files > 0 && sourceSpeed != null && targetSpeed != null)
+            {
+                duration = CopyEstimate.Describe(CopyEstimate.RestoreDuration(bytes, files, sourceSpeed, targetSpeed));
+                measurements.Add(new PreviewLine("Durée estimée",
+                    duration + " pour les fichiers, d'après la mesure des deux disques : sauvegarde en " +
+                    CopyEstimate.Speeds(sourceSpeed) + ", cette machine en " + CopyEstimate.Speeds(targetSpeed) +
+                    ". Sans compter les applications, qui dépendent de la connexion"));
+
+                if (CopyEstimate.Advice(sourceSpeed) is string advice)
+                    measurements.Add(new PreviewLine("Support lent", advice, PreviewLineKind.Caution));
+            }
+            else if (files > 0)
+            {
+                measurements.Add(new PreviewLine("Durée estimée",
+                    "non estimée : « Mesurer la vitesse » de la sauvegarde et de cette machine, une quinzaine de " +
+                    "secondes, pour la connaître"));
+            }
+
             if (missing.Count > 0)
                 measurements.Add(new PreviewLine("Logiciels à réinstaller",
                     missing.Count + " logiciel(s) de l'ancienne installation absents ici", PreviewLineKind.Caution));
@@ -277,7 +307,8 @@ namespace LDI12.Actions.Backup
             {
                 Outcome = PreviewOutcome.Ready,
                 Summary = ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront restaurés depuis « " +
-                          Path.GetFileName(backup) + " », puis relus un par un.",
+                          Path.GetFileName(backup) + " », puis relus un par un." +
+                          (duration == null ? string.Empty : " Durée estimée : " + duration + "."),
                 WillDo = willDo,
                 WillNotDo = willNotDo,
                 Measurements = measurements,

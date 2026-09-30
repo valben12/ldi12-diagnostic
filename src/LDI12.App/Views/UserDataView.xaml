@@ -58,6 +58,11 @@
                     <TextBlock Text="{Binding ResumableText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.StatusInfo}"
                                Visibility="{Binding HasResumable, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="{Binding SpeedText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="{Binding SpeedAdvice}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.StatusWarning}"
+                               Visibility="{Binding HasSpeedAdvice, Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding Warning}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.StatusWarning}"
                                Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibility}}" />
@@ -222,6 +227,19 @@
                                  c'est-à-dire à rien, et étiré il se centre au milieu de la carte. -->
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
                                      Text="{Binding BackupDestination, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <!-- La durée avant de lancer : une mesure du support choisi, sur demande,
+                                 puisque préparer une copie n'écrit rien. -->
+                            <Grid Margin="0,12,0,0" MaxWidth="960" HorizontalAlignment="Left">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Style="{StaticResource Button.Ghost}" Content="Mesurer la vitesse"
+                                        Command="{Binding MeasureSpeedCommand}" VerticalAlignment="Top" />
+                                <TextBlock Grid.Column="1" Text="{Binding SpeedNote}" Style="{StaticResource Text.Muted}"
+                                           Margin="14,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </Grid>
 
                             <!-- Reprise : une sauvegarde arrêtée en route (support débranché, plein, ou arrêt
                                  demandé) repart où elle s'était arrêtée, dans le même dossier. -->

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -13,8 +14,10 @@ using LDI12.Actions.Journal;
 using LDI12.App.Mvvm;
 using LDI12.App.Services;
 using LDI12.Core.Diagnostics;
+using LDI12.Core.Execution;
 using LDI12.Core.Logging;
 using LDI12.Core.Model;
+using LDI12.Platform.Gateways;
 
 namespace LDI12.App.ViewModels
 {
@@ -97,6 +100,8 @@ namespace LDI12.App.ViewModels
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
+            MeasureSpeedCommand = new AsyncRelayCommand(MeasureSpeedAsync,
+                () => !IsCopying && !IsMeasuringSpeed && !string.IsNullOrWhiteSpace(BackupDestination));
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
@@ -169,7 +174,9 @@ namespace LDI12.App.ViewModels
                 RestoreDrives.Clear();
                 foreach (var drive in drives)
                 {
-                    BackupDrives.Add(new DriveTile(drive, tile => BackupDestination = tile.Root));
+                    var backupTile = new DriveTile(drive, tile => BackupDestination = tile.Root);
+                    ShowSpeed(backupTile, _speeds.TryGetValue(RootOf(drive.Root), out var known) ? known : null);
+                    BackupDrives.Add(backupTile);
                     if (drive.Backups > 0) RestoreDrives.Add(new DriveTile(drive, tile => RestoreSource = tile.Root));
                 }
 
@@ -197,6 +204,96 @@ namespace LDI12.App.ViewModels
 
         private static bool SameRoot(string root, string path)
             => string.Equals(root.TrimEnd('\\'), (path ?? string.Empty).Trim().TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
+        // ---------- vitesse du support et durée
+
+        private readonly Dictionary<string, CopySpeed> _speeds = new Dictionary<string, CopySpeed>(StringComparer.OrdinalIgnoreCase);
+        private bool _isMeasuringSpeed;
+        private string _speedNote = "Mesurer le support choisi, une quinzaine de secondes, donne la durée de la copie avant de la lancer.";
+
+        public ICommand MeasureSpeedCommand { get; }
+
+        public bool IsMeasuringSpeed
+        {
+            get => _isMeasuringSpeed;
+            private set
+            {
+                if (Set(ref _isMeasuringSpeed, value)) (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        /// <summary>Ce qu'on sait de la vitesse du support choisi.</summary>
+        public string SpeedNote { get => _speedNote; private set => Set(ref _speedNote, value); }
+
+        /// <summary>
+        /// Mesure le support choisi.
+        /// </summary>
+        /// <remarks>
+        /// Sur demande, jamais à la préparation : préparer une copie n'écrit rien, et c'est écrit
+        /// sur l'écran. La mesure, elle, écrit une soixantaine de mégaoctets sur le support, dans
+        /// un dossier qu'elle efface. Si une copie était déjà préparée, elle l'est de nouveau, avec
+        /// sa durée.
+        /// </remarks>
+        private async Task MeasureSpeedAsync()
+        {
+            var destination = BackupDestination.Trim();
+            var root = RootOf(destination);
+            if (root.Length == 0) return;
+
+            var prepared = _backupPreview != null;
+            IsMeasuringSpeed = true;
+            SpeedNote = "Mesure de " + root + " en cours : écriture et relecture d'un fichier d'essai, puis de petits fichiers…";
+
+            try
+            {
+                var probe = new CopySpeedProbe(_logger);
+                var speed = await Task.Run(() => probe.Measure(destination, null, CancellationToken.None)).ConfigureAwait(true);
+
+                if (!speed.IsValid)
+                {
+                    SpeedNote = "La mesure n'a pas abouti : " + (speed.Failure ?? "cause inconnue") + ".";
+                    return;
+                }
+
+                _speeds[root] = speed;
+                foreach (var tile in BackupDrives)
+                    if (string.Equals(RootOf(tile.Root), root, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, speed);
+
+                SpeedNote = root + " : " + CopyEstimate.Speeds(speed) + "." +
+                            (CopyEstimate.Advice(speed) is string advice ? " " + advice : string.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La vitesse du support n'a pas pu être mesurée.", ex);
+                SpeedNote = "La mesure n'a pas abouti : " + ex.Message;
+            }
+            finally
+            {
+                IsMeasuringSpeed = false;
+            }
+
+            Invalidate();
+            if (prepared && CanPrepareBackup) await PrepareBackupAsync().ConfigureAwait(true);
+        }
+
+        private static void ShowSpeed(DriveTile tile, CopySpeed? speed)
+        {
+            tile.SpeedText = speed == null ? null : "Mesuré : " + CopyEstimate.Speeds(speed) + ".";
+            tile.SpeedAdvice = speed == null ? null : CopyEstimate.Advice(speed);
+        }
+
+        private static string RootOf(string path)
+        {
+            try
+            {
+                return string.IsNullOrWhiteSpace(path) ? string.Empty : Path.GetPathRoot(Path.GetFullPath(path.Trim())) ?? string.Empty;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException ||
+                                       ex is System.Security.SecurityException)
+            {
+                return string.Empty;
+            }
+        }
 
         // ---------- pilotes et applications
 
@@ -645,6 +742,8 @@ namespace LDI12.App.ViewModels
         {
             foreach (var line in preview.Measurements)
                 if (line.Kind == PreviewLineKind.Caution) lines.Add("Attention. " + line.Label + " : " + line.Value);
+            foreach (var line in preview.Measurements)
+                if (line.Kind == PreviewLineKind.Fact) lines.Add(line.Label + " : " + line.Value + ".");
             foreach (var line in preview.WillDo) lines.Add(line);
             foreach (var line in preview.WillNotDo) lines.Add(line);
             if (preview.Outcome == PreviewOutcome.Blocked && preview.Blocker != null) lines.Add("Impossible : " + preview.Blocker);
@@ -1005,6 +1104,9 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
             };
 
+            if (_speeds.TryGetValue(RootOf(BackupDestination), out var speed))
+                parameters[BackupUserDataAction.SpeedParameter] = speed.Encode();
+
             var applications = CheckedApplications();
             if (applications.Count > 0)
                 parameters[BackupUserDataAction.WingetParameter] = WingetApplications.Encode(applications);
@@ -1042,6 +1144,7 @@ namespace LDI12.App.ViewModels
             (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
 
         public event EventHandler? JournalChanged;

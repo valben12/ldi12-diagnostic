@@ -147,6 +147,12 @@ namespace LDI12.Actions.Backup
         public const string ResumeParameter = "resume";
 
         /// <summary>
+        /// La vitesse mesurée du support, voir <see cref="CopySpeed.Encode"/>. Absent : la durée
+        /// n'est pas estimée, et la prévisualisation dit comment l'obtenir.
+        /// </summary>
+        public const string SpeedParameter = "speed";
+
+        /// <summary>
         /// Marge exigée en plus de la taille des données.
         /// </summary>
         /// <remarks>
@@ -287,6 +293,29 @@ namespace LDI12.Actions.Backup
                     free.IsReliable ? ValueFormat.Bytes(free.Value) : "non lue"),
             };
 
+            // La durée, avant tout le reste : c'est elle qui décide de lancer maintenant, de changer
+            // de port ou de support. À la reprise, seule la part qui reste à copier est comptée.
+            var speed = CopySpeed.Decode(context.Parameter(SpeedParameter));
+            string? duration = null;
+            if (speed != null && files > 0)
+            {
+                var remaining = Math.Max(0, bytes - already);
+                var share = bytes > 0 ? (double)remaining / bytes : 1;
+                duration = CopyEstimate.Describe(CopyEstimate.Duration(remaining, (int)Math.Ceiling(files * share), speed));
+
+                measurements.Add(new PreviewLine("Durée estimée",
+                    duration + ", d'après la mesure du support : " + CopyEstimate.Speeds(speed) +
+                    ". Plus long si le disque de cette machine est lent ou abîmé"));
+
+                var advice = CopyEstimate.Advice(speed);
+                if (advice != null) measurements.Add(new PreviewLine("Support lent", advice, PreviewLineKind.Caution));
+            }
+            else if (files > 0)
+            {
+                measurements.Add(new PreviewLine("Durée estimée",
+                    "non estimée : « Mesurer la vitesse » du support choisi, une quinzaine de secondes, pour la connaître"));
+            }
+
             var willDo = new List<string>();
             foreach (var folder in plan)
                 if (folder.Application == null)
@@ -370,7 +399,8 @@ namespace LDI12.Actions.Backup
                 Outcome = PreviewOutcome.Ready,
                 Summary = (resume == null ? string.Empty : "Reprise de la sauvegarde interrompue du " + resume.StartedText + ". ") +
                           ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront copiés vers " +
-                          root + ", puis relus un par un.",
+                          root + ", puis relus un par un." +
+                          (duration == null ? string.Empty : " Durée estimée : " + duration + "."),
                 WillDo = willDo,
                 WillNotDo = willNotDo,
                 Measurements = measurements,

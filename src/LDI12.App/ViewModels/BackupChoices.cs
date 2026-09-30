@@ -45,6 +45,27 @@ namespace LDI12.App.ViewModels
         public ICommand SelectCommand { get; }
 
         public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+
+        private string? _speedText;
+        private string? _speedAdvice;
+
+        /// <summary>La vitesse mesurée de ce support, ou nul tant qu'il n'a pas été mesuré.</summary>
+        public string? SpeedText
+        {
+            get => _speedText;
+            set { if (Set(ref _speedText, value)) Raise(nameof(HasSpeed)); }
+        }
+
+        public bool HasSpeed => _speedText != null;
+
+        /// <summary>Le conseil qui accompagne un support lent.</summary>
+        public string? SpeedAdvice
+        {
+            get => _speedAdvice;
+            set { if (Set(ref _speedAdvice, value)) Raise(nameof(HasSpeedAdvice)); }
+        }
+
+        public bool HasSpeedAdvice => _speedAdvice != null;
     }
 
     /// <summary>Une case d'une liste : un pilote, une application.</summary>

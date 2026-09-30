@@ -196,6 +196,8 @@ namespace LDI12.Actions.Backup
                 foreach (var directory in files.EnumerateDirectories(applications))
                     Application(files, directory, targets, items, left);
 
+            Others(files, backup, targets, items);
+
             var wifi = new List<string>();
             var wifiFolder = Path.Combine(backup, WifiExport.Folder);
             if (files.DirectoryExists(wifiFolder))
@@ -208,6 +210,56 @@ namespace LDI12.Actions.Backup
             }
 
             return new RestoreLayout { Backup = backup, Items = items, WifiProfiles = wifi, Left = left };
+        }
+
+        /// <summary>
+        /// Les dossiers ajoutés à la main : à leur emplacement d'origine si ce disque existe ici,
+        /// sinon dans les Documents.
+        /// </summary>
+        /// <remarks>
+        /// Jamais sur le disque qui porte la sauvegarde : « E:\ » d'origine peut être, sur la
+        /// nouvelle machine, la lettre du disque de sauvegarde lui-même, et la restauration s'y
+        /// recopierait.
+        /// </remarks>
+        private static void Others(IFileSystemGateway files, string backup, RestoreTargets targets, ICollection<RestoreItem> items)
+        {
+            var folder = Path.Combine(backup, ExtraFolders.Folder);
+            if (!files.DirectoryExists(folder)) return;
+
+            var text = files.ReadText(Path.Combine(backup, ExtraFolders.MapFileName));
+            var map = ExtraFolders.ParseMap(text.HasValue ? text.Value : null);
+            var backupRoot = SafeRoot(backup);
+
+            foreach (var directory in files.EnumerateDirectories(folder))
+            {
+                var name = Path.GetFileName(directory.TrimEnd('\\'));
+                var fallback = Combine(targets.Documents, Path.Combine(ExtraFolders.Folder, name));
+
+                var destination = fallback;
+                if (map.TryGetValue(name, out var original))
+                {
+                    var root = SafeRoot(original);
+                    if (root.Length > 0 && files.DirectoryExists(root) &&
+                        !string.Equals(root, backupRoot, StringComparison.OrdinalIgnoreCase))
+                        destination = original;
+                }
+
+                if (destination.Length == 0) continue;
+
+                items.Add(new RestoreItem
+                {
+                    Label = ExtraFolders.Folder + " / " + name,
+                    Source = directory,
+                    Destination = destination,
+                    Mode = RestoreMode.Merge,
+                });
+            }
+        }
+
+        private static string SafeRoot(string path)
+        {
+            try { return Path.GetPathRoot(path) ?? string.Empty; }
+            catch (ArgumentException) { return string.Empty; }
         }
 
         private static void Personal(

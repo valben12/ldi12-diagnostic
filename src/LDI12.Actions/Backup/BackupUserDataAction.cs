@@ -79,6 +79,9 @@ namespace LDI12.Actions.Backup
         /// cliché instantané, et de quoi.
         /// </remarks>
         public List<OpenFile> OpenFiles { get; } = new List<OpenFile>();
+
+        /// <summary>Dossiers ajoutés à la main : leur emplacement d'origine est noté dans la sauvegarde.</summary>
+        public IReadOnlyList<ExtraFolder> ExtraFolders { get; init; } = Array.Empty<ExtraFolder>();
     }
 
     /// <summary>
@@ -163,6 +166,11 @@ namespace LDI12.Actions.Backup
         /// n'est pas estimée, et la prévisualisation dit comment l'obtenir.
         /// </summary>
         public const string SpeedParameter = "speed";
+
+        /// <summary>
+        /// Dossiers ajoutés à la main, un par ligne, où qu'ils soient. Voir <see cref="ExtraFolders"/>.
+        /// </summary>
+        public const string ExtraFoldersParameter = "extra";
 
         /// <summary>
         /// Marge exigée en plus de la taille des données.
@@ -263,6 +271,26 @@ namespace LDI12.Actions.Backup
                     }, source.Keep, source.Target, application.Name, cancellationToken));
                 }
 
+            // Les dossiers ajoutés à la main, où qu'ils soient.
+            var extras = ExtraFolders.Plan(ExtraFolders.Decode(context.Parameter(ExtraFoldersParameter)));
+            var missingExtras = new List<string>();
+            foreach (var extra in extras)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!context.Files.DirectoryExists(extra.Path))
+                {
+                    missingExtras.Add(extra.Path);
+                    continue;
+                }
+
+                Take(Survey(context, ExtraFolders.Folder + " / " + extra.Name, extra.Path, new DirectoryScanRequest(extra.Path)
+                {
+                    MaxFiles = MaxFilesPerFolder,
+                    Budget = ScanBudget,
+                    ExcludeRelative = extra.IsVolumeRoot ? ExtraFolders.SystemDirectories : Array.Empty<string>(),
+                }, extra.IsVolumeRoot ? ExtraFolders.KeepAtRoot : null, extra.Target, null, cancellationToken));
+            }
+
             if (files == 0 && !withWifi && winget.Count == 0 && !withDrivers)
                 return new ActionPreview
                 {
@@ -338,7 +366,8 @@ namespace LDI12.Actions.Backup
             foreach (var folder in plan)
                 if (folder.Application == null)
                     willDo.Add("Copier « " + folder.Label + " » : " + ValueFormat.Bytes(folder.Bytes) +
-                               " en " + folder.Files.Count + " fichier(s)");
+                               " en " + folder.Files.Count + " fichier(s)" +
+                               (folder.Target.StartsWith(ExtraFolders.Folder, StringComparison.Ordinal) ? ", depuis " + folder.Path : string.Empty));
 
             var willNotDo = new List<string>
             {
@@ -352,6 +381,22 @@ namespace LDI12.Actions.Backup
 
             if (!withPersonal)
                 willNotDo.Add("Ne copie pas les dossiers personnels (Bureau, Documents, Images…) : l'option n'est pas cochée.");
+
+            foreach (var missing in missingExtras)
+                measurements.Add(new PreviewLine("Dossier introuvable", missing + " n'existe pas ou n'est pas accessible : " +
+                                                 "il ne sera pas copié", PreviewLineKind.Caution));
+
+            // Un dossier ajouté qui contient déjà un dossier personnel, ou qui s'y trouve : copié deux fois.
+            foreach (var extra in extras)
+                foreach (var folder in plan)
+                    if (folder.Target != extra.Target && folder.Application == null && !folder.Target.StartsWith(ExtraFolders.Folder, StringComparison.Ordinal) &&
+                        (IsInside(folder.Path, extra.Path) || IsInside(extra.Path, folder.Path)))
+                    {
+                        measurements.Add(new PreviewLine("Copié deux fois", extra.Path + " recoupe « " + folder.Label +
+                                                         " », déjà dans la sauvegarde : ces fichiers y seront deux fois",
+                                                         PreviewLineKind.Caution));
+                        break;
+                    }
 
             Applications(applications, plan, withApplications, willDo, willNotDo);
 
@@ -444,6 +489,7 @@ namespace LDI12.Actions.Backup
                 {
                     Destination = root,
                     Resumed = resume != null,
+                    ExtraFolders = extras,
                     AlreadyBytes = already,
                     Folders = plan,
                     Bytes = bytes,
@@ -649,6 +695,9 @@ namespace LDI12.Actions.Backup
                 wifi = await WifiExport.RunAsync(context, plan.Destination, cancellationToken).ConfigureAwait(false);
                 details.Add("Wi-Fi : " + wifi.Describe());
             }
+
+            if (plan.ExtraFolders.Count > 0 && !Deposit(context, plan, ExtraFolders.MapFileName, ExtraFolders.Map(plan.ExtraFolders)))
+                details.Add("La liste des dossiers ajoutés n'a pas pu être écrite : la restauration les remettra dans les Documents.");
 
             if (plan.WingetPackages.Count > 0)
             {

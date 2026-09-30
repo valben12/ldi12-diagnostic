@@ -68,6 +68,20 @@ namespace LDI12.App.ViewModels
         public bool HasSpeedAdvice => _speedAdvice != null;
     }
 
+    /// <summary>Un dossier ajouté à la main, et de quoi le retirer.</summary>
+    public sealed class ExtraFolderItem
+    {
+        public ExtraFolderItem(string path, Action<ExtraFolderItem> remove)
+        {
+            Path = path;
+            RemoveCommand = new RelayCommand(() => remove(this));
+        }
+
+        public string Path { get; }
+
+        public ICommand RemoveCommand { get; }
+    }
+
     /// <summary>Une case d'une liste : un pilote, une application.</summary>
     public sealed class ChoiceItem : ObservableObject
     {

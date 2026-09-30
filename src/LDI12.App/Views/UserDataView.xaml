@@ -273,6 +273,32 @@
                                 </StackPanel>
                             </CheckBox>
 
+                            <!-- Dossiers ajoutés à la main : les données qui ne sont pas là où Windows les attend. -->
+                            <TextBlock Text="Autres dossiers" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="Un dossier « Compta » sur C:, des photos sur un second disque, un disque entier : ajoutez-les ici. Ils sont restaurés à leur emplacement d'origine quand ce disque existe sur la nouvelle machine, sinon dans les Documents." />
+                            <ItemsControl ItemsSource="{Binding ExtraFolders}" Margin="0,8,0,0"
+                                          Visibility="{Binding HasExtraFolders, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,6" MaxWidth="900" HorizontalAlignment="Left">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Path}" Style="{StaticResource Text.Body}"
+                                                       Foreground="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                            <Button Grid.Column="1" Style="{StaticResource Button.Ghost}" Content="Retirer"
+                                                    Command="{Binding RemoveCommand}" Margin="12,0,0,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Style="{StaticResource Button.Ghost}" Content="Ajouter des dossiers…" HorizontalAlignment="Left"
+                                    Command="{Binding AddExtraFoldersCommand}" Margin="0,8,0,0" />
+
                             <!-- Pilotes : ceux que la réinstallation perdrait, un par paquet. -->
                             <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding IncludeDrivers}">
                                 <StackPanel>

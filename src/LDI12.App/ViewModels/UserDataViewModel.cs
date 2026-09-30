@@ -101,6 +101,7 @@ namespace LDI12.App.ViewModels
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
+            AddExtraFoldersCommand = new RelayCommand(AddExtraFolders, () => !IsCopying);
             CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
@@ -486,6 +487,56 @@ namespace LDI12.App.ViewModels
             {
                 return string.Empty;
             }
+        }
+
+        // ---------- dossiers ajoutés à la main
+
+        /// <summary>Les dossiers ajoutés à la sauvegarde, où qu'ils soient.</summary>
+        public ObservableCollection<ExtraFolderItem> ExtraFolders { get; } = new ObservableCollection<ExtraFolderItem>();
+
+        public bool HasExtraFolders => ExtraFolders.Count > 0;
+
+        public ICommand AddExtraFoldersCommand { get; }
+
+        /// <summary>
+        /// Ouvre la fenêtre de choix de dossiers de l'Explorateur.
+        /// </summary>
+        /// <remarks>
+        /// Plusieurs dossiers d'un coup, et la barre d'adresse pour coller un chemin. La racine d'un
+        /// disque se choisit aussi : tout ce disque est alors sauvegardé, sans ses dossiers système.
+        /// </remarks>
+        private void AddExtraFolders()
+        {
+            var owner = IntPtr.Zero;
+            try
+            {
+                var window = System.Windows.Application.Current?.MainWindow;
+                if (window != null) owner = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            }
+            catch (InvalidOperationException) { }
+
+            var added = false;
+            foreach (var path in FolderPicker.Pick(owner, "Dossiers à ajouter à la sauvegarde"))
+            {
+                var normalized = LDI12.Actions.Backup.ExtraFolders.Normalize(path);
+                var known = false;
+                foreach (var item in ExtraFolders) known |= string.Equals(item.Path, normalized, StringComparison.OrdinalIgnoreCase);
+                if (known) continue;
+
+                ExtraFolders.Add(new ExtraFolderItem(normalized, RemoveExtraFolder));
+                added = true;
+            }
+
+            if (!added) return;
+            Raise(nameof(HasExtraFolders));
+            Invalidate();
+        }
+
+        private void RemoveExtraFolder(ExtraFolderItem item)
+        {
+            if (IsCopying || !ExtraFolders.Remove(item)) return;
+            Raise(nameof(HasExtraFolders));
+            Invalidate();
         }
 
         // ---------- pilotes et applications
@@ -1396,6 +1447,13 @@ namespace LDI12.App.ViewModels
             if (_speeds.TryGetValue(RootOf(BackupDestination), out var speed))
                 parameters[BackupUserDataAction.SpeedParameter] = speed.Encode();
 
+            if (ExtraFolders.Count > 0)
+            {
+                var paths = new List<string>();
+                foreach (var item in ExtraFolders) paths.Add(item.Path);
+                parameters[BackupUserDataAction.ExtraFoldersParameter] = LDI12.Actions.Backup.ExtraFolders.Encode(paths);
+            }
+
             var applications = CheckedApplications();
             if (applications.Count > 0)
                 parameters[BackupUserDataAction.WingetParameter] = WingetApplications.Encode(applications);
@@ -1433,6 +1491,7 @@ namespace LDI12.App.ViewModels
             (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (AddExtraFoldersCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseDurations();
         }
 

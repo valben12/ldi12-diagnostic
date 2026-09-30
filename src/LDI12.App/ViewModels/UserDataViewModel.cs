@@ -100,10 +100,6 @@ namespace LDI12.App.ViewModels
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
-            MeasureRestoreSpeedCommand = new AsyncRelayCommand(MeasureRestoreSpeedAsync,
-                () => !IsCopying && !IsMeasuringSpeed && !string.IsNullOrWhiteSpace(RestoreSource));
-            MeasureSpeedCommand = new AsyncRelayCommand(MeasureSpeedAsync,
-                () => !IsCopying && !IsMeasuringSpeed && !string.IsNullOrWhiteSpace(BackupDestination));
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
@@ -172,6 +168,13 @@ namespace LDI12.App.ViewModels
                 if (signature.ToString() == _drivesSignature) return;
                 _drivesSignature = signature.ToString();
 
+                // Un support débranché oublie sa mesure : rebranché, peut-être sur un autre port, il
+                // sera mesuré de nouveau.
+                var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var drive in drives) present.Add(RootOf(drive.Root));
+                Forget(present);
+                _unmeasurable.RemoveWhere(key => key != MachineKey && !present.Contains(key));
+
                 BackupDrives.Clear();
                 RestoreDrives.Clear();
                 foreach (var drive in drives)
@@ -188,6 +191,7 @@ namespace LDI12.App.ViewModels
                 }
 
                 MarkSelection();
+                ScheduleMeasures();
                 Raise(nameof(HasBackupDrives));
                 Raise(nameof(HasNoBackupDrive));
                 Raise(nameof(HasRestoreDrives));
@@ -203,6 +207,18 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        private void Forget(ISet<string> present)
+        {
+            var gone = new List<string>();
+            foreach (var key in _speeds.Keys) if (!present.Contains(key)) gone.Add(key);
+            foreach (var key in _sourceSpeeds.Keys) if (!present.Contains(key)) gone.Add(key);
+            foreach (var key in gone)
+            {
+                _speeds.Remove(key);
+                _sourceSpeeds.Remove(key);
+            }
+        }
+
         private void MarkSelection()
         {
             foreach (var tile in BackupDrives) tile.IsSelected = SameRoot(tile.Root, BackupDestination);
@@ -212,163 +228,238 @@ namespace LDI12.App.ViewModels
         private static bool SameRoot(string root, string path)
             => string.Equals(root.TrimEnd('\\'), (path ?? string.Empty).Trim().TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
-        // ---------- vitesse du support et durée
+        // ---------- vitesse des supports et durée, mesurées d'office
 
         private readonly Dictionary<string, CopySpeed> _speeds = new Dictionary<string, CopySpeed>(StringComparer.OrdinalIgnoreCase);
-        private bool _isMeasuringSpeed;
-        private string _speedNote = "Mesurer le support choisi, une quinzaine de secondes, donne la durée de la copie avant de la lancer.";
-
-        public ICommand MeasureSpeedCommand { get; }
-
-        public bool IsMeasuringSpeed
-        {
-            get => _isMeasuringSpeed;
-            private set
-            {
-                if (!Set(ref _isMeasuringSpeed, value)) return;
-                (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-                (MeasureRestoreSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-            }
-        }
-
-        /// <summary>Ce qu'on sait de la vitesse du support choisi.</summary>
-        public string SpeedNote { get => _speedNote; private set => Set(ref _speedNote, value); }
-
-        /// <summary>
-        /// Mesure le support choisi.
-        /// </summary>
-        /// <remarks>
-        /// Sur demande, jamais à la préparation : préparer une copie n'écrit rien, et c'est écrit
-        /// sur l'écran. La mesure, elle, écrit une soixantaine de mégaoctets sur le support, dans
-        /// un dossier qu'elle efface. Si une copie était déjà préparée, elle l'est de nouveau, avec
-        /// sa durée.
-        /// </remarks>
-        private async Task MeasureSpeedAsync()
-        {
-            var destination = BackupDestination.Trim();
-            var root = RootOf(destination);
-            if (root.Length == 0) return;
-
-            var prepared = _backupPreview != null;
-            IsMeasuringSpeed = true;
-            SpeedNote = "Mesure de " + root + " en cours : écriture et relecture d'un fichier d'essai, puis de petits fichiers…";
-
-            try
-            {
-                var probe = new CopySpeedProbe(_logger);
-                var speed = await Task.Run(() => probe.Measure(destination, null, CancellationToken.None)).ConfigureAwait(true);
-
-                if (!speed.IsValid)
-                {
-                    SpeedNote = "La mesure n'a pas abouti : " + (speed.Failure ?? "cause inconnue") + ".";
-                    return;
-                }
-
-                _speeds[root] = speed;
-                foreach (var tile in BackupDrives)
-                    if (string.Equals(RootOf(tile.Root), root, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, speed);
-
-                SpeedNote = root + " : " + CopyEstimate.Speeds(speed) + "." +
-                            (CopyEstimate.Advice(speed) is string advice ? " " + advice : string.Empty);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(Category, "La vitesse du support n'a pas pu être mesurée.", ex);
-                SpeedNote = "La mesure n'a pas abouti : " + ex.Message;
-            }
-            finally
-            {
-                IsMeasuringSpeed = false;
-            }
-
-            Invalidate();
-            if (prepared && CanPrepareBackup) await PrepareBackupAsync().ConfigureAwait(true);
-        }
-
-        // ---------- vitesse de la restauration
-
         private readonly Dictionary<string, ReadSpeed> _sourceSpeeds = new Dictionary<string, ReadSpeed>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _unmeasurable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private CopySpeed? _machineSpeed;
-        private string _restoreSpeedNote =
-            "Mesurer la sauvegarde et ce disque, une quinzaine de secondes, donne la durée de la restauration avant de la lancer.";
+        private CancellationTokenSource? _measureCancel;
+        private Task _measuring = Task.CompletedTask;
+        private bool _measureAgain;
+        private DispatcherTimer? _measureDelay;
+        private string _speedNote = "Choisissez un support : sa vitesse est mesurée d'elle-même, en une dizaine de secondes.";
+        private string _restoreSpeedNote = "Choisissez la sauvegarde : sa vitesse est mesurée d'elle-même, sans rien y écrire.";
 
-        public ICommand MeasureRestoreSpeedCommand { get; }
-
+        public string SpeedNote { get => _speedNote; private set => Set(ref _speedNote, value); }
         public string RestoreSpeedNote { get => _restoreSpeedNote; private set => Set(ref _restoreSpeedNote, value); }
 
+        /// <summary>La durée de la copie préparée, recalculée dès qu'une mesure arrive.</summary>
+        public string BackupDuration
+        {
+            get
+            {
+                if (_backupPreview?.Plan is not BackupPlan plan || plan.Files == 0) return string.Empty;
+
+                var root = RootOf(plan.Destination);
+                if (!_speeds.TryGetValue(root, out var speed))
+                    return _unmeasurable.Contains(root)
+                        ? "Durée : non estimée, ce support n'a pas pu être mesuré."
+                        : "Durée : mesure du support en cours…";
+
+                var remaining = Math.Max(0, plan.Bytes - plan.AlreadyBytes);
+                var share = plan.Bytes > 0 ? (double)remaining / plan.Bytes : 1;
+                return "Durée estimée : " +
+                       CopyEstimate.Describe(CopyEstimate.Duration(remaining, (int)Math.Ceiling(plan.Files * share), speed)) + ".";
+            }
+        }
+
+        /// <summary>La durée de la restauration préparée, recalculée dès qu'une mesure arrive.</summary>
+        public string RestoreDuration
+        {
+            get
+            {
+                if (_restorePreview?.Plan is not RestorePlan plan || plan.Files == 0) return string.Empty;
+
+                var root = RootOf(RestoreSource);
+                if (_unmeasurable.Contains(root) || _unmeasurable.Contains(MachineKey))
+                    return "Durée : non estimée, un des deux disques n'a pas pu être mesuré.";
+                if (!_sourceSpeeds.TryGetValue(root, out var source) || _machineSpeed == null)
+                    return "Durée : mesure des disques en cours…";
+
+                return "Durée estimée : " +
+                       CopyEstimate.Describe(CopyEstimate.RestoreDuration(plan.Bytes, plan.Files, source, _machineSpeed)) +
+                       " pour les fichiers.";
+            }
+        }
+
+        public bool HasBackupDuration => BackupDuration.Length > 0;
+        public bool HasRestoreDuration => RestoreDuration.Length > 0;
+
+        private const string MachineKey = "<machine>";
+
+        private void RaiseDurations()
+        {
+            Raise(nameof(BackupDuration));
+            Raise(nameof(HasBackupDuration));
+            Raise(nameof(RestoreDuration));
+            Raise(nameof(HasRestoreDuration));
+        }
+
         /// <summary>
-        /// Mesure les deux disques d'une restauration : la sauvegarde qu'on lit, et cette machine qui écrit.
+        /// Lance les mesures qui manquent, un instant après le dernier changement de support.
         /// </summary>
         /// <remarks>
-        /// La sauvegarde est mesurée en lecture seule, sur ses propres fichiers : rien n'y est écrit,
-        /// comme la restauration s'y engage. Le disque de cette machine est mesuré une fois par
-        /// session, dans le dossier temporaire de Windows, avec des fichiers d'essai effacés à la fin.
+        /// Le délai évite de mesurer chaque lettre tapée dans le champ. Aucune mesure ne démarre
+        /// pendant un transfert : elle se disputerait le support avec la copie et fausserait
+        /// l'une comme l'autre.
         /// </remarks>
-        private async Task MeasureRestoreSpeedAsync()
+        private void ScheduleMeasures()
         {
-            var source = RestoreSource.Trim();
-            var root = RootOf(source);
-            if (root.Length == 0) return;
+            if (_measureDelay == null)
+            {
+                if (Dispatcher.FromThread(System.Threading.Thread.CurrentThread) == null) return;
+                _measureDelay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+                _measureDelay.Tick += (_, _) =>
+                {
+                    _measureDelay!.Stop();
+                    _ = MeasureMissingAsync();
+                };
+            }
 
-            var prepared = _restorePreview != null;
-            IsMeasuringSpeed = true;
+            _measureDelay.Stop();
+            _measureDelay.Start();
+        }
 
+        private async Task MeasureMissingAsync()
+        {
+            if (IsBackupTransferring || IsRestoreTransferring) return;
+            if (!_measuring.IsCompleted)
+            {
+                _measureAgain = true;
+                return;
+            }
+
+            _measureCancel?.Dispose();
+            _measureCancel = new CancellationTokenSource();
+            var token = _measureCancel.Token;
+
+            var run = MeasureAsync(token);
+            _measuring = run;
+            await run.ConfigureAwait(true);
+
+            if (_measureAgain && !token.IsCancellationRequested)
+            {
+                _measureAgain = false;
+                await MeasureMissingAsync().ConfigureAwait(true);
+            }
+        }
+
+        /// <summary>
+        /// Les mesures, l'une après l'autre : le support de sauvegarde choisi, puis la sauvegarde à
+        /// restaurer et le disque de cette machine.
+        /// </summary>
+        /// <remarks>
+        /// La sauvegarde à restaurer est mesurée en lecture seule, sur ses propres fichiers. Le
+        /// support de destination et le disque de cette machine reçoivent des fichiers d'essai,
+        /// effacés à la fin. Chacun n'est mesuré qu'une fois tant qu'il reste branché.
+        /// </remarks>
+        private async Task MeasureAsync(CancellationToken token)
+        {
             try
             {
                 var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
-                var backup = RestoreCatalog.Find(services.Files, source, out _);
-                if (backup == null)
-                {
-                    RestoreSpeedNote = "Aucune sauvegarde LDI12 n'a été trouvée dans « " + source + " » : rien à mesurer.";
-                    return;
-                }
-
                 var probe = new CopySpeedProbe(_logger);
 
-                RestoreSpeedNote = "Lecture de la sauvegarde en cours, sans rien y écrire…";
-                var read = await Task.Run(() => probe.MeasureSource(backup, CancellationToken.None)).ConfigureAwait(true);
-                if (!read.IsValid)
+                var destination = BackupDestination.Trim();
+                var root = RootOf(destination);
+                if (root.Length > 0 && !_speeds.ContainsKey(root) && !_unmeasurable.Contains(root) &&
+                    services.Files.DirectoryExists(destination))
                 {
-                    RestoreSpeedNote = "La mesure de la sauvegarde n'a pas abouti : " + (read.Failure ?? "cause inconnue") + ".";
-                    return;
-                }
+                    SpeedNote = "Mesure de " + root + " en cours…";
+                    var speed = await Task.Run(() => probe.Measure(destination, null, token), token).ConfigureAwait(true);
+                    token.ThrowIfCancellationRequested();
 
-                _sourceSpeeds[root] = read;
-                foreach (var tile in RestoreDrives)
-                    if (string.Equals(RootOf(tile.Root), root, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, read);
-
-                if (_machineSpeed == null)
-                {
-                    RestoreSpeedNote = "Mesure du disque de cette machine, avec des fichiers d'essai effacés ensuite…";
-                    var machine = await Task.Run(() => probe.Measure(Path.GetTempPath(), null, CancellationToken.None))
-                        .ConfigureAwait(true);
-                    if (!machine.IsValid)
+                    if (speed.IsValid)
                     {
-                        RestoreSpeedNote = "La mesure du disque de cette machine n'a pas abouti : " +
-                                           (machine.Failure ?? "cause inconnue") + ".";
-                        return;
+                        _speeds[root] = speed;
+                        foreach (var tile in BackupDrives)
+                            if (string.Equals(RootOf(tile.Root), root, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, speed);
+                        SpeedNote = root + " : " + CopyEstimate.Speeds(speed) + "." +
+                                    (CopyEstimate.Advice(speed) is string advice ? " " + advice : string.Empty);
+                    }
+                    else
+                    {
+                        _unmeasurable.Add(root);
+                        SpeedNote = root + " n'a pas pu être mesuré : " + (speed.Failure ?? "cause inconnue") +
+                                    ". La copie reste possible, sans durée annoncée.";
                     }
 
-                    _machineSpeed = machine;
+                    RaiseDurations();
                 }
 
-                RestoreSpeedNote = "Sauvegarde : " + CopyEstimate.Speeds(read) + ". Cette machine : " +
-                                   CopyEstimate.Speeds(_machineSpeed) + "." +
-                                   (CopyEstimate.Advice(read) is string advice ? " " + advice : string.Empty);
+                var source = RestoreSource.Trim();
+                var sourceRoot = RootOf(source);
+                if (sourceRoot.Length > 0 && !_sourceSpeeds.ContainsKey(sourceRoot) && !_unmeasurable.Contains(sourceRoot))
+                {
+                    var backup = RestoreCatalog.Find(services.Files, source, out _);
+                    if (backup != null)
+                    {
+                        RestoreSpeedNote = "Lecture de la sauvegarde en cours, sans rien y écrire…";
+                        var read = await Task.Run(() => probe.MeasureSource(backup, token), token).ConfigureAwait(true);
+                        token.ThrowIfCancellationRequested();
+
+                        if (read.IsValid)
+                        {
+                            _sourceSpeeds[sourceRoot] = read;
+                            foreach (var tile in RestoreDrives)
+                                if (string.Equals(RootOf(tile.Root), sourceRoot, StringComparison.OrdinalIgnoreCase)) ShowSpeed(tile, read);
+                        }
+                        else
+                        {
+                            _unmeasurable.Add(sourceRoot);
+                        }
+
+                        if (_machineSpeed == null && !_unmeasurable.Contains(MachineKey) && read.IsValid)
+                        {
+                            RestoreSpeedNote = "Mesure du disque de cette machine en cours…";
+                            var machine = await Task.Run(() => probe.Measure(Path.GetTempPath(), null, token), token)
+                                .ConfigureAwait(true);
+                            token.ThrowIfCancellationRequested();
+
+                            if (machine.IsValid) _machineSpeed = machine;
+                            else _unmeasurable.Add(MachineKey);
+                        }
+
+                        RestoreSpeedNote = !read.IsValid
+                            ? "La sauvegarde n'a pas pu être mesurée : " + (read.Failure ?? "cause inconnue") +
+                              ". La restauration reste possible, sans durée annoncée."
+                            : "Sauvegarde : " + CopyEstimate.Speeds(read) + "." +
+                              (_machineSpeed == null ? string.Empty : " Cette machine : " + CopyEstimate.Speeds(_machineSpeed) + ".") +
+                              (CopyEstimate.Advice(read) is string advice ? " " + advice : string.Empty);
+
+                        RaiseDurations();
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Arrêtée pour laisser la place à une copie : elle reprendra au prochain choix de support.
+                SpeedNote = "Mesure interrompue.";
             }
             catch (Exception ex)
             {
-                _logger.Error(Category, "La vitesse de la restauration n'a pas pu être mesurée.", ex);
-                RestoreSpeedNote = "La mesure n'a pas abouti : " + ex.Message;
+                _logger.Error(Category, "La vitesse d'un support n'a pas pu être mesurée.", ex);
             }
-            finally
-            {
-                IsMeasuringSpeed = false;
-            }
-
-            InvalidateRestore();
-            if (prepared && CanPrepareRestore) await PrepareRestoreAsync().ConfigureAwait(true);
         }
+
+        /// <summary>
+        /// Arrête une mesure en cours, et attend qu'elle ait rendu la main.
+        /// </summary>
+        /// <remarks>
+        /// Appelé avant chaque transfert : une mesure qui écrirait sur le support pendant la
+        /// copie la ralentirait, et serait elle-même faussée.
+        /// </remarks>
+        private async Task StopMeasuresAsync()
+        {
+            _measureDelay?.Stop();
+            _measureAgain = false;
+            _measureCancel?.Cancel();
+
+            try { await _measuring.ConfigureAwait(true); }
+            catch (Exception ex) when (ex is OperationCanceledException || ex is IOException) { }
+        }
+
 
         private static void ShowSpeed(DriveTile tile, ReadSpeed? speed)
         {
@@ -716,6 +807,7 @@ namespace LDI12.App.ViewModels
                 if (!Set(ref _restoreSource, value)) return;
                 InvalidateRestore();
                 MarkSelection();
+                ScheduleMeasures();
             }
         }
 
@@ -747,6 +839,7 @@ namespace LDI12.App.ViewModels
         private void InvalidateRestore()
         {
             _restorePreview = null;
+            RaiseDurations();
             _restoreDriversPreview = null;
             _restoreApplicationsPreview = null;
             RestoreLines.Clear();
@@ -852,8 +945,10 @@ namespace LDI12.App.ViewModels
         {
             foreach (var line in preview.Measurements)
                 if (line.Kind == PreviewLineKind.Caution) lines.Add("Attention. " + line.Label + " : " + line.Value);
+            // La durée est affichée à part, et recalculée à l'arrivée de chaque mesure.
             foreach (var line in preview.Measurements)
-                if (line.Kind == PreviewLineKind.Fact) lines.Add(line.Label + " : " + line.Value + ".");
+                if (line.Kind == PreviewLineKind.Fact && line.Label != "Durée estimée")
+                    lines.Add(line.Label + " : " + line.Value + ".");
             foreach (var line in preview.WillDo) lines.Add(line);
             foreach (var line in preview.WillNotDo) lines.Add(line);
             if (preview.Outcome == PreviewOutcome.Blocked && preview.Blocker != null) lines.Add("Impossible : " + preview.Blocker);
@@ -873,6 +968,8 @@ namespace LDI12.App.ViewModels
         {
             var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
             if (runner == null || !CanRestore) return;
+
+            await StopMeasuresAsync().ConfigureAwait(true);
 
             IsCopying = true;
             Status = "Restauration en cours…";
@@ -986,6 +1083,7 @@ namespace LDI12.App.ViewModels
                 if (!Set(ref _backupDestination, value)) return;
                 Invalidate();
                 MarkSelection();
+                ScheduleMeasures();
             }
         }
 
@@ -1022,6 +1120,7 @@ namespace LDI12.App.ViewModels
         {
             _backupPreview = null;
             _driversPreview = null;
+            RaiseDurations();
             BackupLines.Clear();
             BackupSummary = string.Empty;
             Raise(nameof(HasBackupPreview));
@@ -1142,6 +1241,8 @@ namespace LDI12.App.ViewModels
             var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
             if (preview == null || action == null || runner == null) return;
 
+            await StopMeasuresAsync().ConfigureAwait(true);
+
             IsCopying = true;
             Status = "Copie en cours…";
             IsBackupTransferring = true;
@@ -1254,8 +1355,7 @@ namespace LDI12.App.ViewModels
             (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-            (MeasureSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-            (MeasureRestoreSpeedCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            RaiseDurations();
         }
 
         public event EventHandler? JournalChanged;

@@ -12,7 +12,7 @@ using Microsoft.Win32.SafeHandles;
 namespace LDI12.Platform.Gateways
 {
     /// <summary>
-    /// Mesure, en une quinzaine de secondes, ce qu'une sauvegarde coûtera sur un support.
+    /// Mesure, en une dizaine de secondes, ce qu'une sauvegarde coûtera sur un support.
     /// </summary>
     /// <remarks>
     /// <b>Pourquoi pas la mesure de disque de l'écran Mesures.</b> Elle donne le débit continu, et
@@ -41,7 +41,11 @@ namespace LDI12.Platform.Gateways
         /// <summary>Place laissée libre sur le support, en plus de ce que la mesure écrit.</summary>
         private const long Headroom = 256L * 1024 * 1024;
 
-        private static readonly TimeSpan PhaseBudget = TimeSpan.FromSeconds(5);
+        /// <summary>
+        /// Trois secondes par phase : la mesure part d'elle-même au choix du support, elle doit
+        /// avoir fini avant que le technicien ait fini de cocher ses options.
+        /// </summary>
+        private static readonly TimeSpan PhaseBudget = TimeSpan.FromSeconds(3);
 
         private readonly IScopedLogger _log;
 

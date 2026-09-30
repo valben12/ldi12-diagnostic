@@ -248,8 +248,7 @@ namespace LDI12.Actions.Backup
             else if (files > 0)
             {
                 measurements.Add(new PreviewLine("Durée estimée",
-                    "non estimée : « Mesurer la vitesse » de la sauvegarde et de cette machine, une quinzaine de " +
-                    "secondes, pour la connaître"));
+                    "non estimée : les deux disques n'ont pas encore été mesurés"));
             }
 
             if (missing.Count > 0)

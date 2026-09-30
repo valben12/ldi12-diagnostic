@@ -85,7 +85,7 @@ namespace LDI12.Tests
             var preview = await Preview(null);
 
             var line = Assert.Single(preview.Measurements, m => m.Label == "Durée estimée");
-            Assert.Contains("Mesurer la vitesse", line.Value);
+            Assert.Contains("pas encore été mesuré", line.Value);
         }
 
         // ============================================================ mesure réelle

@@ -67,6 +67,9 @@ namespace LDI12.Actions.Backup
         /// son vrai nom, à la même taille et à la même date, n'est pas recopié.
         /// </summary>
         public bool Resumed { get; init; }
+
+        /// <summary>À la reprise, ce que le dossier contient déjà : la durée ne compte que le reste.</summary>
+        public long AlreadyBytes { get; init; }
     }
 
     /// <summary>
@@ -313,7 +316,7 @@ namespace LDI12.Actions.Backup
             else if (files > 0)
             {
                 measurements.Add(new PreviewLine("Durée estimée",
-                    "non estimée : « Mesurer la vitesse » du support choisi, une quinzaine de secondes, pour la connaître"));
+                    "non estimée : le support n'a pas encore été mesuré"));
             }
 
             var willDo = new List<string>();
@@ -408,6 +411,7 @@ namespace LDI12.Actions.Backup
                 {
                     Destination = root,
                     Resumed = resume != null,
+                    AlreadyBytes = already,
                     Folders = plan,
                     Bytes = bytes,
                     Files = files,

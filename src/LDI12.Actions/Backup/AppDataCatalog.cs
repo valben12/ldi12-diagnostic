@@ -188,10 +188,10 @@ namespace LDI12.Actions.Backup
                 },
                 Limits = new[]
                 {
-                    "Les mots de passe et les cookies sont chiffrés par Windows pour ce compte, sur cette " +
-                    "installation. Ils ne se déchiffreront pas sur un Windows réinstallé, même recopiés.",
-                    "Les connexions aux sites seront à rouvrir. Favoris, historique, extensions et réglages " +
-                    "suivent la copie.",
+                    "Les mots de passe sont chiffrés par une clé que Windows protège pour ce compte : ils ne " +
+                    "suivent que si l'option « Mots de passe des navigateurs » est cochée, qui emporte cette clé.",
+                    "Certaines connexions aux sites seront à rouvrir : les cookies récents sont aussi liés à " +
+                    "l'installation du navigateur. Favoris, historique, extensions et réglages suivent la copie.",
                 },
                 Restore = new[]
                 {

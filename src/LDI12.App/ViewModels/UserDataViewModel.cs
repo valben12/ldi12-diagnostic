@@ -82,6 +82,7 @@ namespace LDI12.App.ViewModels
         private bool _includePersonal = true;
         private bool _includeApplications = true;
         private bool _exportWifi;
+        private bool _browserPasswords;
         private string? _lastBackupFolder;
 
         public UserDataViewModel(
@@ -1632,6 +1633,16 @@ namespace LDI12.App.ViewModels
             set { if (Set(ref _exportWifi, value)) Invalidate(); }
         }
 
+        /// <summary>
+        /// Emporter la clé des mots de passe de Chrome, Edge et des autres navigateurs Chromium.
+        /// Décoché à chaque ouverture, comme le Wi-Fi : elle ouvre les mots de passe de la sauvegarde.
+        /// </summary>
+        public bool BrowserPasswords
+        {
+            get => _browserPasswords;
+            set { if (Set(ref _browserPasswords, value)) Invalidate(); }
+        }
+
         public ICommand OpenBackupCommand { get; }
 
         private void Invalidate()
@@ -1885,6 +1896,7 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.PersonalParameter] = IncludePersonal ? "1" : "0",
                 [BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0",
                 [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
+                [BackupUserDataAction.BrowserPasswordsParameter] = BrowserPasswords ? "1" : "0",
                 [BackupUserDataAction.DriversParameter] = CheckedDrivers().Count > 0 ? "1" : "0",
                 [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
             };

@@ -24,7 +24,8 @@ namespace LDI12.Actions
             ISystemRestoreGateway restore,
             ILdiLogger logger,
             SystemSnapshot? snapshot = null,
-            IReadOnlyDictionary<string, string>? parameters = null)
+            IReadOnlyDictionary<string, string>? parameters = null,
+            ISecretProtector? secrets = null)
         {
             Platform = platform ?? throw new ArgumentNullException(nameof(platform));
             Processes = processes ?? throw new ArgumentNullException(nameof(processes));
@@ -35,6 +36,7 @@ namespace LDI12.Actions
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             Snapshot = snapshot;
             Parameters = parameters ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Secrets = secrets ?? NoSecretProtector.Instance;
         }
 
         public IPlatformInfo Platform { get; }
@@ -44,6 +46,9 @@ namespace LDI12.Actions
         public IRegistryGateway Registry { get; }
         public ISystemRestoreGateway Restore { get; }
         public ILdiLogger Logger { get; }
+
+        /// <summary>Le chiffrement de Windows pour le compte sous lequel l'action tourne.</summary>
+        public ISecretProtector Secrets { get; }
 
         /// <summary>
         /// Le dernier diagnostic, quand il existe.
@@ -62,10 +67,10 @@ namespace LDI12.Actions
             => Parameters.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
         public ActionContext With(IReadOnlyDictionary<string, string> parameters)
-            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, Snapshot, parameters);
+            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, Snapshot, parameters, Secrets);
 
         public ActionContext With(SystemSnapshot? snapshot)
-            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, snapshot, Parameters);
+            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, snapshot, Parameters, Secrets);
     }
 
     /// <summary>

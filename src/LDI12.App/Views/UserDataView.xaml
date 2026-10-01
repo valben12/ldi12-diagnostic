@@ -349,6 +349,16 @@
                                                Text="Les codes des réseaux enregistrés sont écrits en clair sur le support de sauvegarde. À effacer une fois la machine rendue." />
                                 </StackPanel>
                             </CheckBox>
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0"
+                                      IsChecked="{Binding BrowserPasswords}"
+                                      Visibility="{Binding IsSessionSource, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <TextBlock Text="Mots de passe des navigateurs" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="Chrome, Edge, Brave, Opera, Vivaldi : sans cette option, les mots de passe enregistrés ne se liront pas sur le nouveau PC. La clé qui les ouvre est écrite sur le support de sauvegarde. À effacer une fois la machine rendue." />
+                                </StackPanel>
+                            </CheckBox>
 
                             <!-- Dossiers ajoutés à la main : les données qui ne sont pas là où Windows les attend. -->
                             <TextBlock Text="Autres dossiers" Style="{StaticResource Text.Body}" Margin="0,14,0,0"

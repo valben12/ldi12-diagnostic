@@ -14,6 +14,7 @@
   <ItemGroup>
     <!-- Assemblies du framework. -->
     <Reference Include="System.Management" />
+    <Reference Include="System.Security" />
   </ItemGroup>
 
   <ItemGroup>

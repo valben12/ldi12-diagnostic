@@ -372,6 +372,33 @@ namespace LDI12.Tests
         }
     }
 
+    /// <summary>
+    /// Un DPAPI d'essai : « chiffre » en retournant les octets derrière une marque propre au compte.
+    /// Un autre compte, une autre marque : ce qu'il a chiffré ne s'ouvre pas ici.
+    /// </summary>
+    internal sealed class FakeSecretProtector : ISecretProtector
+    {
+        private readonly byte _account;
+
+        public FakeSecretProtector(byte account = 1) => _account = account;
+
+        public byte[]? Protect(byte[] data)
+        {
+            var result = new byte[data.Length + 1];
+            result[0] = _account;
+            for (var index = 0; index < data.Length; index++) result[index + 1] = data[data.Length - 1 - index];
+            return result;
+        }
+
+        public byte[]? Unprotect(byte[] data)
+        {
+            if (data.Length == 0 || data[0] != _account) return null;
+            var result = new byte[data.Length - 1];
+            for (var index = 0; index < result.Length; index++) result[index] = data[data.Length - 1 - index];
+            return result;
+        }
+    }
+
     internal static class ActionFakes
     {
         public static ActionContext Context(
@@ -381,7 +408,8 @@ namespace LDI12.Tests
             IProcessLauncher? launcher = null,
             ISystemRestoreGateway? restore = null,
             SystemSnapshot? snapshot = null,
-            IReadOnlyDictionary<string, string>? parameters = null)
+            IReadOnlyDictionary<string, string>? parameters = null,
+            ISecretProtector? secrets = null)
             => new ActionContext(
                 platform ?? new FakePlatformInfo(elevated: true),
                 processes ?? new FakeProcessRunner(),
@@ -391,7 +419,8 @@ namespace LDI12.Tests
                 restore ?? new FakeSystemRestoreGateway(),
                 NullLogger.Instance,
                 snapshot,
-                parameters);
+                parameters,
+                secrets);
 
         public static ProcessResult Result(int exitCode = 0, string output = "", bool timedOut = false, bool launchFailed = false)
             => new ProcessResult

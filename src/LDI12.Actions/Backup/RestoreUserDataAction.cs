@@ -261,8 +261,12 @@ namespace LDI12.Actions.Backup
                 var item = folder.Item;
                 if (item.Mode == RestoreMode.ChromiumLocalState)
                 {
-                    willDo.Add("Ajouter les profils restaurés à la liste des profils de " + item.Application +
-                               ", sans reprendre l'ancienne clé de chiffrement");
+                    willDo.Add(context.Files.FileExists(KeyFile(item))
+                        ? "Ajouter les profils restaurés à la liste des profils de " + item.Application + ", et lui remettre la " +
+                          "clé des mots de passe de la sauvegarde, rechiffrée pour ce compte : les mots de passe enregistrés " +
+                          "reviennent. Les profils de " + item.Application + " qui ne viennent pas de la sauvegarde perdront les leurs"
+                        : "Ajouter les profils restaurés à la liste des profils de " + item.Application +
+                          ", sans reprendre l'ancienne clé de chiffrement : les mots de passe enregistrés ne reviendront pas");
                     continue;
                 }
 
@@ -493,12 +497,31 @@ namespace LDI12.Actions.Backup
             var merged = ChromiumLocalState.Merge(saved.Value, exists ? current.Value : null, item.Profiles);
             if (merged == null) return "la liste des profils de la sauvegarde est illisible, elle n'a pas été reprise.";
 
+            // La clé des mots de passe, quand la sauvegarde l'a emportée : rechiffrée pour ce compte.
+            string? keyNote = null;
+            var keyFile = KeyFile(item);
+            if (context.Files.FileExists(keyFile))
+            {
+                var document = context.Files.ReadText(keyFile);
+                var key = BrowserKeys.Read(document.HasValue ? document.Value : null);
+                var installed = key == null ? null : BrowserKeys.Install(context.Secrets, merged, key);
+                if (installed != null)
+                {
+                    merged = installed;
+                    keyNote = " Mots de passe : clé de la sauvegarde remise, rechiffrée pour ce compte.";
+                }
+                else
+                {
+                    keyNote = " Mots de passe : la clé de la sauvegarde n'a pas pu être remise, ils ne se liront pas.";
+                }
+            }
+
             if (!exists)
             {
                 var parent = Path.GetDirectoryName(item.Destination);
                 if (!string.IsNullOrEmpty(parent)) context.Files.CreateDirectory(parent!);
                 return context.Files.WriteText(item.Destination, merged)
-                    ? "reprise de la sauvegarde, sans l'ancienne clé de chiffrement."
+                    ? keyNote == null ? "reprise de la sauvegarde, sans l'ancienne clé de chiffrement." : "reprise de la sauvegarde." + keyNote
                     : "la liste des profils n'a pas pu être écrite.";
             }
 
@@ -508,9 +531,15 @@ namespace LDI12.Actions.Backup
                 return "la liste actuelle des profils n'a pas pu être mise de côté, elle est laissée telle quelle.";
 
             return context.Files.ReplaceText(item.Destination, merged)
-                ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
+                ? keyNote == null
+                    ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
+                    : "profils restaurés ajoutés à la liste du navigateur." + keyNote
                 : "la liste des profils n'a pas pu être mise à jour.";
         }
+
+        /// <summary>La clé des mots de passe déposée à côté de « Local State » dans la sauvegarde.</summary>
+        private static string KeyFile(RestoreItem item)
+            => Path.Combine(Path.GetDirectoryName(item.Source) ?? string.Empty, BrowserKeys.FileName);
 
         /// <summary>
         /// Réimporte les profils Wi-Fi, un par un.

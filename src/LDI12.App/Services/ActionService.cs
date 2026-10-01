@@ -6,6 +6,7 @@ using LDI12.Actions.Journal;
 using LDI12.Core.Logging;
 using LDI12.Core.Model;
 using LDI12.Platform.Elevation;
+using LDI12.Platform.Gateways;
 
 namespace LDI12.App.Services
 {
@@ -50,7 +51,7 @@ namespace LDI12.App.Services
 
                 var context = new ActionContext(
                     services.Platform, services.Processes, services.Launcher, services.Files,
-                    services.Registry, services.Restore, _logger, _snapshot);
+                    services.Registry, services.Restore, _logger, _snapshot, secrets: new DpapiSecretProtector());
 
                 return _runner = new ActionRunner(context, Journal, _logger, _channel);
             }

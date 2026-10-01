@@ -57,6 +57,9 @@ namespace LDI12.Actions.Backup
 
         public bool ExportWifi { get; init; }
 
+        /// <summary>Emporter la clé des mots de passe de chaque navigateur Chromium sauvegardé.</summary>
+        public bool BrowserPasswords { get; init; }
+
         /// <summary>Applications cochées, à réinstaller par winget. Vide : aucune liste déposée.</summary>
         public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
 
@@ -152,6 +155,12 @@ namespace LDI12.Actions.Backup
 
         /// <summary>« 1 » exporte les profils Wi-Fi avec leurs clés. Absent : rien n'est exporté.</summary>
         public const string WifiParameter = "wifi";
+
+        /// <summary>
+        /// « 1 » emporte la clé des mots de passe des navigateurs Chromium, déchiffrée, pour que la
+        /// restauration la remette au nouveau compte. Absent : les mots de passe ne suivent pas.
+        /// </summary>
+        public const string BrowserPasswordsParameter = "browser-passwords";
 
         /// <summary>
         /// Les applications à réinstaller, une par ligne, en identifiants winget. Absent : aucune.
@@ -271,6 +280,7 @@ namespace LDI12.Actions.Backup
             var withPersonal = context.Parameter(PersonalParameter) != "0";
             var withApplications = context.Parameter(ApplicationsParameter) != "0";
             var withWifi = context.Parameter(WifiParameter) == "1";
+            var withPasswords = context.Parameter(BrowserPasswordsParameter) == "1";
             var winget = WingetApplications.Decode(context.Parameter(WingetParameter));
             var withDrivers = context.Parameter(DriversParameter) == "1";
 
@@ -301,6 +311,9 @@ namespace LDI12.Actions.Backup
                 // Ni Wi-Fi ni winget pour un Windows qui ne tourne pas : ses clés Wi-Fi sont
                 // chiffrées pour sa machine, et winget ne voit que le Windows en cours.
                 withWifi = false;
+
+                // La clé d'un compte ne se déchiffre que dans sa session, sur son Windows.
+                withPasswords = false;
                 winget = Array.Empty<string>();
             }
             else if (label != null)
@@ -522,6 +535,16 @@ namespace LDI12.Actions.Backup
 
             willDo.Add("Relire chaque fichier copié et comparer son empreinte à celle de la source");
 
+            var chromium = 0;
+            foreach (var application in applications) if (BrowserKeySource(application) != null) chromium++;
+            if (withPasswords && chromium > 0)
+                willDo.Add("Emporter la clé des mots de passe de " + chromium + " navigateur(s) (Chrome, Edge…), déchiffrée par " +
+                           "Windows pour ce compte : la restauration la remettra au nouveau compte. Le support de sauvegarde " +
+                           "devra être gardé en conséquence");
+            else if (chromium > 0 && !roots.IsOffline)
+                willNotDo.Add("N'emporte pas la clé des mots de passe des navigateurs : l'option n'est pas cochée, les mots de " +
+                              "passe enregistrés dans Chrome ou Edge ne se liront pas sur le nouveau PC.");
+
             if (withWifi)
                 willDo.Add("Exporter les profils Wi-Fi enregistrés dans « " + WifiExport.Folder + " », avec leurs clés " +
                            "en clair quand Windows les livre : le support de sauvegarde devra être gardé en conséquence");
@@ -644,6 +667,7 @@ namespace LDI12.Actions.Backup
                     Files = files,
                     Applications = applications,
                     ExportWifi = withWifi,
+                    BrowserPasswords = withPasswords && chromium > 0,
                     WingetPackages = winget,
                     CloudOnlyFiles = cloud,
                 },
@@ -847,6 +871,9 @@ namespace LDI12.Actions.Backup
             }
 
             WifiExportResult? wifi = null;
+            if (plan.BrowserPasswords && !interrupted)
+                details.Add("Mots de passe des navigateurs : " + BrowserPasswordKeys(context, plan));
+
             if (plan.ExportWifi && !interrupted)
             {
                 progress?.Report(new ActionProgress("Export des profils Wi-Fi…", 1));
@@ -1002,6 +1029,40 @@ namespace LDI12.Actions.Backup
         /// l'export depuis la machine elle-même. Il demande Windows 8.1 ou plus récent sur le PC
         /// de l'atelier.
         /// </remarks>
+        /// <summary>Le dossier qui porte « Local State », pour un navigateur Chromium ; nul sinon.</summary>
+        private static AppDataSource? BrowserKeySource(AppDataApplication application)
+        {
+            foreach (var source in application.Sources)
+                if (source.TopLevelOnly && source.Keep != null && source.Keep("Local State") &&
+                    source.Target == System.IO.Path.Combine(AppDataCatalog.Folder, application.Name))
+                    return source;
+            return null;
+        }
+
+        /// <summary>Dépose, pour chaque navigateur Chromium, sa clé déchiffrée par ce compte.</summary>
+        private static string BrowserPasswordKeys(ActionContext context, BackupPlan plan)
+        {
+            var kept = new List<string>();
+            var refused = new List<string>();
+            foreach (var application in plan.Applications)
+            {
+                var source = BrowserKeySource(application);
+                if (source == null) continue;
+
+                var state = context.Files.ReadText(System.IO.Path.Combine(source.Root, "Local State"));
+                var key = state.HasValue ? BrowserKeys.Extract(context.Secrets, state.Value) : null;
+                if (key != null && Deposit(context, plan, System.IO.Path.Combine(source.Target, BrowserKeys.FileName), BrowserKeys.Document(key)))
+                    kept.Add(application.Name);
+                else
+                    refused.Add(application.Name);
+            }
+
+            var text = kept.Count > 0 ? "clé emportée pour " + string.Join(", ", kept) : "aucune clé emportée";
+            if (refused.Count > 0)
+                text += " ; " + string.Join(", ", refused) + " : clé illisible pour ce compte, les mots de passe ne suivront pas";
+            return text + ".";
+        }
+
         private static async Task<string> OfflineDriversAsync(ActionContext context, BackupPlan plan, CancellationToken cancellationToken)
         {
             var folder = System.IO.Path.Combine(plan.Destination, DriverBackup.Folder);

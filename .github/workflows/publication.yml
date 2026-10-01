@@ -1,0 +1,88 @@
+# Compilation et publication de l'exécutable unique, sur une machine Windows.
+#
+# Le logiciel est une application WPF pour .NET Framework : il ne se compile que sous Windows,
+# avec MSBuild 17. Ce flux fait ce que ferait build\publish.ps1 sur le poste de l'atelier,
+# tests compris.
+#
+# - Poussée sur une branche : compilation et tests, l'exécutable est joint à l'exécution.
+# - Poussée d'une étiquette « v… » : même chose, puis publication en release GitHub. Une
+#   étiquette qui contient un tiret (v1.28.0-beta.1) part en pré-version : à essayer, pas à
+#   distribuer.
+#
+# Les releases GitHub ne sont pas lues par la vérification de mise à jour du logiciel, qui
+# interroge ldi12.fr : publier ici ne pousse rien sur les clés déjà en service.
+name: Publication
+
+on:
+  push:
+    branches: ['main', 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publier:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compiler, tester, rassembler en un seul fichier
+        shell: powershell
+        run: .\build\publish.ps1
+
+      - name: Joindre l'exécutable à l'exécution
+        uses: actions/upload-artifact@v4
+        with:
+          name: LDI12-Diagnostic
+          path: artifacts/*
+
+      # Captures de chaque écran, sur demande : un commit dont le message contient « [captures] ».
+      # Elles sont déposées dans docs/captures, sur la branche même, pour juger l'interface sur
+      # image. Un commit poussé par ce jeton ne relance pas le flux.
+      - name: Capturer les écrans
+        if: contains(github.event.head_commit.message, '[captures]')
+        shell: powershell
+        run: |
+          $exe = (Get-ChildItem artifacts\*.exe | Select-Object -First 1).FullName
+          .\build\captures.ps1 -Exe $exe -Out docs\captures
+
+      - name: Déposer les captures
+        if: contains(github.event.head_commit.message, '[captures]') && startsWith(github.ref, 'refs/heads/')
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/captures
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host 'Aucune capture nouvelle.'; exit 0 }
+          git commit -m "Captures d'écran de ${{ github.sha }}"
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
+      # Deux façons de demander une release : pousser une étiquette « v… », ou pousser sur une
+      # branche le fichier .github/publier qui contient le nom de l'étiquette voulue. La seconde
+      # sert quand l'étiquette ne peut pas être poussée directement ; GitHub la crée alors sur le
+      # commit compilé. Une release qui existe déjà n'est jamais refaite.
+      - name: Publier la release
+        if: startsWith(github.ref, 'refs/tags/v') || hashFiles('.github/publier') != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ('${{ github.ref }}'.StartsWith('refs/tags/')) { $tag = '${{ github.ref_name }}' }
+          else { $tag = (Get-Content .github/publier -Raw).Trim() }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') { throw "Étiquette refusée : « $tag »." }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "La release $tag existe déjà : rien à faire."; exit 0 }
+          $global:LASTEXITCODE = 0
+          $flags = @()
+          if ($tag.Contains('-')) { $flags += '--prerelease' }
+          $notes = 'docs/releases/' + $tag + '.md'
+          if (Test-Path $notes) { $flags += @('--notes-file', $notes) } else { $flags += @('--notes', $tag) }
+          gh release create $tag (Get-ChildItem artifacts/* | ForEach-Object FullName) --target '${{ github.sha }}' --title "LDI12 Diagnostic $($tag.TrimStart('v'))" @flags

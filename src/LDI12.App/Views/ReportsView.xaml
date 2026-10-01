@@ -31,18 +31,19 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,10,0">
                             <TextBlock Text="TECHNICIEN" Style="{StaticResource FieldLabel}" />
-                            <TextBox Style="{StaticResource Field}"
+                            <TextBox Style="{StaticResource Field}" Tag="Nom du technicien"
                                      Text="{Binding Technician, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="10,0,0,0">
                             <TextBlock Text="RÉFÉRENCE DU DOSSIER CLIENT" Style="{StaticResource FieldLabel}" />
-                            <TextBox Style="{StaticResource Field}"
+                            <TextBox Style="{StaticResource Field}" Tag="Numéro de dossier, de facture…"
                                      Text="{Binding ClientReference, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
                     </Grid>
 
                     <TextBlock Text="OBSERVATION" Style="{StaticResource FieldLabel}" Margin="2,16,0,5" />
                     <TextBox Style="{StaticResource Field}" MinHeight="66" AcceptsReturn="True"
+                             Tag="Ce que le client a signalé, ce qui a été fait, ce qui reste à prévoir"
                              TextWrapping="Wrap" VerticalContentAlignment="Top"
                              Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}" />
 

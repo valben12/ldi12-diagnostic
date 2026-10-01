@@ -47,6 +47,21 @@
         /// <summary>Restauration d'une sauvegarde LDI12. Écrit dans le profil, ne supprime rien.</summary>
         public const string RestoreUserData = "RESTORE-USER-DATA";
 
+        /// <summary>Export des pilotes tiers dans une sauvegarde. Lit le magasin de pilotes, n'y touche pas.</summary>
+        public const string ExportDrivers = "BACKUP-DRIVERS";
+
+        /// <summary>Réinstallation des pilotes d'une sauvegarde, par pnputil.</summary>
+        public const string RestoreDrivers = "RESTORE-DRIVERS";
+
+        /// <summary>Réinstallation des applications d'une sauvegarde, par winget.</summary>
+        public const string RestoreApplications = "RESTORE-APPLICATIONS";
+
+        /// <summary>Réinstallation des imprimantes relevées avec une sauvegarde.</summary>
+        public const string RestorePrinters = "RESTORE-PRINTERS";
+
+        /// <summary>Copie, depuis un cliché instantané, des fichiers qu'un programme tenait ouverts.</summary>
+        public const string CopyOpenFiles = "BACKUP-OPEN-FILES";
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

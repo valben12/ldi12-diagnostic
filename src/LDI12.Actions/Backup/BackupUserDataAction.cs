@@ -57,7 +57,64 @@ namespace LDI12.Actions.Backup
 
         public bool ExportWifi { get; init; }
 
+        /// <summary>Emporter la clé des mots de passe de chaque navigateur Chromium sauvegardé.</summary>
+        public bool BrowserPasswords { get; init; }
+
+        /// <summary>Relever imprimantes, lecteurs réseau et clé de Windows : la session ouverte seulement.</summary>
+        public bool ReadSettings { get; init; }
+
+        /// <summary>La clé de Windows d'un autre disque, lue dans son registre.</summary>
+        public string? OfflineProductKey { get; init; }
+
+        /// <summary>Ce que les filtres ont écarté : sa description, et combien.</summary>
+        public string? FilterText { get; init; }
+
+        public int ExcludedFiles { get; init; }
+
+        public long ExcludedBytes { get; init; }
+
+        /// <summary>Applications cochées, à réinstaller par winget. Vide : aucune liste déposée.</summary>
+        public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
+
         public int CloudOnlyFiles { get; init; }
+
+        /// <summary>
+        /// Reprise d'une sauvegarde interrompue : son dossier est réutilisé, et ce qui y porte déjà
+        /// son vrai nom, à la même taille et à la même date, n'est pas recopié.
+        /// </summary>
+        public bool Resumed { get; init; }
+
+        /// <summary>À la reprise, ce que le dossier contient déjà : la durée ne compte que le reste.</summary>
+        public long AlreadyBytes { get; init; }
+
+        /// <summary>
+        /// Les fichiers refusés parce qu'un programme les tenait ouverts, relevés pendant la copie.
+        /// </summary>
+        /// <remarks>
+        /// Remplie par l'exécution, lue ensuite par l'écran : c'est elle qui décide s'il faut un
+        /// cliché instantané, et de quoi.
+        /// </remarks>
+        public List<OpenFile> OpenFiles { get; } = new List<OpenFile>();
+
+        /// <summary>Dossiers ajoutés à la main : leur emplacement d'origine est noté dans la sauvegarde.</summary>
+        public IReadOnlyList<ExtraFolder> ExtraFolders { get; init; } = Array.Empty<ExtraFolder>();
+
+        /// <summary>La machine d'où viennent les données, pour la fiche et l'état.</summary>
+        public string Machine { get; init; } = string.Empty;
+
+        /// <summary>Le compte d'où viennent les données.</summary>
+        public string Account { get; init; } = string.Empty;
+
+        /// <summary>« Windows 11 Famille, build 22631 ». Nul : ce Windows n'a pas pu être décrit.</summary>
+        public string? WindowsDescription { get; init; }
+
+        public SoftwareInventory? Software { get; init; }
+
+        /// <summary>Le volume d'un autre Windows dont tous les pilotes sont à exporter par DISM ; nul sinon.</summary>
+        public string? OfflineDriversVolume { get; init; }
+
+        /// <summary>Les pilotes cochés d'un autre Windows, copiés avec les fichiers sous « Pilotes\oemNN ».</summary>
+        public IReadOnlyList<DriverChoice> OfflineDrivers { get; init; } = Array.Empty<DriverChoice>();
     }
 
     /// <summary>
@@ -113,6 +170,82 @@ namespace LDI12.Actions.Backup
         public const string WifiParameter = "wifi";
 
         /// <summary>
+        /// « 1 » emporte la clé des mots de passe des navigateurs Chromium, déchiffrée, pour que la
+        /// restauration la remette au nouveau compte. Absent : les mots de passe ne suivent pas.
+        /// </summary>
+        public const string BrowserPasswordsParameter = "browser-passwords";
+
+        /// <summary>« 0 » ne relève pas les imprimantes, les lecteurs réseau ni la clé de Windows. Absent : relevés.</summary>
+        public const string SettingsParameter = "settings";
+
+        /// <summary>Types de fichiers écartés des dossiers personnels : « iso, vhdx ». Absent : aucun.</summary>
+        public const string ExcludeExtensionsParameter = "exclude";
+
+        /// <summary>Taille au-delà de laquelle un fichier personnel est écarté, en Go. Absent : aucune.</summary>
+        public const string MaxFileSizeParameter = "max-size";
+
+        /// <summary>
+        /// Les applications à réinstaller, une par ligne, en identifiants winget. Absent : aucune.
+        /// </summary>
+        /// <remarks>
+        /// Seule leur liste est déposée : un logiciel installé ne se copie pas, voir
+        /// <see cref="WingetApplications"/>.
+        /// </remarks>
+        public const string WingetParameter = "winget";
+
+        /// <summary>
+        /// « 1 » : des pilotes accompagnent cette sauvegarde. Absent : non.
+        /// </summary>
+        /// <remarks>
+        /// Ils sont exportés par <see cref="ExportDriversAction"/>, avec les droits administrateur,
+        /// dans le dossier que celle-ci établit. Même sans aucune donnée à copier, la sauvegarde
+        /// dépose alors son manifeste et sa fiche : c'est à eux qu'une restauration la reconnaît.
+        /// </remarks>
+        public const string DriversParameter = "drivers";
+
+        /// <summary>
+        /// « 0 » : toujours commencer une nouvelle sauvegarde. Absent : reprendre la dernière
+        /// sauvegarde inachevée de cette machine et de ce compte sur ce support, s'il y en a une.
+        /// </summary>
+        public const string ResumeParameter = "resume";
+
+        /// <summary>
+        /// La vitesse mesurée du support, voir <see cref="CopySpeed.Encode"/>. Absent : la durée
+        /// n'est pas estimée, et la prévisualisation dit comment l'obtenir.
+        /// </summary>
+        public const string SpeedParameter = "speed";
+
+        /// <summary>
+        /// Dossiers ajoutés à la main, un par ligne, où qu'ils soient. Voir <see cref="ExtraFolders"/>.
+        /// </summary>
+        public const string ExtraFoldersParameter = "extra";
+
+        /// <summary>
+        /// Le dossier d'un compte d'un autre Windows (« E:\Users\Marie ») : sauvegardé comme le
+        /// compte ouvert, depuis ses emplacements par défaut. Absent : le compte de la session.
+        /// </summary>
+        /// <remarks>
+        /// Demande les droits administrateur : le compte d'un autre Windows est protégé par des
+        /// droits qui ne connaissent pas le technicien. L'hôte élevé le lit en mode sauvegarde.
+        /// </remarks>
+        public const string ProfileParameter = "profile";
+
+        /// <summary>
+        /// Les pilotes tiers du Windows de <see cref="ProfileParameter"/> à emporter : la liste
+        /// cochée (voir <see cref="DriverBackup.Encode"/>), ou « 1 » pour tous, exportés par DISM.
+        /// </summary>
+        public const string OfflineDriversParameter = "offline-drivers";
+
+        /// <summary>
+        /// Nom de ce qu'on sauvegarde, pour un disque de données sans Windows : « Disque D ». Il
+        /// nomme le dossier de sauvegarde à la place du nom de la machine.
+        /// </summary>
+        public const string LabelParameter = "label";
+
+        /// <summary>« 1 » : lire avec les droits administrateur, en mode sauvegarde (un autre disque).</summary>
+        public const string ElevatedParameter = "elevated";
+
+        /// <summary>
         /// Marge exigée en plus de la taille des données.
         /// </summary>
         /// <remarks>
@@ -150,9 +283,15 @@ namespace LDI12.Actions.Backup
                 return ActionReadiness.No("Aucun dossier de destination n'a été choisi.",
                     "Choisissez le support sur lequel copier les données.");
 
-            return context.Files.DirectoryExists(destination)
+            if (!context.Files.DirectoryExists(destination))
+                return ActionReadiness.No("Le dossier « " + destination + " » n'existe pas ou n'est pas accessible.");
+
+            // Un autre disque : ses fichiers sont protégés par des droits qui ne connaissent pas le
+            // technicien. Lus par l'hôte élevé, en mode sauvegarde, sans rien y modifier.
+            var elevated = context.Parameter(ProfileParameter) != null || context.Parameter(ElevatedParameter) == "1";
+            return !elevated || context.Platform.IsElevated
                 ? ActionReadiness.Ready
-                : ActionReadiness.No("Le dossier « " + destination + " » n'existe pas ou n'est pas accessible.");
+                : ActionReadiness.Elevation("les fichiers d'un autre disque ne se lisent qu'en administrateur");
         }
 
         public async Task<ActionPreview> PreviewAsync(ActionContext context, CancellationToken cancellationToken)
@@ -163,6 +302,63 @@ namespace LDI12.Actions.Backup
             var withPersonal = context.Parameter(PersonalParameter) != "0";
             var withApplications = context.Parameter(ApplicationsParameter) != "0";
             var withWifi = context.Parameter(WifiParameter) == "1";
+            var withPasswords = context.Parameter(BrowserPasswordsParameter) == "1";
+            var withSettings = context.Parameter(SettingsParameter) != "0";
+            var winget = WingetApplications.Decode(context.Parameter(WingetParameter));
+            var withDrivers = context.Parameter(DriversParameter) == "1";
+
+            // D'où viennent les données : le compte ouvert, le compte d'un autre Windows, ou un
+            // disque de données.
+            var profile = context.Parameter(ProfileParameter);
+            var label = context.Parameter(LabelParameter);
+            var roots = profile == null ? ProfileRoots.Current() : ProfileRoots.Offline(profile);
+
+            string machine, account;
+            string? windowsDescription = null;
+            SoftwareInventory? software;
+            string? offlineVolume = null;
+            string? offlineFailure = null;
+            IReadOnlyDictionary<string, string> offlinePackages = new Dictionary<string, string>();
+            string? offlineKey = null;
+
+            if (profile != null)
+            {
+                offlineVolume = Path.GetPathRoot(profile) ?? string.Empty;
+                var info = await OfflineWindows.ReadAsync(context, offlineVolume, cancellationToken).ConfigureAwait(false);
+                machine = info.MachineName ?? "Disque-" + offlineVolume.TrimEnd('\\', ':');
+                account = Path.GetFileName(profile.TrimEnd('\\'));
+                windowsDescription = info.Description;
+                software = info.Software;
+                offlineFailure = info.Failure;
+                offlinePackages = info.DriverPackages;
+                offlineKey = info.ProductKey;
+
+                // Ni Wi-Fi ni winget pour un Windows qui ne tourne pas : ses clés Wi-Fi sont
+                // chiffrées pour sa machine, et winget ne voit que le Windows en cours.
+                withWifi = false;
+
+                // La clé d'un compte ne se déchiffre que dans sa session, sur son Windows.
+                withPasswords = false;
+                winget = Array.Empty<string>();
+            }
+            else if (label != null)
+            {
+                machine = label;
+                account = "Données";
+                software = null;
+            }
+            else
+            {
+                machine = MachineName(context);
+                account = Environment.UserName;
+                software = Inventory(context);
+            }
+
+            // Imprimantes et lecteurs réseau sont ceux de la session ouverte ; un autre Windows ne
+            // livre que sa clé, lue dans son registre.
+            withSettings &= profile == null && label == null;
+
+            var filter = BackupFilter.Parse(context.Parameter(ExcludeExtensionsParameter), context.Parameter(MaxFileSizeParameter));
 
             var plan = new List<BackupFolder>();
             long bytes = 0;
@@ -182,18 +378,18 @@ namespace LDI12.Actions.Backup
                 unreadable += folder.InaccessibleDirectories;
             }
 
-            foreach (var folder in withPersonal ? Sources(context) : Array.Empty<(string Label, string Path)>())
+            foreach (var folder in withPersonal ? Sources(context, roots) : Array.Empty<(string Label, string Path)>())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Take(Survey(context, folder.Label, folder.Path, new DirectoryScanRequest(folder.Path)
                 {
                     MaxFiles = MaxFilesPerFolder,
                     Budget = ScanBudget,
-                }, null, null, null, cancellationToken));
+                }, null, null, null, cancellationToken, filter));
             }
 
             var applications = withApplications
-                ? AppDataCatalog.Detect(context.Files)
+                ? AppDataCatalog.Detect(context.Files, roots)
                 : Array.Empty<AppDataApplication>();
 
             foreach (var application in applications)
@@ -209,7 +405,57 @@ namespace LDI12.Actions.Backup
                     }, source.Keep, source.Target, application.Name, cancellationToken));
                 }
 
-            if (files == 0 && !withWifi)
+            // Les dossiers ajoutés à la main, où qu'ils soient.
+            var extras = ExtraFolders.Plan(ExtraFolders.Decode(context.Parameter(ExtraFoldersParameter)));
+            var missingExtras = new List<string>();
+            foreach (var extra in extras)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!context.Files.DirectoryExists(extra.Path))
+                {
+                    missingExtras.Add(extra.Path);
+                    continue;
+                }
+
+                Take(Survey(context, ExtraFolders.Folder + " / " + extra.Name, extra.Path, new DirectoryScanRequest(extra.Path)
+                {
+                    MaxFiles = MaxFilesPerFolder,
+                    Budget = ScanBudget,
+                    ExcludeRelative = extra.IsVolumeRoot ? ExtraFolders.SystemDirectories : Array.Empty<string>(),
+                }, extra.IsVolumeRoot ? ExtraFolders.KeepAtRoot : null, extra.Target, null, cancellationToken, filter));
+            }
+
+            // Les pilotes cochés d'un autre Windows : leur paquet, pris tel quel dans son magasin de
+            // pilotes, part avec les fichiers. Copié, relu, repris après interruption comme eux.
+            var offlineChoice = context.Parameter(OfflineDriversParameter);
+            var offlineDrivers = new List<DriverChoice>();
+            var unresolvedDrivers = new List<string>();
+            if (profile != null && offlineChoice != null && offlineChoice != OfflineDrivers.All)
+                foreach (var driver in DriverBackup.Decode(offlineChoice))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var folder = offlinePackages.TryGetValue(driver.InfName, out var package)
+                        ? OfflineDrivers.Repository(offlineVolume!, package)
+                        : null;
+                    var surveyed = folder == null
+                        ? null
+                        : Survey(context, DriverBackup.Folder + " / " + driver.Label, folder, new DirectoryScanRequest(folder)
+                        {
+                            MaxFiles = MaxFilesPerFolder,
+                            Budget = ScanBudget,
+                        }, null, DriverBackup.Folder + "\\" + System.IO.Path.GetFileNameWithoutExtension(driver.InfName), null, cancellationToken);
+
+                    if (surveyed == null)
+                    {
+                        unresolvedDrivers.Add(driver.Label + " (" + driver.InfName + ")");
+                        continue;
+                    }
+
+                    Take(surveyed);
+                    offlineDrivers.Add(driver);
+                }
+
+            if (files == 0 && !withWifi && winget.Count == 0 && !withDrivers)
                 return new ActionPreview
                 {
                     Outcome = PreviewOutcome.NothingToDo,
@@ -217,29 +463,89 @@ namespace LDI12.Actions.Backup
                               "de cette session.",
                 };
 
+            var resume = context.Parameter(ResumeParameter) == "0"
+                ? null
+                : BackupState.FindResumable(context.Files, destination, machine, account);
+
+            // À la reprise, ce qui est déjà sur le support n'a pas à y trouver de place une seconde fois.
+            long already = 0;
+            if (resume != null)
+            {
+                var measure = context.Files.Measure(new DirectoryMeasureRequest(resume.Path), cancellationToken);
+                if (measure.HasValue) already = measure.Value.TotalBytes;
+            }
+
             var free = context.Files.FreeSpace(destination);
-            var needed = (long)(bytes * SpaceMargin);
+            var needed = Math.Max(0, (long)(bytes * SpaceMargin) - already);
 
             if (free.IsReliable && free.Value < needed)
                 return Blocked(
                     "Il manque de la place sur la destination : " + ValueFormat.Bytes(bytes) +
                     " à copier, " + ValueFormat.Bytes(free.Value) + " disponibles.");
 
-            var root = Path.Combine(destination, FolderName(context));
+            // Une destination à l'intérieur d'une source se recopierait dans elle-même.
+            foreach (var folder in plan)
+                if (IsInside(destination, folder.Path))
+                    return Blocked("La destination « " + destination + " » est à l'intérieur de « " + folder.Label +
+                                   " », qui fait partie de la sauvegarde : choisissez un autre support.");
+
+            var root = resume?.Path ?? Unique(context, Path.Combine(destination, FolderName(machine, profile != null || label != null ? account : null)));
 
             var measurements = new List<PreviewLine>
             {
                 new PreviewLine("Destination", root),
+                new PreviewLine("Reprise", resume == null
+                    ? "nouvelle sauvegarde"
+                    : "sauvegarde interrompue du " + resume.StartedText + " : les fichiers déjà copiés et vérifiés " +
+                      "(" + ValueFormat.Bytes(already) + " sur le support) ne seront pas recopiés"),
                 new PreviewLine("À copier", ValueFormat.Bytes(bytes) + " en " + files + " fichier(s)"),
                 new PreviewLine("Place disponible",
                     free.IsReliable ? ValueFormat.Bytes(free.Value) : "non lue"),
             };
 
+            if (!filter.IsEmpty)
+                measurements.Add(new PreviewLine("Écartés par les filtres", filter.ExcludedFiles == 0
+                    ? "aucun fichier (" + filter.Describe() + ")"
+                    : filter.ExcludedFiles + " fichier(s), " + ValueFormat.Bytes(filter.ExcludedBytes) + " : " + filter.Describe()));
+
+            // Ce qui pèse le plus : c'est là qu'on décide quoi écarter quand le support est juste.
+            var largest = BackupFilter.Largest(plan, 5);
+            if (largest.Count > 0 && bytes > 0)
+            {
+                var parts = new List<string>();
+                foreach (var (name, size) in largest) parts.Add(name + " (" + ValueFormat.Bytes(size) + ")");
+                measurements.Add(new PreviewLine("Plus gros dossiers", string.Join(", ", parts)));
+            }
+
+            // La durée, avant tout le reste : c'est elle qui décide de lancer maintenant, de changer
+            // de port ou de support. À la reprise, seule la part qui reste à copier est comptée.
+            var speed = CopySpeed.Decode(context.Parameter(SpeedParameter));
+            string? duration = null;
+            if (speed != null && files > 0)
+            {
+                var remaining = Math.Max(0, bytes - already);
+                var share = bytes > 0 ? (double)remaining / bytes : 1;
+                duration = CopyEstimate.Describe(CopyEstimate.Duration(remaining, (int)Math.Ceiling(files * share), speed));
+
+                measurements.Add(new PreviewLine("Durée estimée",
+                    duration + ", d'après la mesure du support : " + CopyEstimate.Speeds(speed) +
+                    ". Plus long si le disque de cette machine est lent ou abîmé"));
+
+                var advice = CopyEstimate.Advice(speed);
+                if (advice != null) measurements.Add(new PreviewLine("Support lent", advice, PreviewLineKind.Caution));
+            }
+            else if (files > 0)
+            {
+                measurements.Add(new PreviewLine("Durée estimée",
+                    "non estimée : le support n'a pas encore été mesuré"));
+            }
+
             var willDo = new List<string>();
             foreach (var folder in plan)
                 if (folder.Application == null)
                     willDo.Add("Copier « " + folder.Label + " » : " + ValueFormat.Bytes(folder.Bytes) +
-                               " en " + folder.Files.Count + " fichier(s)");
+                               " en " + folder.Files.Count + " fichier(s)" +
+                               (folder.Target.StartsWith(ExtraFolders.Folder, StringComparison.Ordinal) ? ", depuis " + folder.Path : string.Empty));
 
             var willNotDo = new List<string>
             {
@@ -254,9 +560,39 @@ namespace LDI12.Actions.Backup
             if (!withPersonal)
                 willNotDo.Add("Ne copie pas les dossiers personnels (Bureau, Documents, Images…) : l'option n'est pas cochée.");
 
+            foreach (var missing in missingExtras)
+                measurements.Add(new PreviewLine("Dossier introuvable", missing + " n'existe pas ou n'est pas accessible : " +
+                                                 "il ne sera pas copié", PreviewLineKind.Caution));
+
+            // Un dossier ajouté qui contient déjà un dossier personnel, ou qui s'y trouve : copié deux fois.
+            foreach (var extra in extras)
+                foreach (var folder in plan)
+                    if (folder.Target != extra.Target && folder.Application == null && !folder.Target.StartsWith(ExtraFolders.Folder, StringComparison.Ordinal) &&
+                        (IsInside(folder.Path, extra.Path) || IsInside(extra.Path, folder.Path)))
+                    {
+                        measurements.Add(new PreviewLine("Copié deux fois", extra.Path + " recoupe « " + folder.Label +
+                                                         " », déjà dans la sauvegarde : ces fichiers y seront deux fois",
+                                                         PreviewLineKind.Caution));
+                        break;
+                    }
+
             Applications(applications, plan, withApplications, willDo, willNotDo);
 
             willDo.Add("Relire chaque fichier copié et comparer son empreinte à celle de la source");
+
+            var chromium = 0;
+            foreach (var application in applications) if (BrowserKeySource(application) != null) chromium++;
+            if (withPasswords && chromium > 0)
+                willDo.Add("Emporter la clé des mots de passe de " + chromium + " navigateur(s) (Chrome, Edge…), déchiffrée par " +
+                           "Windows pour ce compte : la restauration la remettra au nouveau compte. Le support de sauvegarde " +
+                           "devra être gardé en conséquence");
+            else if (chromium > 0 && !roots.IsOffline)
+                willNotDo.Add("N'emporte pas la clé des mots de passe des navigateurs : l'option n'est pas cochée, les mots de " +
+                              "passe enregistrés dans Chrome ou Edge ne se liront pas sur le nouveau PC.");
+
+            if (withSettings)
+                willDo.Add("Relever les imprimantes, les lecteurs réseau et la clé de Windows, notés dans la fiche et dans « " +
+                           MachineSettings.FileName + " » pour les remettre à la restauration");
 
             if (withWifi)
                 willDo.Add("Exporter les profils Wi-Fi enregistrés dans « " + WifiExport.Folder + " », avec leurs clés " +
@@ -264,7 +600,14 @@ namespace LDI12.Actions.Backup
             else
                 willNotDo.Add("N'exporte pas les profils Wi-Fi : l'option n'est pas cochée.");
 
-            var software = Inventory(context);
+            if (withDrivers)
+                willDo.Add("Recevoir les pilotes cochés dans « " + DriverBackup.Folder + " », exportés à part avec les " +
+                           "droits administrateur, avant la copie des fichiers");
+
+            if (winget.Count > 0)
+                willDo.Add("Déposer la liste des " + winget.Count + " application(s) cochée(s), à réinstaller par winget " +
+                           "(« " + WingetApplications.FileName + " »), et un script qui les réinstalle d'un double clic");
+
             willDo.Add(software == null
                 ? "Déposer la fiche de réinstallation et le manifeste de la copie"
                 : "Déposer la fiche de réinstallation (" + software.Programs.Count + " logiciel(s) et " +
@@ -276,12 +619,36 @@ namespace LDI12.Actions.Backup
                     "aucune analyse ne les a relevés, la fiche ne pourra pas les lister",
                     PreviewLineKind.Caution));
 
-            var running = await RunningAsync(context, applications, cancellationToken).ConfigureAwait(false);
+            // Les programmes ouverts ne concernent que la session : un autre disque n'a rien en cours.
+            var running = roots.IsOffline
+                ? (IReadOnlyList<string>)Array.Empty<string>()
+                : await RunningAsync(context, applications, cancellationToken).ConfigureAwait(false);
+
+            if (profile != null)
+            {
+                measurements.Insert(0, new PreviewLine("Source", "compte « " + account + " » du Windows de " + offlineVolume +
+                    (windowsDescription == null ? string.Empty : " (" + windowsDescription + ")") + ", machine " + machine));
+                if (offlineFailure != null)
+                    measurements.Add(new PreviewLine("Registre de ce Windows", offlineFailure +
+                        " : la fiche ne listera pas ses logiciels, la sauvegarde des fichiers se fait quand même",
+                        PreviewLineKind.Caution));
+                willNotDo.Add("Ne copie pas les profils Wi-Fi ni la liste winget de ce Windows : ses clés Wi-Fi sont " +
+                              "chiffrées pour sa machine, et winget ne voit que le Windows en cours.");
+                if (offlineChoice == OfflineDrivers.All)
+                    willDo.Add("Exporter tous les pilotes tiers de ce Windows par DISM, dans « " + DriverBackup.Folder + " »");
+                if (offlineDrivers.Count > 0)
+                    willDo.Add("Copier " + offlineDrivers.Count + " pilote(s) de ce Windows dans « " + DriverBackup.Folder +
+                               " », pour les réinstaller sur le nouveau PC");
+                if (unresolvedDrivers.Count > 0)
+                    measurements.Add(new PreviewLine("Pilotes introuvables", string.Join(", ", unresolvedDrivers) +
+                        " : absents du magasin de pilotes de ce Windows, ils ne seront pas sauvegardés", PreviewLineKind.Caution));
+            }
             if (running.Count > 0)
                 measurements.Add(new PreviewLine(
                     "Programmes ouverts",
-                    string.Join(", ", running) + ". À fermer avant la copie : un fichier tenu ouvert est " +
-                    "refusé, ou copié en cours d'écriture",
+                    string.Join(", ", running) + ". À fermer avant la copie (bouton « Fermer navigateurs et " +
+                    "messagerie ») : un fichier tenu ouvert est récupéré par cliché instantané, mais un profil de " +
+                    "navigateur fermé se copie plus sûrement",
                     PreviewLineKind.Caution));
 
             if (cloud > 0)
@@ -291,6 +658,24 @@ namespace LDI12.Actions.Backup
                 willNotDo.Add(
                     cloud + " fichier(s) ne sont présents que dans le nuage : les copier les téléchargerait " +
                     "d'abord sur cette machine. Ils restent disponibles depuis le compte en ligne du client.");
+            }
+
+            // FAT32, le format d'origine de la plupart des clés, refuse les fichiers de 4 Go et plus.
+            var format = context.Files.VolumeFormat(destination);
+            if (format != null && format.StartsWith("FAT", StringComparison.OrdinalIgnoreCase) &&
+                !format.Equals("exFAT", StringComparison.OrdinalIgnoreCase))
+            {
+                var huge = 0;
+                foreach (var folder in plan)
+                    foreach (var file in folder.Files)
+                        if (file.SizeBytes >= FourGigabytes) huge++;
+
+                if (huge > 0)
+                    measurements.Add(new PreviewLine(
+                        "Fichiers trop gros pour ce support",
+                        huge + " fichier(s) de 4 Go ou plus ne peuvent pas aller sur un support en " + format +
+                        ". Choisir un support en NTFS ou exFAT, ou les copier à part",
+                        PreviewLineKind.Caution));
             }
 
             if (unreadable > 0)
@@ -308,19 +693,37 @@ namespace LDI12.Actions.Backup
             return new ActionPreview
             {
                 Outcome = PreviewOutcome.Ready,
-                Summary = ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront copiés vers " +
-                          root + ", puis relus un par un.",
+                Summary = (resume == null ? string.Empty : "Reprise de la sauvegarde interrompue du " + resume.StartedText + ". ") +
+                          ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront copiés vers " +
+                          root + ", puis relus un par un." +
+                          (duration == null ? string.Empty : " Durée estimée : " + duration + "."),
                 WillDo = willDo,
                 WillNotDo = willNotDo,
                 Measurements = measurements,
                 Plan = new BackupPlan
                 {
                     Destination = root,
+                    Resumed = resume != null,
+                    Machine = machine,
+                    Account = account,
+                    WindowsDescription = windowsDescription,
+                    Software = software,
+                    OfflineDriversVolume = profile != null && offlineChoice == OfflineDrivers.All ? offlineVolume : null,
+                    OfflineDrivers = offlineDrivers,
+                    ExtraFolders = extras,
+                    AlreadyBytes = already,
                     Folders = plan,
                     Bytes = bytes,
                     Files = files,
                     Applications = applications,
                     ExportWifi = withWifi,
+                    BrowserPasswords = withPasswords && chromium > 0,
+                    ReadSettings = withSettings,
+                    OfflineProductKey = offlineKey,
+                    FilterText = filter.IsEmpty ? null : filter.Describe(),
+                    ExcludedFiles = filter.ExcludedFiles,
+                    ExcludedBytes = filter.ExcludedBytes,
+                    WingetPackages = winget,
                     CloudOnlyFiles = cloud,
                 },
             };
@@ -329,7 +732,7 @@ namespace LDI12.Actions.Backup
         /// <summary>Relève un dossier et ne garde que ce qu'une copie emporterait.</summary>
         private static BackupFolder? Survey(
             ActionContext context, string label, string path, DirectoryScanRequest request, Func<string, bool>? keep,
-            string? target, string? application, CancellationToken cancellationToken)
+            string? target, string? application, CancellationToken cancellationToken, BackupFilter? filter = null)
         {
             var scan = context.Files.Scan(request, cancellationToken);
             if (!scan.HasValue) return null;
@@ -341,6 +744,7 @@ namespace LDI12.Actions.Backup
             foreach (var file in scan.Value.Files)
             {
                 if (keep != null && !keep(System.IO.Path.GetFileName(file.Path))) continue;
+                if (filter != null && filter.Excludes(file)) continue;
 
                 if (file.CloudOnly)
                 {
@@ -433,8 +837,21 @@ namespace LDI12.Actions.Backup
                     Summary = "Le dossier de sauvegarde n'a pas pu être créé sur la destination.",
                 };
 
+            // Avant le premier fichier : si le support est arraché en cours de route, c'est ce
+            // « en cours » qui restera, et qui fera reconnaître la sauvegarde comme à reprendre.
+            SetState(context, plan, BackupProgressState.Running);
+
             var interrupted = false;
+            var lost = false;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Copie de");
+
+            // Un support plein n'a aucune chance de se libérer pendant la copie, un support
+            // débranché fait échouer chaque fichier restant en une fraction de seconde : dans les
+            // deux cas, continuer produirait des milliers d'échecs identiques. La présence du
+            // dossier n'est vérifiée qu'après un échec, pour ne rien coûter aux fichiers qui passent.
+            var copier = new BatchCopier(context.Files, tracker, result =>
+                result.Outcome == FileCopyOutcome.NoSpace ||
+                (!Succeeded(result.Outcome) && !context.Files.DirectoryExists(plan.Destination)));
 
             foreach (var folder in plan.Folders)
             {
@@ -449,33 +866,44 @@ namespace LDI12.Actions.Backup
                 };
                 results.Add(here);
 
+                var items = new List<(FileEntry File, string Target)>(folder.Files.Count);
+                var relatives = new List<string>(folder.Files.Count);
                 foreach (var file in folder.Files)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     var relative = Relative(folder.Path, file.Path);
-                    var target = System.IO.Path.Combine(plan.Destination, folder.Destination, relative);
+                    relatives.Add(relative);
+                    items.Add((file, System.IO.Path.Combine(plan.Destination, folder.Destination, relative)));
+                }
 
-                    var result = context.Files.Copy(
-                        new FileCopyRequest(file, target) { Progressed = tracker.Bytes }, cancellationToken);
-
-                    tracker.FileDone(file.SizeBytes);
+                var noSpace = false;
+                var completed = copier.Run(items, (index, result) =>
+                {
                     Count(here, result);
                     counters.Add(result);
 
                     manifest.Append(Csv(folder.Destination)).Append(';')
-                        .Append(Csv(relative)).Append(';')
-                        .Append(file.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
+                        .Append(Csv(relatives[index])).Append(';')
+                        .Append(items[index].File.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
                         .AppendLine(Describe(result.Outcome));
 
-                    // Un support plein n'a aucune chance de se libérer pendant la copie :
-                    // continuer produirait des milliers d'échecs identiques et ferait perdre une
-                    // heure avant de le dire.
-                    if (result.Outcome == FileCopyOutcome.NoSpace)
+                    noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+
+                    if (result.Outcome == FileCopyOutcome.Locked)
+                        plan.OpenFiles.Add(new OpenFile { Source = items[index].File.Path, Target = items[index].Target });
+                }, cancellationToken);
+
+                if (!completed)
+                {
+                    interrupted = true;
+                    if (noSpace)
                     {
                         details.Add(folder.Label + ", copie interrompue : la destination est pleine.");
-                        interrupted = true;
-                        break;
+                    }
+                    else
+                    {
+                        details.Add(folder.Label + ", copie interrompue : le support de sauvegarde ne répond plus. " +
+                                    "Rebranchez-le et relancez la sauvegarde : elle reprendra où elle s'est arrêtée.");
+                        lost = true;
                     }
                 }
 
@@ -484,7 +912,44 @@ namespace LDI12.Actions.Backup
                 details.Add(folder.Label + " : " + Describe(here));
             }
 
+            // Support parti : plus rien ne peut s'y écrire, et chaque tentative prendrait son délai.
+            if (lost)
+                return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+
+            if (plan.OfflineDrivers.Count > 0 &&
+                !Deposit(context, plan, System.IO.Path.Combine(DriverBackup.Folder, DriverBackup.ListFileName), DriverBackup.Csv(plan.OfflineDrivers)))
+                details.Add("La liste des pilotes n'a pas pu être écrite : la restauration les nommera par leur fichier.");
+
+            if (plan.OfflineDriversVolume != null && !interrupted)
+            {
+                progress?.Report(new ActionProgress("Export des pilotes de ce Windows…", 1));
+                details.Add("Pilotes : " + await OfflineDriversAsync(context, plan, cancellationToken).ConfigureAwait(false));
+            }
+
             WifiExportResult? wifi = null;
+            MachineSettingsRecord? settings = null;
+            if (plan.ReadSettings && !interrupted)
+            {
+                progress?.Report(new ActionProgress("Relevé des imprimantes et des lecteurs réseau…", 1));
+                settings = await MachineSettings.ReadAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            else if (plan.OfflineProductKey != null)
+            {
+                settings = new MachineSettingsRecord
+                {
+                    Keys = new[] { new ProductKey { Label = "Windows, clé installée", Key = plan.OfflineProductKey } },
+                };
+            }
+
+            if (settings != null && !settings.IsEmpty)
+                details.Add(Deposit(context, plan, MachineSettings.FileName, MachineSettings.Document(settings))
+                    ? "Réglages : " + settings.Printers.Count + " imprimante(s), " + settings.Drives.Count + " lecteur(s) réseau, " +
+                      (settings.Keys.Count > 0 ? "clé de Windows relevée." : "pas de clé de Windows lisible.")
+                    : "Les réglages de la machine n'ont pas pu être écrits dans la sauvegarde.");
+
+            if (plan.BrowserPasswords && !interrupted)
+                details.Add("Mots de passe des navigateurs : " + BrowserPasswordKeys(context, plan));
+
             if (plan.ExportWifi && !interrupted)
             {
                 progress?.Report(new ActionProgress("Export des profils Wi-Fi…", 1));
@@ -492,10 +957,55 @@ namespace LDI12.Actions.Backup
                 details.Add("Wi-Fi : " + wifi.Describe());
             }
 
-            progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));
-            Sheet(context, plan, results, wifi, interrupted, details);
+            if (plan.ExtraFolders.Count > 0 && !Deposit(context, plan, ExtraFolders.MapFileName, ExtraFolders.Map(plan.ExtraFolders)))
+                details.Add("La liste des dossiers ajoutés n'a pas pu être écrite : la restauration les remettra dans les Documents.");
 
-            return Finish(context, plan, manifest, counters, details, stopwatch, interrupted);
+            if (plan.WingetPackages.Count > 0)
+            {
+                // Sans marque d'ordre d'octets : cmd.exe ne lit pas un script qui commence par elle,
+                // et le lecteur JSON de winget n'en attend pas.
+                var listed = context.Files.ReplaceText(
+                    System.IO.Path.Combine(plan.Destination, WingetApplications.FileName),
+                    WingetApplications.Document(plan.WingetPackages));
+                listed &= context.Files.ReplaceText(
+                    System.IO.Path.Combine(plan.Destination, WingetApplications.ScriptName), WingetApplications.Script());
+
+                details.Add(listed
+                    ? "Applications : " + plan.WingetPackages.Count + " à réinstaller par winget, listées dans " +
+                      WingetApplications.FileName + "."
+                    : "La liste des applications à réinstaller n'a pas pu être écrite dans le dossier de sauvegarde.");
+            }
+
+            progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));
+            Sheet(context, plan, results, wifi, settings, interrupted, details);
+
+            var outcome = Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+            SetState(context, plan, interrupted ? BackupProgressState.Interrupted : BackupProgressState.Finished);
+            return outcome;
+        }
+
+        private void SetState(ActionContext context, BackupPlan plan, BackupProgressState state)
+            => context.Files.ReplaceText(
+                System.IO.Path.Combine(plan.Destination, BackupState.FileName),
+                BackupState.Render(state, plan.Machine, plan.Account));
+
+        private static bool Succeeded(FileCopyOutcome outcome)
+            => outcome == FileCopyOutcome.Copied || outcome == FileCopyOutcome.AlreadyPresent;
+
+        /// <summary>
+        /// Dépose un fichier du logiciel dans la sauvegarde : fiche, manifeste, liste des logiciels.
+        /// </summary>
+        /// <remarks>
+        /// Une première fois, il n'écrase rien, comme tout ce que cette action écrit. À la reprise,
+        /// celui du passage précédent est remplacé : il décrivait une copie inachevée. La marque
+        /// d'ordre d'octets est remise dans ce cas, sans elle Excel lirait mal les accents.
+        /// </remarks>
+        private static bool Deposit(ActionContext context, BackupPlan plan, string name, string content)
+        {
+            var path = System.IO.Path.Combine(plan.Destination, name);
+            return plan.Resumed
+                ? context.Files.ReplaceText(path, "\uFEFF" + content)
+                : context.Files.WriteText(path, content);
         }
 
         /// <summary>
@@ -507,51 +1017,57 @@ namespace LDI12.Actions.Backup
         /// </remarks>
         private void Sheet(
             ActionContext context, BackupPlan plan, IReadOnlyList<BackupFolderResult> results,
-            WifiExportResult? wifi, bool interrupted, ICollection<string> details)
+            WifiExportResult? wifi, MachineSettingsRecord? settings, bool interrupted, ICollection<string> details)
         {
-            var software = Inventory(context);
+            var software = plan.Software;
             var windows = context.Platform.Profile;
 
             var model = new ReinstallSheetModel
             {
-                Machine = MachineName(context),
-                Account = Environment.UserName,
+                Machine = plan.Machine,
+                Account = plan.Account,
                 // Le nom court, pas ProductName : sous Windows 11, le registre annonce toujours
                 // « Windows 10 », et la première fiche d'essai l'a recopié tel quel.
-                Windows = windows.ShortName + ", build " + windows.Build.ToString(CultureInfo.InvariantCulture),
+                Windows = plan.WindowsDescription ??
+                          windows.ShortName + ", build " + windows.Build.ToString(CultureInfo.InvariantCulture),
                 Destination = plan.Destination,
                 ToolVersion = ToolVersion(),
                 Folders = results,
                 Applications = plan.Applications,
                 Wifi = wifi,
+                Settings = settings,
+                FilterText = plan.FilterText,
+                ExcludedFiles = plan.ExcludedFiles,
+                ExcludedBytes = plan.ExcludedBytes,
                 Software = software,
                 CloudOnlyFiles = plan.CloudOnlyFiles,
                 Interrupted = interrupted,
             };
 
-            var written = context.Files.WriteText(
-                System.IO.Path.Combine(plan.Destination, ReinstallSheet.FileName), ReinstallSheet.Render(model));
+            var written = Deposit(context, plan, ReinstallSheet.FileName, ReinstallSheet.Render(model));
 
             details.Add(written
                 ? "Fiche de réinstallation déposée : " + ReinstallSheet.FileName + "."
                 : "La fiche de réinstallation n'a pas pu être écrite dans le dossier de sauvegarde.");
 
+            if (!Deposit(context, plan, ReinstallSheet.ReportFileName, ReinstallSheet.RenderReport(model)))
+                details.Add("Le rapport de sauvegarde n'a pas pu être écrit dans le dossier de sauvegarde.");
+            else
+                details.Add("Rapport à remettre au client : " + ReinstallSheet.ReportFileName + ".");
+
             if (software != null &&
-                !context.Files.WriteText(System.IO.Path.Combine(plan.Destination, ReinstallSheet.SoftwareFileName),
-                    ReinstallSheet.SoftwareCsv(software)))
+                !Deposit(context, plan, ReinstallSheet.SoftwareFileName, ReinstallSheet.SoftwareCsv(software)))
                 details.Add("La liste des logiciels n'a pas pu être écrite dans le dossier de sauvegarde.");
         }
 
         private static ActionOutcome Finish(
             ActionContext context, BackupPlan plan, StringBuilder manifest, Counters counters,
-            List<string> details, Stopwatch stopwatch, bool interrupted)
+            List<string> details, Stopwatch stopwatch, bool interrupted, bool lost)
         {
             stopwatch.Stop();
 
-            var written = context.Files.WriteText(
-                System.IO.Path.Combine(plan.Destination, "manifeste.csv"), manifest.ToString());
-
-            if (!written) details.Add("Le manifeste n'a pas pu être écrit dans le dossier de sauvegarde.");
+            if (!lost && !Deposit(context, plan, "manifeste.csv", manifest.ToString()))
+                details.Add("Le manifeste n'a pas pu être écrit dans le dossier de sauvegarde.");
 
             var status = interrupted || counters.Failed > 0
                 ? counters.Copied > 0 ? ActionStatus.PartiallySucceeded : ActionStatus.Failed
@@ -560,9 +1076,12 @@ namespace LDI12.Actions.Backup
             var summary = counters.Copied + " fichier(s) copiés et vérifiés, " +
                           ValueFormat.Bytes(counters.Bytes) + " écrits";
 
-            if (counters.Skipped > 0) summary += ", " + counters.Skipped + " déjà présent(s)";
+            if (counters.Skipped > 0)
+                summary += ", " + counters.Skipped + (plan.Resumed ? " déjà copié(s) lors du passage précédent" : " déjà présent(s)");
             if (counters.Failed > 0) summary += ", " + counters.Failed + " non copié(s)";
-            summary += interrupted ? " : copie interrompue, la destination est pleine." : ".";
+            summary += lost
+                ? " : copie interrompue, le support ne répond plus. Rebranchez-le et relancez : elle reprendra où elle s'est arrêtée."
+                : interrupted ? " : copie interrompue, la destination est pleine." : ".";
 
             return new ActionOutcome
             {
@@ -579,11 +1098,75 @@ namespace LDI12.Actions.Backup
         /// de caches de logiciels. Ce qui compte chez lui passe par le catalogue des données
         /// d'applications, qui sait quoi prendre et quoi laisser.
         /// </remarks>
-        private static IEnumerable<(string Label, string Path)> Sources(ActionContext context)
+        private static IEnumerable<(string Label, string Path)> Sources(ActionContext context, ProfileRoots roots)
         {
-            foreach (var entry in UserDataSurveyor.PersonalFolders())
+            foreach (var entry in roots.Personal)
                 if (context.Files.DirectoryExists(entry.Path))
                     yield return entry;
+        }
+
+        /// <summary>
+        /// Exporte les pilotes tiers d'un Windows qui ne tourne pas.
+        /// </summary>
+        /// <remarks>
+        /// DISM sait lire le magasin de pilotes d'une image hors ligne, c'est-à-dire du disque d'un
+        /// PC en panne : tous les pilotes tiers partent, un dossier par paquet, comme pour
+        /// l'export depuis la machine elle-même. Il demande Windows 8.1 ou plus récent sur le PC
+        /// de l'atelier.
+        /// </remarks>
+        /// <summary>Le dossier qui porte « Local State », pour un navigateur Chromium ; nul sinon.</summary>
+        private static AppDataSource? BrowserKeySource(AppDataApplication application)
+        {
+            foreach (var source in application.Sources)
+                if (source.TopLevelOnly && source.Keep != null && source.Keep("Local State") &&
+                    source.Target == System.IO.Path.Combine(AppDataCatalog.Folder, application.Name))
+                    return source;
+            return null;
+        }
+
+        /// <summary>Dépose, pour chaque navigateur Chromium, sa clé déchiffrée par ce compte.</summary>
+        private static string BrowserPasswordKeys(ActionContext context, BackupPlan plan)
+        {
+            var kept = new List<string>();
+            var refused = new List<string>();
+            foreach (var application in plan.Applications)
+            {
+                var source = BrowserKeySource(application);
+                if (source == null) continue;
+
+                var state = context.Files.ReadText(System.IO.Path.Combine(source.Root, "Local State"));
+                var key = state.HasValue ? BrowserKeys.Extract(context.Secrets, state.Value) : null;
+                if (key != null && Deposit(context, plan, System.IO.Path.Combine(source.Target, BrowserKeys.FileName), BrowserKeys.Document(key)))
+                    kept.Add(application.Name);
+                else
+                    refused.Add(application.Name);
+            }
+
+            var text = kept.Count > 0 ? "clé emportée pour " + string.Join(", ", kept) : "aucune clé emportée";
+            if (refused.Count > 0)
+                text += " ; " + string.Join(", ", refused) + " : clé illisible pour ce compte, les mots de passe ne suivront pas";
+            return text + ".";
+        }
+
+        private static async Task<string> OfflineDriversAsync(ActionContext context, BackupPlan plan, CancellationToken cancellationToken)
+        {
+            var folder = System.IO.Path.Combine(plan.Destination, DriverBackup.Folder);
+            if (!context.Files.CreateDirectory(folder)) return "le dossier « " + DriverBackup.Folder + " » n'a pas pu être créé.";
+
+            var run = await context.Processes.RunAsync(
+                // Racine sans guillemets : « "E:\" » ferait prendre le guillemet final pour un caractère.
+                new ProcessRequest("dism.exe", "/Image:" + plan.OfflineDriversVolume!.TrimEnd('\\') + "\\ /Export-Driver /Destination:\"" + folder + "\"")
+                {
+                    Timeout = TimeSpan.FromMinutes(30),
+                    OutputEncoding = ConsoleOutputEncoding.OemCodePage,
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            if (!run.Completed || run.ExitCode != 0) return "l'export par DISM a échoué, " + DriverBackup.Tail(run) + ".";
+
+            context.Files.WriteText(System.IO.Path.Combine(folder, DriverBackup.ListFileName),
+                "inf;périphériques;classe;version\r\n");
+            return "pilotes tiers de ce Windows exportés dans « " + DriverBackup.Folder + " ».";
         }
 
         /// <summary>
@@ -653,9 +1236,46 @@ namespace LDI12.Actions.Backup
             return string.IsNullOrWhiteSpace(machine) ? Environment.MachineName : machine!;
         }
 
-        private static string FolderName(ActionContext context)
-            => "LDI12-Sauvegarde-" + Sanitize(MachineName(context)) + "-" +
+        /// <summary>
+        /// « LDI12-Sauvegarde-PC-SALON-2026-09-30-1400 », et le compte en plus quand il ne va pas de
+        /// soi : un autre Windows peut en avoir plusieurs, sauvegardés côte à côte.
+        /// </summary>
+        private static string FolderName(string machine, string? account)
+            => BackupState.Prefix + Sanitize(machine) + (account == null ? string.Empty : "-" + Sanitize(account)) + "-" +
                DateTimeOffset.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
+
+        private const long FourGigabytes = 4L * 1024 * 1024 * 1024 - 1;
+
+        /// <summary>Vrai si <paramref name="path"/> est <paramref name="folder"/> ou se trouve dedans.</summary>
+        internal static bool IsInside(string path, string folder)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(folder)) return false;
+
+            var inner = path.Trim().TrimEnd('\\') + "\\";
+            var outer = folder.Trim().TrimEnd('\\') + "\\";
+            return inner.StartsWith(outer, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Un nom de dossier libre.
+        /// </summary>
+        /// <remarks>
+        /// Le nom porte la minute : deux sauvegardes lancées dans la même minute auraient partagé
+        /// le même dossier, et la seconde aurait refusé d'y écrire son manifeste. La date reste en
+        /// fin de nom, avant le suffixe, pour que la sauvegarde se reconnaisse toujours.
+        /// </remarks>
+        private static string Unique(ActionContext context, string path)
+        {
+            if (!context.Files.DirectoryExists(path)) return path;
+
+            for (var index = 2; index < 100; index++)
+            {
+                var candidate = path + "-" + index.ToString(CultureInfo.InvariantCulture);
+                if (!context.Files.DirectoryExists(candidate)) return candidate;
+            }
+
+            return path;
+        }
 
         private static string? ToolVersion()
         {
@@ -698,6 +1318,8 @@ namespace LDI12.Actions.Backup
             FileCopyOutcome.PathTooLong => "chemin trop long pour la destination",
             FileCopyOutcome.VerificationFailed => "relecture différente de la source : copie retirée",
             FileCopyOutcome.CloudOnly => "présent seulement en ligne",
+            FileCopyOutcome.DeviceError => "support injoignable ou illisible",
+            FileCopyOutcome.FileTooLarge => "4 Go ou plus : refusé par le format FAT32 du support",
             _ => "échec",
         };
 

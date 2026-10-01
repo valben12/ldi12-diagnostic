@@ -257,6 +257,15 @@ namespace LDI12.Tests
                 return Task.FromResult(State);
             }
 
+            /// <summary>Les signaux envoyés hors échange : les ordres d'arrêt.</summary>
+            public List<string> Signaux { get; } = new List<string>();
+
+            public Task SignalAsync(string line)
+            {
+                Signaux.Add(line);
+                return Task.CompletedTask;
+            }
+
             public Task<string> SendAsync(
                 string request, Func<string, bool>? onNotification, TimeSpan timeout,
                 CancellationToken cancellationToken)

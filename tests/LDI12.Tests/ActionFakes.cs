@@ -70,7 +70,7 @@ namespace LDI12.Tests
 
         public bool ReplaceText(string path, string content)
         {
-            if (LockedFiles.Contains(path)) return false;
+            if (LockedFiles.Contains(path) || Gone(path)) return false;
             Written[path] = content;
             Texts[path] = content;
             return true;
@@ -186,9 +186,75 @@ namespace LDI12.Tests
 
         public Measured<long> Free { get; set; } = Measured.Ok(1_000_000_000_000L, DataSource.FileSystem);
 
+        /// <summary>Le support qui sera arraché : tout chemin qui commence ainsi disparaît.</summary>
+        public string? UnplugRoot { get; set; }
+
+        /// <summary>Le fichier pendant la copie duquel le support est arraché.</summary>
+        public string? UnplugDuring { get; set; }
+
+        public bool Unplugged { get; private set; }
+
+        private bool Gone(string path)
+            => Unplugged && UnplugRoot != null && path.StartsWith(UnplugRoot, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Durée simulée d'une copie : de quoi voir ce que gagne le parallèle.</summary>
+        public TimeSpan CopyDelay { get; set; }
+
+        /// <summary>
+        /// Un seul accès au support à la fois, comme la tête d'un disque dur : copier à plusieurs
+        /// n'y gagne rien.
+        /// </summary>
+        public bool SerializeDelay { get; set; }
+
+        /// <summary>Le plus grand nombre de copies menées en même temps.</summary>
+        public int MaxConcurrentCopies { get; private set; }
+
+        private readonly object _copyGate = new object();
+        private readonly object _deviceGate = new object();
+        private int _concurrent;
+
         public FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken)
         {
+            var now = Interlocked.Increment(ref _concurrent);
+            try
+            {
+                lock (_copyGate) MaxConcurrentCopies = Math.Max(MaxConcurrentCopies, now);
+
+                if (CopyDelay > TimeSpan.Zero)
+                {
+                    if (SerializeDelay) lock (_deviceGate) Thread.Sleep(CopyDelay);
+                    else Thread.Sleep(CopyDelay);
+                }
+
+                lock (_copyGate) return CopyCore(request);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrent);
+            }
+        }
+
+        /// <summary>Fichiers qui échouent une fois, avec ce résultat, puis passent : une erreur passagère.</summary>
+        public Dictionary<string, FileCopyOutcome> FailOnce { get; } =
+            new Dictionary<string, FileCopyOutcome>(StringComparer.OrdinalIgnoreCase);
+
+        private FileCopyResult CopyCore(FileCopyRequest request)
+        {
             var source = request.Source;
+
+            if (FailOnce.TryGetValue(source.Path, out var transient))
+            {
+                FailOnce.Remove(source.Path);
+                return FileCopyResult.Of(transient);
+            }
+
+            if (UnplugDuring != null && string.Equals(UnplugDuring, source.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                Unplugged = true;
+                Directories.RemoveWhere(Gone);
+            }
+
+            if (Gone(request.Destination) || Gone(source.Path)) return FileCopyResult.Of(FileCopyOutcome.DeviceError);
 
             if (source.CloudOnly) return FileCopyResult.Of(FileCopyOutcome.CloudOnly);
             if (LockedFiles.Contains(source.Path)) return FileCopyResult.Of(FileCopyOutcome.Locked);
@@ -212,7 +278,12 @@ namespace LDI12.Tests
 
         public bool CreateDirectory(string path)
         {
+            if (Gone(path)) return false;
             Created.Add(path);
+
+            // Comme la vraie passerelle : un dossier créé existe ensuite. La sauvegarde s'en sert
+            // pour distinguer un fichier refusé d'un support débranché.
+            Directories.Add(path);
             return true;
         }
 
@@ -234,8 +305,14 @@ namespace LDI12.Tests
 
         public Measured<long> FreeSpace(string path) => Free;
 
+        /// <summary>Format annoncé pour tout volume : NTFS, sauf réglage contraire.</summary>
+        public string? Format { get; set; } = "NTFS";
+
+        public string? VolumeFormat(string path) => Format;
+
         public bool WriteText(string path, string content)
         {
+            if (Gone(path)) return false;
             Written[path] = content;
             return true;
         }
@@ -295,6 +372,33 @@ namespace LDI12.Tests
         }
     }
 
+    /// <summary>
+    /// Un DPAPI d'essai : « chiffre » en retournant les octets derrière une marque propre au compte.
+    /// Un autre compte, une autre marque : ce qu'il a chiffré ne s'ouvre pas ici.
+    /// </summary>
+    internal sealed class FakeSecretProtector : ISecretProtector
+    {
+        private readonly byte _account;
+
+        public FakeSecretProtector(byte account = 1) => _account = account;
+
+        public byte[]? Protect(byte[] data)
+        {
+            var result = new byte[data.Length + 1];
+            result[0] = _account;
+            for (var index = 0; index < data.Length; index++) result[index + 1] = data[data.Length - 1 - index];
+            return result;
+        }
+
+        public byte[]? Unprotect(byte[] data)
+        {
+            if (data.Length == 0 || data[0] != _account) return null;
+            var result = new byte[data.Length - 1];
+            for (var index = 0; index < result.Length; index++) result[index] = data[data.Length - 1 - index];
+            return result;
+        }
+    }
+
     internal static class ActionFakes
     {
         public static ActionContext Context(
@@ -304,7 +408,8 @@ namespace LDI12.Tests
             IProcessLauncher? launcher = null,
             ISystemRestoreGateway? restore = null,
             SystemSnapshot? snapshot = null,
-            IReadOnlyDictionary<string, string>? parameters = null)
+            IReadOnlyDictionary<string, string>? parameters = null,
+            ISecretProtector? secrets = null)
             => new ActionContext(
                 platform ?? new FakePlatformInfo(elevated: true),
                 processes ?? new FakeProcessRunner(),
@@ -314,7 +419,8 @@ namespace LDI12.Tests
                 restore ?? new FakeSystemRestoreGateway(),
                 NullLogger.Instance,
                 snapshot,
-                parameters);
+                parameters,
+                secrets);
 
         public static ProcessResult Result(int exitCode = 0, string output = "", bool timedOut = false, bool launchFailed = false)
             => new ProcessResult

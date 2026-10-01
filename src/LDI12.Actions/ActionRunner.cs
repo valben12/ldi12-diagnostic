@@ -317,6 +317,11 @@ namespace LDI12.Actions
                 Token = token,
             };
 
+            // Arrêter une action élevée, c'est le lui demander : l'échange continue d'attendre sa
+            // réponse, que l'hôte rend dès que l'action s'est arrêtée entre deux fichiers.
+            using var stop = cancellationToken.Register(() =>
+                _ = _channel?.SignalAsync(ElevationProtocol.Write(new ElevatedRequest { Op = ElevationProtocol.OpCancel })));
+
             var message = await ExchangeAsync(
                     request,
                     line =>
@@ -326,15 +331,27 @@ namespace LDI12.Actions
                             return false;
 
                         if (notification.Text != null)
-                            progress?.Report(new ActionProgress(notification.Text, notification.Fraction));
+                            progress?.Report(new ActionProgress(notification.Text, notification.Fraction)
+                            {
+                                Detail = notification.Detail,
+                                Remaining = notification.RemainingSeconds.HasValue
+                                    ? TimeSpan.FromSeconds(notification.RemainingSeconds.Value)
+                                    : (TimeSpan?)null,
+                                Elapsed = notification.ElapsedSeconds.HasValue
+                                    ? TimeSpan.FromSeconds(notification.ElapsedSeconds.Value)
+                                    : (TimeSpan?)null,
+                            });
 
                         return true;
                     },
-                    action.Descriptor.HardTimeout, cancellationToken)
+                    action.Descriptor.HardTimeout, CancellationToken.None)
                 .ConfigureAwait(false);
 
             if (message.Type == ElevatedMessage.TypeOutcome && message.Outcome != null)
                 return message.Outcome.ToOutcome();
+
+            if (cancellationToken.IsCancellationRequested)
+                return ActionOutcome.Simple(ActionStatus.Cancelled, "Opération interrompue par le technicien.");
 
             return ActionOutcome.Simple(
                 ActionStatus.Failed,

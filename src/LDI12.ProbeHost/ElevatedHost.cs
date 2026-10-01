@@ -13,6 +13,7 @@ using LDI12.Actions.Maintenance;
 using LDI12.Core.Execution;
 using LDI12.Core.Logging;
 using LDI12.Platform;
+using LDI12.Platform.Gateways;
 
 namespace LDI12.ProbeHost
 {
@@ -35,6 +36,14 @@ namespace LDI12.ProbeHost
         private const string Category = "Elevated";
 
         private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
+
+        /// <summary>
+        /// Délai quand un relevé attend son exécution : le technicien a préparé la restauration,
+        /// puis relit le relevé, ferme les navigateurs du client, répond au téléphone. L'hôte qui
+        /// se refermait au bout d'un quart d'heure faisait alors échouer les pilotes et les
+        /// imprimantes au clic sur « Restaurer ».
+        /// </summary>
+        private static readonly TimeSpan PendingTimeout = TimeSpan.FromHours(4);
         private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
 
         /// <summary>Chemins transmis pour affichage. Le relevé complet reste ici.</summary>
@@ -51,6 +60,13 @@ namespace LDI12.ProbeHost
             }
 
             using var services = await PlatformServices.CreateAsync(logger, cancellationToken).ConfigureAwait(false);
+
+            // Lire en mode sauvegarde, comme robocopy /B : c'est ce qui permet de copier les comptes
+            // d'un autre Windows, protégés par des droits qui ne connaissent pas le technicien. Rien
+            // n'est modifié sur les fichiers ; seules les lectures passent outre leurs droits.
+            log.Info(FileSystemGateway.EnableBackupSemantics()
+                ? "Privilège de sauvegarde actif : lecture des fichiers protégés possible."
+                : "Privilège de sauvegarde refusé : les fichiers protégés seront comptés comme refusés.");
 
             using var pipe = new NamedPipeClientStream(
                 ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous,
@@ -75,47 +91,95 @@ namespace LDI12.ProbeHost
 
             var session = new ElevatedSession(services, logger);
 
+            // Une ligne à la fois sur le tube. Les notifications de progression partent au fil de
+            // l'eau depuis l'action, la réponse à la fin : sans ce verrou, deux lignes pouvaient
+            // s'entremêler.
+            var writeLock = new object();
+            void Send(ElevatedMessage message)
+            {
+                var text = ElevationProtocol.Write(message);
+                lock (writeLock) writer.WriteLine(text);
+            }
+
+            // Le tube est lu en permanence, y compris pendant une opération : c'est ce qui permet
+            // de recevoir l'ordre d'arrêt d'une copie qui dure des heures. Une seule lecture est en
+            // attente à la fois.
+            var lineTask = reader.ReadLineAsync();
+            Task<ElevatedMessage>? running = null;
+            CancellationTokenSource? operation = null;
+
             while (!cancellationToken.IsCancellationRequested)
             {
-                var line = await ReadLineAsync(reader, cancellationToken).ConfigureAwait(false);
-                if (line == null)
-                {
-                    log.Info("Canal refermé par l'application.");
-                    break;
-                }
+                // Sans opération en cours, un hôte oublié ne doit pas rester en vie indéfiniment.
+                var waitFor = running ?? (Task)Task.Delay(session.HasPending ? PendingTimeout : IdleTimeout, cancellationToken);
+                var done = await Task.WhenAny(lineTask, waitFor).ConfigureAwait(false);
 
-                var request = ElevationProtocol.Read<ElevatedRequest>(line);
-                if (request == null)
+                if (done != lineTask)
                 {
-                    await writer.WriteLineAsync(ElevationProtocol.Write(new ElevatedMessage
+                    if (running == null)
                     {
-                        Type = ElevatedMessage.TypeError,
-                        Message = "Requête illisible.",
-                    })).ConfigureAwait(false);
+                        log.Info("Canal inactif : l'hôte élevé se referme.");
+                        break;
+                    }
+
+                    Send(await running.ConfigureAwait(false));
+                    running = null;
+                    operation?.Dispose();
+                    operation = null;
                     continue;
                 }
 
-                if (string.Equals(request.Op, ElevationProtocol.OpClose, StringComparison.OrdinalIgnoreCase)) break;
+                var line = await lineTask.ConfigureAwait(false);
+                if (line == null)
+                {
+                    log.Info("Canal refermé par l'application.");
+                    operation?.Cancel();
+                    break;
+                }
 
-                var response = await session
-                    .HandleAsync(request, notification => writer.WriteLine(ElevationProtocol.Write(notification)), cancellationToken)
-                    .ConfigureAwait(false);
+                lineTask = reader.ReadLineAsync();
 
-                await writer.WriteLineAsync(ElevationProtocol.Write(response)).ConfigureAwait(false);
+                var request = ElevationProtocol.Read<ElevatedRequest>(line);
+                if (request != null && string.Equals(request.Op, ElevationProtocol.OpCancel, StringComparison.OrdinalIgnoreCase))
+                {
+                    log.Info("Arrêt demandé par le technicien.");
+                    operation?.Cancel();
+                    continue;
+                }
+
+                if (request != null && string.Equals(request.Op, ElevationProtocol.OpClose, StringComparison.OrdinalIgnoreCase))
+                {
+                    operation?.Cancel();
+                    break;
+                }
+
+                // L'application n'envoie une requête qu'après la réponse à la précédente : une
+                // requête pendant une opération ne peut être qu'un signal inconnu, qui n'a pas de
+                // réponse à attendre. En répondre une serait la prendre pour celle de l'opération.
+                if (running != null)
+                {
+                    log.Warn("Requête reçue pendant une opération, ignorée : " + (request?.Op ?? "illisible"));
+                    continue;
+                }
+
+                if (request == null)
+                {
+                    Send(new ElevatedMessage { Type = ElevatedMessage.TypeError, Message = "Requête illisible." });
+                    continue;
+                }
+
+                operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                running = session.HandleAsync(request, Send, operation.Token);
+            }
+
+            if (running != null)
+            {
+                try { await running.ConfigureAwait(false); }
+                catch (Exception ex) when (ex is OperationCanceledException || ex is IOException) { }
             }
 
             log.Info("Hôte élevé terminé.");
             return 0;
-        }
-
-        /// <summary>Lecture bornée : un hôte élevé oublié ne doit pas rester en vie indéfiniment.</summary>
-        private static async Task<string?> ReadLineAsync(StreamReader reader, CancellationToken cancellationToken)
-        {
-            var read = reader.ReadLineAsync();
-            var timeout = Task.Delay(IdleTimeout, cancellationToken);
-
-            var finished = await Task.WhenAny(read, timeout).ConfigureAwait(false);
-            return finished == read ? await read.ConfigureAwait(false) : null;
         }
 
         private static bool IsElevated()
@@ -139,6 +203,18 @@ namespace LDI12.ProbeHost
         {
             private readonly Dictionary<string, Pending> _pending =
                 new Dictionary<string, Pending>(StringComparer.Ordinal);
+
+            /// <summary>Les relevés en attente, du plus ancien au plus récent.</summary>
+            private readonly Queue<string> _order = new Queue<string>();
+
+            /// <summary>
+            /// Relevés gardés au plus. Celui d'un disque entier tient des centaines de milliers de
+            /// fichiers : préparer dix fois de suite ne doit pas les accumuler en mémoire.
+            /// </summary>
+            private const int MaxPending = 12;
+
+            /// <summary>Un relevé attend d'être exécuté.</summary>
+            public bool HasPending => _pending.Count > 0;
 
             private readonly PlatformServices _services;
             private readonly ILdiLogger _logger;
@@ -191,7 +267,14 @@ namespace LDI12.ProbeHost
                 var preview = await action.PreviewAsync(context, cancellationToken).ConfigureAwait(false);
 
                 var token = Guid.NewGuid().ToString("N");
-                _pending[token] = new Pending(action, preview, context);
+
+                // Seul un relevé exécutable attend : les autres n'ont rien à faire faire.
+                if (preview.CanExecute)
+                {
+                    _pending[token] = new Pending(action, preview, context);
+                    _order.Enqueue(token);
+                    while (_order.Count > MaxPending) _pending.Remove(_order.Dequeue());
+                }
 
                 _journal.Record(
                     InterventionKind.Preview, action.Descriptor.Id, action.Descriptor.DisplayName,
@@ -218,11 +301,17 @@ namespace LDI12.ProbeHost
                 if (!string.Equals(pending.Action.Descriptor.Id, request.Action, StringComparison.OrdinalIgnoreCase))
                     return Error("Le relevé ne correspond pas à l'action demandée.");
 
-                var progress = new Progress<ActionProgress>(report => notify(new ElevatedMessage
+                // Rapportée sur-le-champ, et non par Progress<T> qui passe par le pool : une
+                // notification pouvait sinon partir après la réponse, et être prise pour la
+                // réponse de la requête suivante.
+                var progress = new ImmediateProgress(report => notify(new ElevatedMessage
                 {
                     Type = ElevatedMessage.TypeProgress,
                     Text = report.Text,
                     Fraction = report.Fraction,
+                    Detail = report.Detail,
+                    RemainingSeconds = report.Remaining?.TotalSeconds,
+                    ElapsedSeconds = report.Elapsed?.TotalSeconds,
                 }));
 
                 var outcome = await pending.Action
@@ -266,7 +355,7 @@ namespace LDI12.ProbeHost
             private ActionContext CreateContext(Dictionary<string, string>? parameters)
                 => new ActionContext(
                     _services.Platform, _services.Processes, _services.Launcher, _services.Files,
-                    _services.Registry, _services.Restore, _logger, null, parameters);
+                    _services.Registry, _services.Restore, _logger, null, parameters, new DpapiSecretProtector());
 
             private static ElevatedMessage Error(string message)
                 => new ElevatedMessage { Type = ElevatedMessage.TypeError, Message = message };
@@ -284,6 +373,16 @@ namespace LDI12.ProbeHost
                 public ActionPreview Preview { get; }
                 public ActionContext Context { get; }
             }
+        }
+    
+        /// <summary>Une progression rapportée sur le fil de l'action, dans l'ordre.</summary>
+        private sealed class ImmediateProgress : IProgress<ActionProgress>
+        {
+            private readonly Action<ActionProgress> _report;
+
+            public ImmediateProgress(Action<ActionProgress> report) => _report = report;
+
+            public void Report(ActionProgress value) => _report(value);
         }
     }
 }

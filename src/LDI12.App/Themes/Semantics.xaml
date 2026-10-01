@@ -411,38 +411,89 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Case à cocher.
+         Grille et non pile horizontale : dans une pile, le texte reçoit une largeur infinie, ne
+         passe jamais à la ligne et se fait couper par la carte. C'est ce que montraient les
+         captures de l'écran des données, descriptions tronquées en plein mot.
+         La case suit la première ligne, et la coche apparaît en fondu, posée par un aplat au
+         lieu d'un échange de couleur : un changement sec se lit comme un clignotement. -->
     <Style x:Key="Check" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <StackPanel Orientation="Horizontal">
-                        <Border x:Name="Box" Width="17" Height="17" CornerRadius="5"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.SurfaceHover}"
-                                BorderBrush="{DynamicResource Brush.BorderStrong}" BorderThickness="1">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="17" Height="17" VerticalAlignment="Top" Margin="0,1,0,0">
+                            <Border x:Name="Box" CornerRadius="5"
+                                    Background="{DynamicResource Brush.SurfaceHover}"
+                                    BorderBrush="{DynamicResource Brush.BorderStrong}" BorderThickness="1" />
+                            <Border x:Name="Fill" CornerRadius="5" Opacity="0"
+                                    Background="{DynamicResource Brush.BrandRed}" />
                             <Path x:Name="Tick" Data="M4,8.5 L7,11.5 L13,5"
                                   Stroke="{DynamicResource Brush.TextOnAccent}" StrokeThickness="2"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" Opacity="0" />
-                        </Border>
-                        <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
+                                  StrokeLineJoin="Round" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <ScaleTransform x:Name="TickScale" ScaleX="0.6" ScaleY="0.6" />
+                                </Path.RenderTransform>
+                            </Path>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Top" />
+                    </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.BrandRed}" />
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
-                            <Setter TargetName="Tick" Property="Opacity" Value="1" />
-                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
                         </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.12" />
+                                        <DoubleAnimation Storyboard.TargetName="Tick" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.12" />
+                                        <DoubleAnimation Storyboard.TargetName="TickScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="1" Duration="0:0:0.20">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.5" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TickScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="1" Duration="0:0:0.20">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.5" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.12" />
+                                        <DoubleAnimation Storyboard.TargetName="Tick" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.10" />
+                                        <DoubleAnimation Storyboard.TargetName="TickScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="0.6" Duration="0:0:0.10" />
+                                        <DoubleAnimation Storyboard.TargetName="TickScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="0.6" Duration="0:0:0.10" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

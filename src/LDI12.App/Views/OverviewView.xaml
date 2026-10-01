@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LDI12.App"
-             xmlns:controls="clr-namespace:LDI12.App.Controls">
+             xmlns:controls="clr-namespace:LDI12.App.Controls"
+             xmlns:diag="clr-namespace:LDI12.Core.Diagnostics;assembly=LDI12.Core">
 
     <UserControl.Resources>
         <!-- L'arc suit la bande du score : vert, ambre, orange, rouge. -->
@@ -19,6 +20,25 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Band}" Value="Critical">
                     <Setter Property="ValueBrush" Value="{DynamicResource Brush.StatusCritical}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- Le chiffre d'un compteur de constats, à la couleur de sa gravité. -->
+        <Style x:Key="SeverityCountText" TargetType="TextBlock" BasedOn="{StaticResource Text.Metric}">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.StatusInfo}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static diag:Severity.Critical}">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.StatusCritical}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static diag:Severity.Problem}">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.StatusProblem}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static diag:Severity.Warning}">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.StatusWarning}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsZero}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.TextTertiary}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -97,7 +117,40 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+
+                    <!-- Les constats par gravité, en quatre compteurs : la moitié droite du
+                         cadre restait vide, et ces chiffres s'y lisent d'un regard. Un compteur
+                         à zéro reste en place, éteint. -->
+                    <ItemsControl Grid.Column="2" ItemsSource="{Binding SeverityCounts}" VerticalAlignment="Center"
+                                  Margin="20,0,0,0" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="118" Margin="0,0,8,8" Padding="12,9" CornerRadius="10"
+                                        Background="{DynamicResource Brush.SurfaceHover}"
+                                        BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Count}" Style="{StaticResource SeverityCountText}" />
+                                        <Grid Margin="0,2,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse Style="{StaticResource SeverityDot}" Width="7" Height="7" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Label}" Style="{StaticResource Text.Muted}"
+                                                       Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <!-- Brève dilatation à la fin de l'analyse : la ponctuation qui dit « c'est
                          terminé, voici le résultat ». Elle ne se déclenche qu'à la sortie de
@@ -155,7 +208,9 @@
                         <TextBlock Text="ÉTAT GÉNÉRAL DE LA MACHINE" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Text="{Binding BandLabel}" Style="{StaticResource BandTitle}"
                                    Margin="0,6,0,0" />
-                        <TextBlock Text="{Binding FindingSummary}" Style="{StaticResource Text.Body}" Margin="0,8,0,0" />
+                        <!-- Les compteurs disent déjà les constats : la phrase ne reste que lorsqu'il n'y en a aucun. -->
+                        <TextBlock Text="{Binding FindingSummary}" Style="{StaticResource Text.Body}" Margin="0,8,0,0"
+                                   Visibility="{Binding HasNoFinding, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding ConfidenceText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" />
                         <TextBlock Text="{Binding CapMessage}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0"
                                    Foreground="{DynamicResource Brush.StatusWarning}" MaxWidth="900" HorizontalAlignment="Left"
@@ -165,7 +220,9 @@
             </Border>
 
             <!-- ===== Dimensions ===== -->
-            <ItemsControl ItemsSource="{Binding Dimensions}" Margin="0,14,0,0"
+            <!-- Marge droite négative : chaque carte porte sa gouttière à droite, la dernière
+                 colonne s'arrêtait donc dix points avant le bord du cadre du score. -->
+            <ItemsControl ItemsSource="{Binding Dimensions}" Margin="0,14,-10,0"
                           Visibility="{Binding HasResult, Converter={StaticResource BoolToVisibility}}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

@@ -27,6 +27,9 @@ namespace LDI12.Actions.Elevation
         public const string OpRestorePoint = "restore-point";
         public const string OpClose = "close";
 
+        /// <summary>Arrête l'opération en cours. Sans réponse propre : c'est l'opération qui répond.</summary>
+        public const string OpCancel = "cancel";
+
         private static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
         {
             NullValueHandling = NullValueHandling.Ignore,
@@ -73,6 +76,13 @@ namespace LDI12.Actions.Elevation
         public string? Text { get; set; }
 
         public double? Fraction { get; set; }
+
+        /// <summary>Précision de la progression : volumes et nombres de fichiers.</summary>
+        public string? Detail { get; set; }
+
+        public double? RemainingSeconds { get; set; }
+
+        public double? ElapsedSeconds { get; set; }
 
         public string? Message { get; set; }
 

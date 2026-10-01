@@ -61,6 +61,18 @@ namespace LDI12.Actions.Backup
         ChromiumLocalState = 2,
     }
 
+    /// <summary>Ce qui reste à faire une fois les fichiers d'un dossier remis.</summary>
+    public enum RestoreAfterCopy
+    {
+        None = 0,
+
+        /// <summary>Inscrire les polices restaurées pour le compte.</summary>
+        RegisterFonts = 1,
+
+        /// <summary>Remettre le fond d'écran.</summary>
+        SetWallpaper = 2,
+    }
+
     /// <summary>Un dossier de la sauvegarde, et l'endroit où il revient.</summary>
     public sealed class RestoreItem
     {
@@ -83,6 +95,31 @@ namespace LDI12.Actions.Backup
 
         /// <summary>Profils à reprendre dans « Local State », pour <see cref="RestoreMode.ChromiumLocalState"/>.</summary>
         public IReadOnlyList<string> Profiles { get; init; } = Array.Empty<string>();
+
+        public RestoreAfterCopy AfterCopy { get; init; }
+    }
+
+    /// <summary>Une sauvegarde trouvée sur un disque.</summary>
+    public sealed class BackupEntry
+    {
+        public string Path { get; init; } = string.Empty;
+
+        internal string Stamp { get; init; } = string.Empty;
+
+        public DateTime? Date { get; init; }
+
+        public string Machine { get; init; } = string.Empty;
+
+        /// <summary>Le compte sauvegardé ; nul pour une sauvegarde d'avant la version 1.28.</summary>
+        public string? Account { get; init; }
+
+        public BackupProgressState? State { get; init; }
+
+        public string Title => Machine + (string.IsNullOrEmpty(Account) ? string.Empty : " · " + Account);
+
+        public string Description
+            => (Date.HasValue ? Date.Value.ToString("d MMMM yyyy 'à' HH'h'mm", CultureInfo.GetCultureInfo("fr-FR")) : "date inconnue") +
+               (State == BackupProgressState.Running || State == BackupProgressState.Interrupted ? " · incomplète" : string.Empty);
     }
 
     /// <summary>Ce que la sauvegarde contient, rapporté à la machine où l'on restaure.</summary>
@@ -146,16 +183,93 @@ namespace LDI12.Actions.Backup
             return best;
         }
 
+        /// <summary>
+        /// Toutes les sauvegardes LDI12 d'un disque, de la plus récente à la plus ancienne.
+        /// </summary>
+        /// <remarks>
+        /// Un disque d'atelier en porte souvent plusieurs : un dossier par compte d'un même PC, et
+        /// les PC de plusieurs clients. La plus récente n'est pas forcément celle qu'on veut
+        /// restaurer : on choisit.
+        /// </remarks>
+        public static IReadOnlyList<BackupEntry> List(IFileSystemGateway files, string root)
+        {
+            var result = new List<BackupEntry>();
+            if (string.IsNullOrWhiteSpace(root) || !files.DirectoryExists(root)) return result;
+
+            foreach (var directory in files.EnumerateDirectories(root))
+            {
+                var name = Path.GetFileName(directory.TrimEnd('\\'));
+                if (!name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || !IsBackup(files, directory)) continue;
+
+                var stamp = Stamp(name);
+                var state = files.ReadText(Path.Combine(directory, BackupState.FileName));
+                var record = BackupState.Parse(state.HasValue ? state.Value : null);
+
+                result.Add(new BackupEntry
+                {
+                    Path = directory,
+                    Stamp = stamp,
+                    Date = StampDate(stamp),
+                    Machine = record?.Machine is { Length: > 0 } machine ? machine : MachineOf(name, stamp),
+                    Account = record?.Account,
+                    State = record?.State,
+                });
+            }
+
+            result.Sort((a, b) => string.CompareOrdinal(b.Stamp, a.Stamp));
+            return result;
+        }
+
+        /// <summary>« SALON » dans « LDI12-Sauvegarde-SALON-2026-09-29-1000 » ou « …-1000-2 ».</summary>
+        private static string MachineOf(string name, string stamp)
+        {
+            var stem = name.Substring(Prefix.Length);
+            if (stamp.Length == 0) return stem;
+
+            // Le suffixe éventuel (« -2 ») est rendu sur deux chiffres dans l'horodatage : on retire
+            // la date, puis ce qui la suit dans le nom.
+            var date = stamp.Substring(0, 15);
+            var at = stem.LastIndexOf(date, StringComparison.Ordinal);
+            return at > 0 ? stem.Substring(0, at).TrimEnd('-') : stem;
+        }
+
         /// <summary>« yyyy-MM-dd-HHmm » à la fin du nom, le nom de machine pouvant contenir des tirets.</summary>
+        /// <remarks>
+        /// Deux sauvegardes lancées dans la même minute prennent un suffixe (« …-1400-2 ») : il est
+        /// gardé dans l'horodatage rendu, sur deux chiffres, pour que la seconde se classe après la
+        /// première.
+        /// </remarks>
         internal static string Stamp(string name)
+        {
+            if (Parses(name)) return name.Substring(name.Length - 15);
+
+            var dash = name.LastIndexOf('-');
+            if (dash <= 0 || dash < name.Length - 3) return string.Empty;
+
+            var suffix = name.Substring(dash + 1);
+            if (suffix.Length == 0 || !int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out var rank)) return string.Empty;
+
+            var stem = name.Substring(0, dash);
+            return Parses(stem) ? stem.Substring(stem.Length - 15) + "-" + rank.ToString("00", CultureInfo.InvariantCulture) : string.Empty;
+        }
+
+        /// <summary>La date d'un horodatage rendu par <see cref="Stamp"/>.</summary>
+        internal static DateTime? StampDate(string stamp)
+            => stamp.Length >= 15 && DateTime.TryParseExact(stamp.Substring(0, 15), "yyyy-MM-dd-HHmm",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                ? date
+                : (DateTime?)null;
+
+        private static bool Parses(string name)
             => name.Length >= 15 && DateTime.TryParseExact(name.Substring(name.Length - 15), "yyyy-MM-dd-HHmm",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
-                ? name.Substring(name.Length - 15)
-                : string.Empty;
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
         private static bool IsBackup(IFileSystemGateway files, string path)
             => files.FileExists(Path.Combine(path, "manifeste.csv")) ||
-               files.FileExists(Path.Combine(path, ReinstallSheet.FileName));
+               files.FileExists(Path.Combine(path, ReinstallSheet.FileName)) ||
+               files.FileExists(Path.Combine(path, DriverBackup.Folder, DriverBackup.ListFileName)) ||
+               files.FileExists(Path.Combine(path, WingetApplications.FileName)) ||
+               files.FileExists(Path.Combine(path, BackupState.FileName));
 
         public static RestoreLayout Build(IFileSystemGateway files, string backup, RestoreTargets targets)
         {
@@ -169,6 +283,8 @@ namespace LDI12.Actions.Backup
                 foreach (var directory in files.EnumerateDirectories(applications))
                     Application(files, directory, targets, items, left);
 
+            Others(files, backup, targets, items);
+
             var wifi = new List<string>();
             var wifiFolder = Path.Combine(backup, WifiExport.Folder);
             if (files.DirectoryExists(wifiFolder))
@@ -181,6 +297,56 @@ namespace LDI12.Actions.Backup
             }
 
             return new RestoreLayout { Backup = backup, Items = items, WifiProfiles = wifi, Left = left };
+        }
+
+        /// <summary>
+        /// Les dossiers ajoutés à la main : à leur emplacement d'origine si ce disque existe ici,
+        /// sinon dans les Documents.
+        /// </summary>
+        /// <remarks>
+        /// Jamais sur le disque qui porte la sauvegarde : « E:\ » d'origine peut être, sur la
+        /// nouvelle machine, la lettre du disque de sauvegarde lui-même, et la restauration s'y
+        /// recopierait.
+        /// </remarks>
+        private static void Others(IFileSystemGateway files, string backup, RestoreTargets targets, ICollection<RestoreItem> items)
+        {
+            var folder = Path.Combine(backup, ExtraFolders.Folder);
+            if (!files.DirectoryExists(folder)) return;
+
+            var text = files.ReadText(Path.Combine(backup, ExtraFolders.MapFileName));
+            var map = ExtraFolders.ParseMap(text.HasValue ? text.Value : null);
+            var backupRoot = SafeRoot(backup);
+
+            foreach (var directory in files.EnumerateDirectories(folder))
+            {
+                var name = Path.GetFileName(directory.TrimEnd('\\'));
+                var fallback = Combine(targets.Documents, Path.Combine(ExtraFolders.Folder, name));
+
+                var destination = fallback;
+                if (map.TryGetValue(name, out var original))
+                {
+                    var root = SafeRoot(original);
+                    if (root.Length > 0 && files.DirectoryExists(root) &&
+                        !string.Equals(root, backupRoot, StringComparison.OrdinalIgnoreCase))
+                        destination = original;
+                }
+
+                if (destination.Length == 0) continue;
+
+                items.Add(new RestoreItem
+                {
+                    Label = ExtraFolders.Folder + " / " + name,
+                    Source = directory,
+                    Destination = destination,
+                    Mode = RestoreMode.Merge,
+                });
+            }
+        }
+
+        private static string SafeRoot(string path)
+        {
+            try { return Path.GetPathRoot(path) ?? string.Empty; }
+            catch (ArgumentException) { return string.Empty; }
         }
 
         private static void Personal(
@@ -235,6 +401,72 @@ namespace LDI12.Actions.Backup
 
                 case "Microsoft Edge":
                     Chromium(files, directory, name, Combine(targets.LocalAppData, @"Microsoft\Edge\User Data"), "msedge.exe", items);
+                    return;
+
+                case "Brave":
+                    Chromium(files, directory, name, Combine(targets.LocalAppData, @"BraveSoftware\Brave-Browser\User Data"), "brave.exe", items);
+                    return;
+
+                case "Vivaldi":
+                    Chromium(files, directory, name, Combine(targets.LocalAppData, @"Vivaldi\User Data"), "vivaldi.exe", items);
+                    return;
+
+                case "Opera":
+                    items.Add(Replace(name, name, directory, Combine(targets.RoamingAppData, @"Opera Software\Opera Stable"), "opera.exe"));
+                    return;
+
+                case "Opera GX":
+                    items.Add(Replace(name, name, directory, Combine(targets.RoamingAppData, @"Opera Software\Opera GX Stable"), "opera.exe"));
+                    return;
+
+                case "Office":
+                    foreach (var (folder, destination) in new[]
+                             {
+                                 ("Dictionnaires", @"Microsoft\UProof"),
+                                 ("Modèles", @"Microsoft\Templates"),
+                                 ("Insertions automatiques", @"Microsoft\Document Building Blocks"),
+                                 ("Correction automatique", @"Microsoft\Office"),
+                             })
+                    {
+                        var source = Path.Combine(directory, folder);
+                        if (files.DirectoryExists(source))
+                            items.Add(new RestoreItem
+                            {
+                                Label = "Office / " + folder.ToLowerInvariant(),
+                                Application = "Office",
+                                Source = source,
+                                Destination = Combine(targets.RoamingAppData, destination),
+                                Mode = RestoreMode.Merge,
+                                Processes = new[] { "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe" },
+                            });
+                    }
+
+                    return;
+
+                case "Environnement":
+                    var wallpaper = Path.Combine(directory, "Fond d'écran");
+                    if (files.DirectoryExists(wallpaper))
+                        items.Add(new RestoreItem
+                        {
+                            Label = "Fond d'écran",
+                            Application = "Fond d'écran",
+                            Source = wallpaper,
+                            Destination = Combine(targets.Pictures, "Fond d'écran"),
+                            Mode = RestoreMode.Merge,
+                            AfterCopy = RestoreAfterCopy.SetWallpaper,
+                        });
+
+                    var fonts = Path.Combine(directory, "Polices");
+                    if (files.DirectoryExists(fonts))
+                        items.Add(new RestoreItem
+                        {
+                            Label = "Polices",
+                            Application = "Polices",
+                            Source = fonts,
+                            Destination = Combine(targets.LocalAppData, @"Microsoft\Windows\Fonts"),
+                            Mode = RestoreMode.Merge,
+                            AfterCopy = RestoreAfterCopy.RegisterFonts,
+                        });
                     return;
 
                 case "Mozilla Firefox":

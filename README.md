@@ -6,7 +6,7 @@ qui examine une machine et rend deux documents lisibles : un rapport détaillé 
 technicien, un bilan sans jargon pour la personne à qui appartient l'ordinateur.
 
 Windows 7 SP1 jusqu'à Windows 11 · x86, x64, ARM64 en émulation · C# et WPF sur
-.NET Framework 4.6.2 · exécutable unique de 12,4 Mo · hors ligne.
+.NET Framework 4.6.2 · exécutable unique de 13,5 Mo · hors ligne.
 
 ![Vue d'ensemble](docs/images/vue-ensemble.webp)
 
@@ -39,10 +39,45 @@ minutes selon l'état du disque.
 
 ![Écran Stockage](docs/images/stockage.webp)
 
+## Sauvegarder et restaurer
+
+La moitié des interventions finit par une réinstallation ou un changement de machine. L'écran
+**Données** fait le transfert d'un bout à l'autre, en quatre étapes : que sauvegarder, où copier,
+ce qui part avec, puis préparer et copier.
+
+- **Chaque fichier est relu sur le support** et comparé à l'original, empreinte SHA-256 à
+  l'appui, pas dans le cache de Windows. Il est écrit sous un nom provisoire et ne prend son
+  vrai nom qu'une fois vérifié : jamais de fichier à moitié écrit, jamais rien d'écrasé.
+- **Un support débranché, plein ou une copie arrêtée** : relancer reprend où la copie s'était
+  arrêtée, sans recopier ce qui est déjà vérifié. Un fichier tenu ouvert, une archive Outlook
+  par exemple, est récupéré par un cliché instantané de Windows, toujours supprimé ensuite.
+- **La durée est annoncée avant de lancer**, d'après une mesure automatique des deux supports.
+  Les petits fichiers partent à plusieurs quand le support y gagne, et la machine ne se met pas
+  en veille pendant la copie.
+- **Le compte ouvert, le disque d'un PC client ou un disque de données.** Un disque qui porte un
+  Windows se sauvegarde compte par compte, au nom de la machine lue dans son registre ; un
+  disque de données, dossier par dossier. Des dossiers situés n'importe où s'ajoutent à la main.
+- **Ce qu'on oublie de noter** : navigateurs (Chrome, Edge, Firefox, Brave, Vivaldi, Opera) et
+  leurs mots de passe sur option, Thunderbird et Outlook, Wi-Fi, pilotes au choix, applications
+  à réinstaller par winget, imprimantes, lecteurs réseau, clé de Windows, dictionnaire et
+  modèles d'Office, fond d'écran, polices.
+- **La restauration remet chaque chose à sa place** : pilotes d'abord, puis imprimantes,
+  données, lecteurs réseau et applications. Rien n'est supprimé sur la machine, un profil
+  remplacé est mis de côté, et la sauvegarde n'est jamais modifiée.
+- **Deux documents** sont déposés avec la sauvegarde : la fiche de réinstallation pour le
+  technicien, et un rapport imprimable pour le client, ce qui est en sécurité et ce qui ne l'est
+  pas, à signer des deux côtés.
+
+Un test sans aucune simulation tourne sous Windows à chaque modification : sauvegarde d'un jeu
+de fichiers piégeux, archive tenue ouverte, support arraché puis reprise, restauration sur un
+nouveau poste, et chaque fichier comparé à l'original.
+
+![Écran Données](docs/captures/dark-11-donnees.png)
+
 ## Ce qu'il sait réparer
 
-Dix-sept opérations, du vidage de cache DNS à la sauvegarde vérifiée des dossiers personnels
-vers un disque externe. Aucune ne part sur un simple clic : chacune affiche d'abord la commande
+Vingt-trois opérations, du vidage de cache DNS à la sauvegarde vérifiée des données du client
+et à leur restauration. Aucune ne part sur un simple clic : chacune affiche d'abord la commande
 exacte qu'elle va lancer, ce qu'elle va modifier, ce qu'elle ne touchera pas, et ce qui sera
 perdu au passage. Le nettoyage montre la liste des fichiers avant d'en supprimer un seul.
 
@@ -101,7 +136,7 @@ XAML d'une application WPF ciblant .NET Framework. La raison est détaillée dan
 [`docs/01-architecture.md`](docs/01-architecture.md) § 1.5.
 
 Les tests tournent avec `vstest.console.exe` sur `tests\LDI12.Tests\bin\Debug\net472\LDI12.Tests.dll`.
-Il y en a 899.
+Il y en a 1 073.
 
 ## Publier l'exécutable qui part sur la clé USB
 
@@ -161,6 +196,11 @@ Lance une analyse, capture la fenêtre en PNG, puis quitte. `--nav <n>` choisit 
 qui se passe quand le contenu passe sous les bords, et c'est précisément là que les défauts
 d'affichage se voient. Les captures de ce fichier ont été prises ainsi.
 
+L'intégration continue le fait pour chaque écran : un commit dont le message contient
+`[captures]` fait capturer les dix-sept écrans en thème sombre et en thème clair, par
+`build\captures.ps1`, et les dépose dans [`docs/captures`](docs/captures). Une modification de
+l'interface se juge sur l'image, avant et après.
+
 ## Structure
 
 | Projet | Rôle |
@@ -169,13 +209,13 @@ d'affichage se voient. Les captures de ce fichier ont été prises ainsi.
 | `LDI12.Platform` | Détection de Windows, registre de fonctionnalités, P/Invoke, passerelles WMI, registre, processus, journalisation. |
 | `LDI12.Collectors` | 39 sondes : matériel, écrans, erreurs signalées, stockage et SMART, Windows, logiciels, tâches planifiées, filet de sécurité, impression, son, stabilité, comptes, heure, ports série, réseau et environnement réseau, sécurité, performances, alimentation, températures. |
 | `LDI12.Engine` | Ordonnancement des sondes, 149 règles, corrélations, scoring, plan d'action, comparaison avant et après. |
-| `LDI12.Actions` | 17 opérations de réparation, de maintenance et de sauvegarde, 23 consoles Windows, journal d'intervention. |
+| `LDI12.Actions` | 23 opérations de réparation, de maintenance, de sauvegarde et de restauration, 23 consoles Windows, journal d'intervention. |
 | `LDI12.Updates` | Vérification de mise à jour signée, téléchargement contrôlé par empreinte, remplacement sur place. |
 | `LDI12.Reports` | Fiches de caractéristiques, sérialisation JSON, historique local, rapport technicien, bilan client et comparatif en HTML autonome. |
 | `LDI12.Publishing.Klarvi` | Dépôt facultatif d'un dossier d'intervention dans Klarvi. Le contrat HTTP est provisoire et confiné à cette classe : le reste du logiciel ne connaît que `IReportPublisher`. |
 | `LDI12.ProbeHost` | Exécutable satellite : mode sans interface, hôte des sondes isolées, élévation ciblée. |
-| `LDI12.App` | Application WPF sans cadre système : thème sombre et clair, navigation, vue d'ensemble, écrans de domaine, réparations, nettoyage, outils, export, réglages. |
-| `LDI12.Tests` | xUnit : 899 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus. |
+| `LDI12.App` | Application WPF sans cadre système : thème sombre et clair, navigation, vue d'ensemble, écrans de domaine, réparations, nettoyage, sauvegarde et restauration, outils, export, réglages. |
+| `LDI12.Tests` | xUnit : 1 073 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus, et un aller-retour de sauvegarde sans simulation sous Windows. |
 
 ## La conception, écrite
 

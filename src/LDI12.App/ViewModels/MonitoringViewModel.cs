@@ -234,14 +234,27 @@ namespace LDI12.App.ViewModels
         public bool IsRunning
         {
             get => _isRunning;
-            private set { if (Set(ref _isRunning, value)) RaiseCommandStates(); }
+            private set
+            {
+                if (!Set(ref _isRunning, value)) return;
+                RaiseCommandStates();
+                Raise(nameof(IsIdle));
+            }
         }
 
         public bool HasSamples
         {
             get => _hasSamples;
-            private set { if (Set(ref _hasSamples, value)) RaiseCommandStates(); }
+            private set
+            {
+                if (!Set(ref _hasSamples, value)) return;
+                RaiseCommandStates();
+                Raise(nameof(IsIdle));
+            }
         }
+
+        /// <summary>Rien n'a encore été mesuré : l'écran montre ce qui viendra, au lieu d'un vide.</summary>
+        public bool IsIdle => !IsRunning && !HasSamples;
 
         public string Status { get => _status; private set => Set(ref _status, value); }
         public string Headline { get => _headline; private set => Set(ref _headline, value); }

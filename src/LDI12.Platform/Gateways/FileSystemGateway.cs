@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using LDI12.Core.Diagnostics;
 using LDI12.Core.Execution;
 using LDI12.Core.Logging;
 using LDI12.Platform.Native;
+using Microsoft.Win32.SafeHandles;
 
 namespace LDI12.Platform.Gateways
 {
@@ -257,6 +260,13 @@ namespace LDI12.Platform.Gateways
         /// ressemble à une sauvegarde, et c'est exactement ce qui rend son existence pire que
         /// son absence.
         /// </para>
+        /// <para>
+        /// <b>Et quand l'effacer est impossible</b>, parce que le support vient d'être débranché,
+        /// la copie ne porte pas encore son vrai nom : elle s'écrit sous
+        /// <see cref="FileCopyRequest.PartialSuffix"/>, et n'est renommée qu'une fois relue
+        /// identique. Un fichier qui porte son vrai nom a donc toujours été vérifié, et une reprise
+        /// peut s'y fier.
+        /// </para>
         /// </remarks>
         public FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken)
         {
@@ -279,54 +289,83 @@ namespace LDI12.Platform.Gateways
 
                 var destination = Extended(request.Destination);
 
+                // FAT32 refuse tout fichier de 4 Go ou plus : le dire d'emblée, sous son vrai nom,
+                // plutôt que d'écrire des gigaoctets pour échouer sur un motif trompeur.
+                if (source.SizeBytes >= Fat32Limit && IsFat(destination))
+                    return FileCopyResult.Of(FileCopyOutcome.FileTooLarge, 0,
+                        "Fichier de 4 Go ou plus : le format FAT32 du support ne peut pas le recevoir.");
+
                 var existing = new FileInfo(destination);
                 if (existing.Exists)
-                    return existing.Length == info.Length && existing.LastWriteTimeUtc == info.LastWriteTimeUtc
+                    return existing.Length == info.Length && SameTime(existing.LastWriteTimeUtc, info.LastWriteTimeUtc)
                         ? FileCopyResult.Of(FileCopyOutcome.AlreadyPresent)
                         : FileCopyResult.Of(FileCopyOutcome.Conflict, 0,
                             "Un fichier différent porte déjà ce nom à la destination.");
 
-                var parent = Path.GetDirectoryName(destination);
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                // Le reste d'une copie interrompue du même fichier est écrasé : il est à nous, à son
+                // nom, et le vérifier d'abord coûterait un appel au support par fichier.
+                var partial = destination + FileCopyRequest.PartialSuffix;
 
                 byte[] expected;
                 long written;
+                bool dated;
 
                 try
                 {
-                    expected = Write(info, destination, out written, request.Progressed, cancellationToken);
+                    try
+                    {
+                        expected = Write(info, partial, out written, out dated, request.Progressed, cancellationToken);
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        // Le dossier n'est créé qu'au premier fichier qui en a besoin : le demander
+                        // pour chaque fichier coûtait un aller-retour au support, cent mille fois
+                        // sur un profil de navigateur.
+                        var parent = Path.GetDirectoryName(destination);
+                        if (string.IsNullOrEmpty(parent)) throw;
+                        Directory.CreateDirectory(parent);
+                        expected = Write(info, partial, out written, out dated, request.Progressed, cancellationToken);
+                    }
                 }
                 catch
                 {
-                    Discard(destination);
+                    Discard(partial);
                     throw;
                 }
 
                 // La date de la source est reportée : sans elle, une reprise de sauvegarde
-                // reverrait chaque fichier comme différent et recopierait tout.
-                try { File.SetLastWriteTimeUtc(destination, info.LastWriteTimeUtc); }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+                // reverrait chaque fichier comme différent et recopierait tout. Posée d'ordinaire
+                // pendant l'écriture ; sinon ici.
+                if (!dated)
+                {
+                    try { File.SetLastWriteTimeUtc(partial, info.LastWriteTimeUtc); }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+                }
 
-                if (!request.Verify) return FileCopyResult.Of(FileCopyOutcome.Copied, written);
-
-                byte[] actual;
                 try
                 {
-                    actual = Fingerprint(destination, request.Progressed, cancellationToken);
+                    if (request.Verify)
+                    {
+                        var actual = Fingerprint(partial, written, request.Progressed, cancellationToken);
+                        if (!Same(expected, actual))
+                        {
+                            Discard(partial);
+                            return FileCopyResult.Of(FileCopyOutcome.VerificationFailed, 0,
+                                "La copie ne se relit pas identique à la source. Elle a été retirée.");
+                        }
+                    }
+
+                    // Le renommage garde la date posée plus haut. Il échoue si un fichier du même
+                    // nom est apparu entre-temps : rien n'est écrasé, même dans ce cas.
+                    File.Move(partial, destination);
                 }
                 catch
                 {
-                    Discard(destination);
+                    Discard(partial);
                     throw;
                 }
 
-                if (!Same(expected, actual))
-                {
-                    Discard(destination);
-                    return FileCopyResult.Of(FileCopyOutcome.VerificationFailed, 0,
-                        "La copie ne se relit pas identique à la source. Elle a été retirée.");
-                }
-
+                KeepAttributes(destination, info.Attributes);
                 return FileCopyResult.Of(FileCopyOutcome.Copied, written);
             }
             catch (PathTooLongException)
@@ -346,7 +385,22 @@ namespace LDI12.Platform.Gateways
                 if (code == 0x27 || code == 0x70)
                     return FileCopyResult.Of(FileCopyOutcome.NoSpace, 0, "La destination est pleine.");
 
+                if (IsDeviceError(code))
+                    return FileCopyResult.Of(FileCopyOutcome.DeviceError, 0,
+                        "Le support ne répond plus : débranché, ou défaillant. " + ex.Message);
+
+                // 223 : fichier trop gros pour le système de fichiers de la destination.
+                if (code == 223)
+                    return FileCopyResult.Of(FileCopyOutcome.FileTooLarge, 0,
+                        "Fichier trop gros pour le format du support de destination.");
+
                 return FileCopyResult.Of(FileCopyOutcome.Locked, 0, ex.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                // Arrêt demandé au milieu d'un fichier : sa copie partielle est déjà retirée. Ce
+                // n'est pas un échec du fichier, il sera copié en entier à la reprise.
+                throw;
             }
             catch (Exception ex)
             {
@@ -355,53 +409,504 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        /// <summary>Les attributs qu'une copie garde de sa source.</summary>
+        private const FileAttributes KeptAttributes =
+            FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System | FileAttributes.Archive;
+
+        /// <summary>
+        /// Reporte les attributs de la source sur la copie, après son renommage.
+        /// </summary>
+        /// <remarks>
+        /// Sans eux, les « desktop.ini » cachés du Bureau, des Documents et des Images revenaient
+        /// visibles à la restauration, posés en icônes sur le Bureau du client. Posés après le
+        /// renommage : un fichier en lecture seule ne se renommerait plus sur certains supports.
+        /// Un refus ne fait pas échouer la copie, dont le contenu est déjà vérifié.
+        /// </remarks>
+        private static void KeepAttributes(string destination, FileAttributes source)
+        {
+            var kept = source & KeptAttributes;
+            if (kept == 0 || kept == FileAttributes.Archive) return;
+
+            try { File.SetAttributes(destination, kept); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+        }
+
+        /// <summary>
+        /// Deux dates d'écriture tenues pour égales.
+        /// </summary>
+        /// <remarks>
+        /// FAT32, format d'origine de la plupart des clés USB, ne retient les dates qu'à deux
+        /// secondes près. Comparées à l'exacte, aucune copie n'y était jamais reconnue comme déjà
+        /// faite : chaque reprise signalait tout en conflit.
+        /// </remarks>
+        internal static bool SameTime(DateTime left, DateTime right)
+            => Math.Abs((left - right).TotalSeconds) <= 2;
+
+        /// <summary>4 Gio : au-delà, FAT32 refuse le fichier.</summary>
+        internal const long Fat32Limit = 4L * 1024 * 1024 * 1024 - 1;
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _fat =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Vrai si la destination est en FAT ou FAT32. Lu une fois par volume.</summary>
+        private bool IsFat(string destination)
+        {
+            string root;
+            try { root = Path.GetPathRoot(Plain(destination)) ?? string.Empty; }
+            catch (ArgumentException) { return false; }
+            if (root.Length == 0) return false;
+
+            return _fat.GetOrAdd(root, key =>
+            {
+                try
+                {
+                    var format = new DriveInfo(key).DriveFormat;
+                    return format.StartsWith("FAT", StringComparison.OrdinalIgnoreCase) &&
+                           !format.Equals("exFAT", StringComparison.OrdinalIgnoreCase);
+                }
+                catch (Exception ex) when (ex is IOException || ex is ArgumentException || ex is UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            });
+        }
+
+        /// <summary>
+        /// Les erreurs Windows d'un support qui ne répond plus.
+        /// </summary>
+        /// <remarks>
+        /// 21 : pas prêt. 23 : erreur de lecture (CRC). 31 : défaillance générale. 55 : ressource
+        /// disparue. 483 : erreur matérielle. 1006 : volume modifié de l'extérieur, ce que rend un
+        /// support arraché. 1117 : erreur d'entrée-sortie. 1167 : périphérique déconnecté.
+        /// </remarks>
+        internal static bool IsDeviceError(int code)
+            => code == 21 || code == 23 || code == 31 || code == 55 || code == 483 ||
+               code == 1006 || code == 1117 || code == 1167;
+
+        /// <summary>Taille d'un bloc de copie.</summary>
+        private const int Block = 1024 * 1024;
+
+        /// <summary>
+        /// Tampon interne des flux : aucun. Chaque lecture et chaque écriture porte un bloc
+        /// entier, qu'un tampon de <see cref="FileStream"/> ne ferait que recopier ; et sous .NET
+        /// Framework, un dernier bloc incomplet lui ferait allouer un mégaoctet par fichier.
+        /// </summary>
+        private const int NoStreamBuffer = 1;
+
+        // Deux blocs par fil d'exécution, gardés d'un fichier à l'autre : les allouer à chaque
+        // copie coûtait deux mégaoctets par fichier sur le tas des gros objets, jamais compacté,
+        // soit des centaines de gigaoctets d'allocations pour un profil de navigateur.
+        [ThreadStatic] private static byte[][]? _blocks;
+
+        [ThreadStatic] private static HashAlgorithm? _sha256;
+
         /// <summary>Écrit la copie et rend l'empreinte de ce qui a été lu à la source.</summary>
+        /// <remarks>
+        /// L'écriture d'un bloc se fait pendant que le suivant se lit et que l'empreinte se
+        /// calcule : source et destination sont presque toujours deux supports différents, et
+        /// les faire attendre l'un l'autre revenait à additionner leurs temps au lieu de ne payer
+        /// que celui du plus lent.
+        /// </remarks>
         private static byte[] Write(
-            FileInfo source, string destination, out long written, Action<long>? progressed,
+            FileInfo source, string destination, out long written, out bool dated, Action<long>? progressed,
             CancellationToken cancellationToken)
         {
-            const int Buffer = 1024 * 1024;
-
-            written = 0;
-            using var hash = SHA256.Create();
-            using var input = new FileStream(
-                source.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, Buffer);
+            var hash = Sha256();
+            using var input = OpenSource(source.FullName);
             using var output = new FileStream(
-                destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, Buffer);
+                destination, FileMode.Create, FileAccess.Write, FileShare.None, NoStreamBuffer);
 
-            var buffer = new byte[Buffer];
-            int read;
-            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                output.Write(buffer, 0, read);
-                hash.TransformBlock(buffer, 0, read, null, 0);
-                written += read;
-                progressed?.Invoke(read);
-            }
+            // Réserver la taille d'emblée, comme robocopy : le système de fichiers alloue le
+            // fichier d'un seul tenant au lieu de l'étendre à chaque bloc, ce qui compte sur les
+            // clés et disques externes en FAT32 ou exFAT. Un support plein le dit dès ici, et
+            // non au dernier bloc.
+            var expected = source.Length;
+            if (expected > Block) output.SetLength(expected);
 
-            hash.TransformFinalBlock(buffer, 0, 0);
+            written = Pump(
+                block => input.Read(block, 0, block.Length),
+                (block, count) => output.Write(block, 0, count),
+                (block, count) => hash.TransformBlock(block, 0, count, null, 0),
+                progressed, cancellationToken);
+
+            // Une source raccourcie pendant la copie ne doit pas laisser de zéros en queue :
+            // la relecture la rejettera, mais la copie sans vérification, elle, la garderait.
+            if (written != expected && expected > Block) output.SetLength(written);
+
+            dated = SetDate(output, source.LastWriteTimeUtc);
+
+            hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return hash.Hash;
         }
 
-        private static byte[] Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
+        /// <summary>
+        /// Pose la date de la source sur la copie encore ouverte.
+        /// </summary>
+        /// <remarks>
+        /// La poser après coup rouvrait chaque fichier, soit une ouverture, une fermeture et un
+        /// passage de l'antivirus de plus par fichier. Posée par le descripteur, après la dernière
+        /// écriture, elle n'est plus modifiée à la fermeture.
+        /// </remarks>
+        private static bool SetDate(FileStream output, DateTime lastWriteUtc)
         {
-            const int Buffer = 1024 * 1024;
-
-            using var hash = SHA256.Create();
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, Buffer);
-
-            var buffer = new byte[Buffer];
-            int read;
-            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                hash.TransformBlock(buffer, 0, read, null, 0);
-                progressed?.Invoke(read);
+                var time = lastWriteUtc.ToFileTimeUtc();
+                return DiskIoNative.SetFileTime(output.SafeFileHandle, IntPtr.Zero, IntPtr.Zero, ref time);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException ||
+                                       ex is ArgumentOutOfRangeException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Ouvre la source en lecture.
+        /// </summary>
+        /// <remarks>
+        /// En mode sauvegarde, quand le processus en a le privilège (voir
+        /// <see cref="EnableBackupSemantics"/>), l'ouverture passe outre les droits du fichier sans
+        /// les modifier, comme robocopy /B : c'est ce qui permet de lire les comptes d'un autre
+        /// Windows, protégés par des droits qui ne connaissent pas le technicien.
+        /// </remarks>
+        private static Stream OpenSource(string path)
+        {
+            if (!BackupSemantics)
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, NoStreamBuffer,
+                    FileOptions.SequentialScan);
+
+            var handle = DiskIoNative.CreateFile(
+                path, DiskIoNative.GenericRead, DiskIoNative.ShareAll, IntPtr.Zero, DiskIoNative.OpenExisting,
+                DiskIoNative.FlagBackupSemantics | DiskIoNative.FlagSequentialScan, IntPtr.Zero);
+
+            if (handle.IsInvalid)
+            {
+                var code = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                if (code == 5) throw new UnauthorizedAccessException(new System.ComponentModel.Win32Exception(code).Message);
+                if (code == 2 || code == 3) throw new FileNotFoundException(new System.ComponentModel.Win32Exception(code).Message, path);
+                throw new IOException(new System.ComponentModel.Win32Exception(code).Message, unchecked((int)0x80070000) | code);
             }
 
-            hash.TransformFinalBlock(buffer, 0, 0);
+            return new FileStream(handle, FileAccess.Read, NoStreamBuffer);
+        }
+
+        /// <summary>Lecture en mode sauvegarde, activée par <see cref="EnableBackupSemantics"/>.</summary>
+        internal static bool BackupSemantics { get; private set; }
+
+        /// <summary>
+        /// Donne au processus le privilège de sauvegarde et fait lire toutes les sources avec lui.
+        /// </summary>
+        /// <remarks>
+        /// Réservé à l'hôte élevé : un administrateur détient ce privilège, désactivé par défaut.
+        /// Rend faux si Windows le refuse ; la copie se fait alors avec les droits ordinaires, et un
+        /// fichier protégé est compté comme refusé.
+        /// </remarks>
+        public static bool EnableBackupSemantics()
+        {
+            try
+            {
+                BackupSemantics = PrivilegeNative.Enable("SeBackupPrivilege");
+            }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
+            {
+                BackupSemantics = false;
+            }
+
+            return BackupSemantics;
+        }
+
+        /// <summary>
+        /// Relit la copie sur le support lui-même, et rend son empreinte.
+        /// </summary>
+        /// <remarks>
+        /// <b>Une relecture ordinaire ne relit rien.</b> Juste après l'écriture, les pages du
+        /// fichier sont encore dans le cache de Windows : une lecture ordinaire les y reprend, et
+        /// compare la mémoire vive à elle-même. Un disque externe qui accepte les écritures et
+        /// rend autre chose à la relecture passait donc la vérification, c'est-à-dire exactement
+        /// le cas pour lequel elle existe.
+        /// <para>
+        /// La relecture se fait donc sans mémoire tampon, comme la mesure de disque. Pour servir
+        /// une telle lecture, le système de fichiers commence par écrire sur le support ce que
+        /// son cache garde encore du fichier : les octets relus sont ceux du support. Seul le
+        /// cache interne du disque peut encore s'intercaler, et aucun logiciel n'y a la main.
+        /// </para>
+        /// <para>
+        /// <b>Pas de <c>FlushFileBuffers</c> à chaque fichier.</b> Il écrirait sur le support ce
+        /// que la relecture sans tampon y fait déjà écrire, et ordonnerait en plus au disque de
+        /// vider son propre cache sans pour autant empêcher la relecture d'y puiser : un aller-retour
+        /// de plus par fichier, soit des minutes sur un profil de navigateur, pour aucune preuve
+        /// supplémentaire.
+        /// </para>
+        /// <para>
+        /// <b>Le prix.</b> La copie ne profite plus de l'écriture différée : chaque fichier est
+        /// réellement sur le support avant de passer au suivant, et la relecture se fait à la
+        /// vitesse du support au lieu de celle de la mémoire. Sur un support externe, c'est à peu
+        /// près une lecture complète de la sauvegarde en plus, puisque c'est précisément ce que
+        /// la vérification prétendait faire. Le coût réel sur un support donné se mesure avec
+        /// <c>CopyReadBackMeasureTests</c>, qui copie les mêmes fichiers relus des deux façons.
+        /// </para>
+        /// <para>
+        /// Un support qui refuse la lecture sans tampon (secteurs de plus de quatre kilo-octets,
+        /// certains partages réseau) est relu par le cache, et le journal le dit une fois : mieux
+        /// vaut une vérification plus faible, annoncée, qu'une sauvegarde impossible.
+        /// </para>
+        /// </remarks>
+        private byte[] Fingerprint(string path, long length, Action<long>? progressed, CancellationToken cancellationToken)
+        {
+            if (!ReadBackThroughCache)
+            {
+                try
+                {
+                    using var reader = UnbufferedReader.Open(path, length);
+                    if (reader != null)
+                    {
+                        var direct = Sha256();
+                        Pump(reader.Read, (block, count) => direct.TransformBlock(block, 0, count, null, 0), null,
+                            progressed, cancellationToken);
+
+                        direct.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                        return direct.Hash;
+                    }
+                }
+                catch (UnbufferedReadRefusedException)
+                {
+                    // Refusée dès le premier bloc : rien n'a encore été compté, on reprend par le cache.
+                }
+
+                if (!_cachedReadBackLogged)
+                {
+                    _cachedReadBackLogged = true;
+                    _log.Warn("Relecture sans mémoire tampon refusée par la destination de " + path +
+                              " : la vérification des copies passe par le cache de Windows.");
+                }
+            }
+
+            var hash = Sha256();
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.Read, NoStreamBuffer, FileOptions.SequentialScan);
+
+            Pump(block => stream.Read(block, 0, block.Length),
+                (block, count) => hash.TransformBlock(block, 0, count, null, 0), null,
+                progressed, cancellationToken);
+
+            hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return hash.Hash;
+        }
+
+        /// <summary>
+        /// Relire les copies par le cache de Windows, comme avant.
+        /// </summary>
+        /// <remarks>
+        /// N'existe que pour mesurer ce que coûte la relecture sur le support : l'application ne
+        /// le règle jamais.
+        /// </remarks>
+        internal bool ReadBackThroughCache { get; set; }
+
+        private bool _cachedReadBackLogged;
+
+        /// <summary>
+        /// Lecture séquentielle sans mémoire tampon, bloc par bloc.
+        /// </summary>
+        /// <remarks>
+        /// Les conditions sont celles de <see cref="DiskIoNative"/> : tampon aligné sur une page,
+        /// transferts multiples de quatre kilo-octets. Le dernier secteur d'un fichier n'est
+        /// généralement pas plein : la lecture demande un secteur entier et Windows ne rend que
+        /// les octets du fichier. Après elle, la position n'est plus alignée, et une lecture de
+        /// plus serait refusée au lieu de rendre zéro : la fin est donc retenue ici.
+        /// </remarks>
+        private sealed class UnbufferedReader : IDisposable
+        {
+            private readonly SafeFileHandle _file;
+            private readonly DiskIoNative.AlignedBuffer _buffer;
+            private bool _started;
+            private bool _ended;
+
+            private UnbufferedReader(SafeFileHandle file, DiskIoNative.AlignedBuffer buffer)
+            {
+                _file = file;
+                _buffer = buffer;
+            }
+
+            /// <summary>Ouvre le fichier, ou rend nul si ce support ne sait pas lire sans tampon.</summary>
+            internal static UnbufferedReader? Open(string path, long length)
+            {
+                SafeFileHandle file;
+                try
+                {
+                    file = DiskIoNative.CreateFile(
+                        path, DiskIoNative.GenericRead, DiskIoNative.ShareRead, IntPtr.Zero,
+                        DiskIoNative.OpenExisting, DiskIoNative.FlagNoBuffering | DiskIoNative.FlagSequentialScan,
+                        IntPtr.Zero);
+                }
+                catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
+                {
+                    return null;
+                }
+
+                if (file.IsInvalid)
+                {
+                    var code = (uint)Marshal.GetLastWin32Error();
+                    file.Dispose();
+                    if (code == DiskIoNative.ErrorInvalidParameter || code == DiskIoNative.ErrorNotSupported)
+                        return null;
+                    throw Failure(code, path);
+                }
+
+                // Un petit fichier n'a pas besoin d'un mégaoctet : un tampon à sa taille, arrondie
+                // à la page, suffit à le lire en une fois.
+                var pages = Math.Max(1, Math.Min(Block, length + DiskIoNative.Alignment - 1) / DiskIoNative.Alignment);
+                return new UnbufferedReader(file, new DiskIoNative.AlignedBuffer((int)pages * DiskIoNative.Alignment));
+            }
+
+            internal int Read(byte[] block)
+            {
+                if (_ended) return 0;
+
+                var wanted = Math.Min(block.Length, _buffer.Size);
+                if (!DiskIoNative.ReadFile(_file, _buffer.Address, wanted, out var read, IntPtr.Zero))
+                {
+                    var code = (uint)Marshal.GetLastWin32Error();
+                    if (!_started && code == DiskIoNative.ErrorInvalidParameter)
+                        throw new UnbufferedReadRefusedException();
+                    throw Failure(code, null);
+                }
+
+                _started = true;
+                if (read < wanted) _ended = true;
+
+                Marshal.Copy(_buffer.Address, block, 0, read);
+                return read;
+            }
+
+            public void Dispose()
+            {
+                _file.Dispose();
+                _buffer.Dispose();
+            }
+
+            /// <summary>
+            /// L'erreur Windows sous la forme que <see cref="Copy"/> sait classer : refus d'accès,
+            /// ou entrée-sortie portant son code, qui distingue un disque plein d'un fichier tenu.
+            /// </summary>
+            private static Exception Failure(uint code, string? path)
+            {
+                var message = new Win32Exception((int)code).Message + (path == null ? string.Empty : " : " + path);
+                return code == DiskIoNative.ErrorAccessDenied
+                    ? new UnauthorizedAccessException(message)
+                    : new IOException(message, unchecked((int)0x80070000) | (int)code);
+            }
+        }
+
+        /// <summary>Le support refuse la lecture sans tampon, avant qu'un seul octet ait été lu.</summary>
+        private sealed class UnbufferedReadRefusedException : Exception
+        {
+        }
+
+        /// <summary>
+        /// Lit bloc par bloc, et traite chaque bloc pendant que le suivant se lit.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="read"/> remplit un bloc et rend le nombre d'octets lus, zéro à la fin.
+        /// <paramref name="background"/> part sur un autre fil pendant que la lecture suivante
+        /// avance ; <paramref name="alongside"/>, s'il est donné, s'exécute sur ce fil-ci en même
+        /// temps que lui, sur le même bloc, que ni l'un ni l'autre ne modifie. Deux blocs
+        /// alternent : celui qu'on lit n'est jamais celui qu'on traite. Un bloc incomplet, qui
+        /// est le dernier ou le seul d'un petit fichier, est traité sur place : il n'y a plus
+        /// rien à lire en parallèle, et changer de fil coûterait plus qu'il ne rapporte.
+        /// <para>
+        /// L'avancement n'est annoncé qu'une fois le bloc traité, et toujours depuis ce fil :
+        /// celui qui le reçoit n'a pas à être prêt à être appelé de deux endroits à la fois.
+        /// </para>
+        /// </remarks>
+        private static long Pump(
+            Func<byte[], int> read, Action<byte[], int> background, Action<byte[], int>? alongside,
+            Action<long>? progressed, CancellationToken cancellationToken)
+        {
+            var blocks = _blocks ??= new[] { new byte[Block], new byte[Block] };
+            var current = 0;
+            long total = 0;
+
+            Task? pending = null;
+            var pendingCount = 0;
+
+            try
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var block = blocks[current];
+                    var count = read(block);
+
+                    if (pending != null)
+                    {
+                        var finished = pending;
+                        pending = null;
+
+                        // GetResult et non Wait : l'exception d'origine remonte telle quelle,
+                        // avec son code, et un disque plein reste reconnu comme tel.
+                        finished.GetAwaiter().GetResult();
+                        progressed?.Invoke(pendingCount);
+                    }
+
+                    if (count == 0) return total;
+                    total += count;
+
+                    if (count < block.Length)
+                    {
+                        background(block, count);
+                        alongside?.Invoke(block, count);
+                        progressed?.Invoke(count);
+                        continue;
+                    }
+
+                    pendingCount = count;
+                    pending = Task.Run(() => background(block, count));
+                    alongside?.Invoke(block, count);
+                    current ^= 1;
+                }
+            }
+            finally
+            {
+                // Jamais de bloc encore en cours d'écriture quand le flux se ferme, ni quand
+                // le tampon repart servir au fichier suivant.
+                if (pending != null)
+                    try { pending.Wait(); }
+                    catch (AggregateException) { }
+            }
+        }
+
+        /// <summary>
+        /// L'empreinte SHA-256, par l'implémentation de Windows quand elle est disponible.
+        /// </summary>
+        /// <remarks>
+        /// Sous .NET Framework, <c>SHA256.Create()</c> rend l'implémentation managée, plusieurs
+        /// fois plus lente que celle de Windows et plus lente qu'un SSD externe en USB 3 : chaque
+        /// octet copié passant deux fois par l'empreinte, c'était elle, et non le disque, qui
+        /// fixait la vitesse de la sauvegarde. Elle est en outre refusée sur une machine
+        /// configurée en mode FIPS. L'instance est gardée d'un fichier à l'autre et remise à zéro
+        /// avant chaque usage.
+        /// </remarks>
+        private static HashAlgorithm Sha256()
+        {
+            var hash = _sha256 ??= CreateSha256();
+            hash.Initialize();
+            return hash;
+        }
+
+        private static HashAlgorithm CreateSha256()
+        {
+            try
+            {
+                return new SHA256Cng();
+            }
+            catch (Exception ex) when (ex is PlatformNotSupportedException || ex is CryptographicException ||
+                                       ex is NotImplementedException)
+            {
+                return SHA256.Create();
+            }
         }
 
         private static bool Same(byte[] left, byte[] right)
@@ -416,6 +921,20 @@ namespace LDI12.Platform.Gateways
         {
             try { if (File.Exists(path)) File.Delete(path); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+        }
+
+        public string? VolumeFormat(string path)
+        {
+            try
+            {
+                var root = Path.GetPathRoot(Path.GetFullPath(Plain(path)));
+                return string.IsNullOrEmpty(root) ? null : new DriveInfo(root).DriveFormat;
+            }
+            catch (Exception ex) when (ex is IOException || ex is ArgumentException || ex is UnauthorizedAccessException ||
+                                       ex is NotSupportedException)
+            {
+                return null;
+            }
         }
 
         public bool CreateDirectory(string path)
@@ -560,7 +1079,7 @@ namespace LDI12.Platform.Gateways
             if (string.IsNullOrEmpty(path)) return path;
 
             if (path.StartsWith(@"\\?\", StringComparison.Ordinal))
-                return accepted ? path : Ordinary(path);
+                return accepted || IsDevicePath(path) ? path : Ordinary(path);
 
             var full = Path.GetFullPath(path);
             if (!accepted) return full;
@@ -572,7 +1091,18 @@ namespace LDI12.Platform.Gateways
 
         /// <summary>Le chemin tel que le reste du logiciel le manipule : jamais sous forme étendue.</summary>
         internal static string Plain(string path)
-            => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? Ordinary(path) : path;
+            => path.StartsWith(@"\\?\", StringComparison.Ordinal) && !IsDevicePath(path) ? Ordinary(path) : path;
+
+        /// <summary>
+        /// Un chemin de périphérique, comme celui d'un cliché instantané
+        /// (<c>\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy3\…</c>).
+        /// </summary>
+        /// <remarks>
+        /// Il n'a pas de forme ordinaire : sans son préfixe, il ne désigne plus rien. Il reste donc
+        /// tel quel d'un bout à l'autre, relevé comme copie.
+        /// </remarks>
+        internal static bool IsDevicePath(string path)
+            => path.StartsWith(@"\\?\GLOBALROOT\", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Retire le préfixe étendu : <c>\\?\UNC\srv\part</c> redevient <c>\\srv\part</c>.</summary>
         internal static string Ordinary(string path)

@@ -104,13 +104,18 @@ namespace LDI12.Actions.Backup
 
         /// <summary>Les applications présentes sur cette machine, dans l'ordre où la fiche les présente.</summary>
         public static IReadOnlyList<AppDataApplication> Detect(IFileSystemGateway files)
+            => Detect(files, ProfileRoots.Current());
+
+        /// <summary>Les applications d'un compte donné : celui de la session, ou celui d'un autre Windows.</summary>
+        public static IReadOnlyList<AppDataApplication> Detect(IFileSystemGateway files, ProfileRoots roots)
         {
             if (files == null) throw new ArgumentNullException(nameof(files));
+            if (roots == null) throw new ArgumentNullException(nameof(roots));
 
-            var local = Special(Environment.SpecialFolder.LocalApplicationData);
-            var roaming = Special(Environment.SpecialFolder.ApplicationData);
-            var profile = Special(Environment.SpecialFolder.UserProfile);
-            var documents = Special(Environment.SpecialFolder.MyDocuments);
+            var local = roots.LocalAppData;
+            var roaming = roots.RoamingAppData;
+            var profile = roots.Profile;
+            var documents = roots.Documents;
 
             var found = new List<AppDataApplication>();
 
@@ -118,6 +123,12 @@ namespace LDI12.Actions.Backup
                 "le gestionnaire de mots de passe de Google (chrome://password-manager/settings)"));
             Add(found, Chromium(files, "Microsoft Edge", Combine(local, @"Microsoft\Edge\User Data"), "msedge.exe",
                 "les paramètres de mots de passe d'Edge (edge://settings/passwords)"));
+            Add(found, Chromium(files, "Brave", Combine(local, @"BraveSoftware\Brave-Browser\User Data"), "brave.exe",
+                "les paramètres de mots de passe de Brave (brave://settings/passwords)"));
+            Add(found, Chromium(files, "Vivaldi", Combine(local, @"Vivaldi\User Data"), "vivaldi.exe",
+                "les paramètres de mots de passe de Vivaldi (vivaldi://settings/passwords)"));
+            Add(found, Opera(files, "Opera", Combine(roaming, @"Opera Software\Opera Stable"), "opera.exe"));
+            Add(found, Opera(files, "Opera GX", Combine(roaming, @"Opera Software\Opera GX Stable"), "opera.exe"));
             Add(found, Mozilla(files, "Mozilla Firefox", Combine(roaming, @"Mozilla\Firefox"), "firefox.exe", mail: false));
             Add(found, Mozilla(files, "Mozilla Thunderbird", Combine(roaming, "Thunderbird"), "thunderbird.exe", mail: true));
             Add(found, Outlook(files, local, roaming, documents));
@@ -125,6 +136,8 @@ namespace LDI12.Actions.Backup
             Add(found, OneNote(files, local));
             Add(found, Teams(files, local, roaming));
             Add(found, SavedGames(files, profile));
+            Add(found, Office(files, roaming));
+            Add(found, Desktop(files, local, roaming));
 
             return found;
         }
@@ -183,10 +196,10 @@ namespace LDI12.Actions.Backup
                 },
                 Limits = new[]
                 {
-                    "Les mots de passe et les cookies sont chiffrés par Windows pour ce compte, sur cette " +
-                    "installation. Ils ne se déchiffreront pas sur un Windows réinstallé, même recopiés.",
-                    "Les connexions aux sites seront à rouvrir. Favoris, historique, extensions et réglages " +
-                    "suivent la copie.",
+                    "Les mots de passe sont chiffrés par une clé que Windows protège pour ce compte : ils ne " +
+                    "suivent que si l'option « Mots de passe des navigateurs » est cochée, qui emporte cette clé.",
+                    "Certaines connexions aux sites seront à rouvrir : les cookies récents sont aussi liés à " +
+                    "l'installation du navigateur. Favoris, historique, extensions et réglages suivent la copie.",
                 },
                 Restore = new[]
                 {
@@ -454,6 +467,114 @@ namespace LDI12.Actions.Backup
                 Restore = new[] { "Copier le contenu de « " + target + " » dans " + Display(root) + "." },
             };
         }
+
+        /// <summary>
+        /// Opera : un seul profil, rangé directement dans son dossier, sans dossier « Default ».
+        /// </summary>
+        /// <remarks>
+        /// Le dossier entier part, sans ses caches, et revient tel quel. Sa clé de mots de passe
+        /// n'est pas reprise : Opera la range avec le profil, et la rechiffrer demanderait de
+        /// toucher au fichier qu'Opera relit à chaque démarrage. Sa synchronisation les ramène.
+        /// </remarks>
+        private static AppDataApplication? Opera(IFileSystemGateway files, string name, string root, string process)
+        {
+            if (!files.FileExists(Path.Combine(root, "Preferences"))) return null;
+
+            var target = Path.Combine(Folder, name);
+            return new AppDataApplication
+            {
+                Name = name,
+                Sources = new[] { new AppDataSource { Root = root, Target = target, ExcludeRelative = ChromiumCaches } },
+                Processes = new[] { process },
+                BeforeWipe = new[] { "Mots de passe de " + name + " : vérifier que la synchronisation du compte Opera est active." },
+                Limits = new[]
+                {
+                    "Les mots de passe sont chiffrés pour cette installation de Windows : ils reviendront par la " +
+                    "synchronisation du compte Opera. Favoris, historique, extensions et réglages suivent la copie.",
+                },
+                Restore = new[]
+                {
+                    "Installer " + name + ", l'ouvrir une fois puis le fermer.",
+                    "Remplacer le contenu de " + Display(root) + " par celui du dossier « " + target + " » de la sauvegarde.",
+                },
+            };
+        }
+
+        /// <summary>
+        /// Ce que Word et Outlook apprennent avec le temps : le dictionnaire personnel, les modèles,
+        /// les insertions automatiques et la correction automatique.
+        /// </summary>
+        private static AppDataApplication? Office(IFileSystemGateway files, string roaming)
+        {
+            var target = Path.Combine(Folder, "Office");
+            var sources = new List<AppDataSource>();
+
+            void Take(string relative, string name, bool topLevel = false, Func<string, bool>? keep = null)
+            {
+                var root = Combine(roaming, relative);
+                if (root.Length > 0 && files.DirectoryExists(root))
+                    sources.Add(new AppDataSource { Root = root, Target = Path.Combine(target, name), TopLevelOnly = topLevel, Keep = keep });
+            }
+
+            Take(@"Microsoft\UProof", "Dictionnaires");
+            Take(@"Microsoft\Templates", "Modèles");
+            Take(@"Microsoft\Document Building Blocks", "Insertions automatiques");
+            Take(@"Microsoft\Office", "Correction automatique", topLevel: true,
+                keep: file => file.EndsWith(".acl", StringComparison.OrdinalIgnoreCase));
+            if (sources.Count == 0) return null;
+
+            return new AppDataApplication
+            {
+                Name = "Office : dictionnaire et modèles",
+                Sources = sources,
+                Processes = new[] { "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe" },
+                Limits = new[]
+                {
+                    "Si Word a déjà été ouvert sur le nouveau PC, son modèle Normal.dotm neuf est gardé : celui " +
+                    "de la sauvegarde reste dans le dossier « " + Path.Combine(target, "Modèles") + " ».",
+                },
+                Restore = new[] { "Fermer Word, Excel et Outlook avant la restauration." },
+            };
+        }
+
+        /// <summary>Le fond d'écran et les polices installées pour le compte seul.</summary>
+        private static AppDataApplication? Desktop(IFileSystemGateway files, string local, string roaming)
+        {
+            var target = Path.Combine(Folder, "Environnement");
+            var sources = new List<AppDataSource>();
+
+            var themes = Combine(roaming, @"Microsoft\Windows\Themes");
+            if (themes.Length > 0 && files.FileExists(Path.Combine(themes, "TranscodedWallpaper")))
+                sources.Add(new AppDataSource
+                {
+                    Root = themes,
+                    Target = Path.Combine(target, "Fond d'écran"),
+                    TopLevelOnly = true,
+                    Keep = file => string.Equals(file, "TranscodedWallpaper", StringComparison.OrdinalIgnoreCase),
+                });
+
+            var fonts = Combine(local, @"Microsoft\Windows\Fonts");
+            if (fonts.Length > 0 && files.DirectoryExists(fonts))
+                sources.Add(new AppDataSource { Root = fonts, Target = Path.Combine(target, "Polices"), Keep = IsFont });
+
+            if (sources.Count == 0) return null;
+
+            return new AppDataApplication
+            {
+                Name = "Fond d'écran et polices",
+                Sources = sources,
+                Limits = new[]
+                {
+                    "Les polices installées pour tous les utilisateurs (C:\\Windows\\Fonts) ne sont pas copiées : " +
+                    "elles viennent des logiciels, qui les réinstallent.",
+                },
+                Restore = new[] { "La restauration remet le fond d'écran et réinscrit les polices pour le compte." },
+            };
+        }
+
+        internal static bool IsFont(string file)
+            => file.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".otf", StringComparison.OrdinalIgnoreCase) ||
+               file.EndsWith(".ttc", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".fon", StringComparison.OrdinalIgnoreCase);
 
         private static void Add(ICollection<AppDataApplication> found, AppDataApplication? application)
         {

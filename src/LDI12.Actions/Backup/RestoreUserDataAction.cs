@@ -36,6 +36,9 @@ namespace LDI12.Actions.Backup
 
         public IReadOnlyList<string> MissingSoftware { get; init; } = Array.Empty<string>();
 
+        /// <summary>Les lecteurs réseau à reconnecter dans cette session.</summary>
+        public IReadOnlyList<NetworkDrive> NetworkDrives { get; init; } = Array.Empty<NetworkDrive>();
+
         public long Bytes { get; init; }
 
         public int Files { get; init; }
@@ -65,6 +68,15 @@ namespace LDI12.Actions.Backup
 
         /// <summary>« 0 » : ne pas réimporter les profils Wi-Fi. Absent : ils sont réimportés.</summary>
         public const string WifiParameter = "wifi";
+
+        /// <summary>« 0 » ne reconnecte pas les lecteurs réseau de la sauvegarde. Absent : reconnectés.</summary>
+        public const string NetworkDrivesParameter = "network-drives";
+
+        /// <summary>La lecture mesurée du support de la sauvegarde, voir <see cref="ReadSpeed.Encode"/>.</summary>
+        public const string SourceSpeedParameter = "source-speed";
+
+        /// <summary>La vitesse mesurée du disque de cette machine, voir <see cref="CopySpeed.Encode"/>.</summary>
+        public const string TargetSpeedParameter = "target-speed";
 
         private const double SpaceMargin = 1.05;
 
@@ -156,6 +168,8 @@ namespace LDI12.Actions.Backup
                 long size = 0;
                 foreach (var file in scan.Value.Files)
                 {
+                    // Le reste d'une copie interrompue pendant la sauvegarde : jamais vérifié, jamais restauré.
+                    if (file.Path.EndsWith(FileCopyRequest.PartialSuffix, StringComparison.OrdinalIgnoreCase)) continue;
                     if (item.Keep != null && !item.Keep(Path.GetFileName(file.Path))) continue;
                     kept.Add(file);
                     size += file.SizeBytes;
@@ -176,13 +190,25 @@ namespace LDI12.Actions.Backup
 
             var wifi = withWifi ? layout.WifiProfiles : Array.Empty<string>();
 
-            if (files == 0 && wifi.Count == 0)
+            // Les lecteurs réseau, sauf ceux dont la lettre est déjà prise ici.
+            var drives = new List<NetworkDrive>();
+            var taken = new List<string>();
+            if (context.Parameter(NetworkDrivesParameter) != "0")
+            {
+                var document = context.Files.ReadText(Path.Combine(backup, MachineSettings.FileName));
+                foreach (var drive in MachineSettings.Read(document.HasValue ? document.Value : null).Drives)
+                    if (context.Files.DirectoryExists(drive.Letter + "\\")) taken.Add(drive.Letter + " (" + drive.Path + ")");
+                    else drives.Add(drive);
+            }
+
+            if (files == 0 && wifi.Count == 0 && drives.Count == 0)
                 return new ActionPreview
                 {
                     Outcome = PreviewOutcome.NothingToDo,
                     Summary = blockedByProcess.Count > 0
                         ? "Rien ne peut être restauré tant que ces programmes sont ouverts : " +
-                          string.Join(", ", blockedByProcess) + "."
+                          string.Join(", ", blockedByProcess) + ". Le bouton « Fermer navigateurs et messagerie » les ferme, " +
+                          "y compris en arrière-plan, et prépare de nouveau."
                         : "La sauvegarde « " + Path.GetFileName(backup) + " » ne contient rien à remettre sur cette machine.",
                 };
 
@@ -199,6 +225,13 @@ namespace LDI12.Actions.Backup
                 new PreviewLine("À restaurer", ValueFormat.Bytes(bytes) + " en " + files + " fichier(s)"),
             };
 
+            var state = BackupState.Parse(Text(context, Path.Combine(backup, BackupState.FileName)));
+            if (state != null && state.State != BackupProgressState.Finished)
+                measurements.Add(new PreviewLine("Sauvegarde incomplète",
+                    "elle s'est arrêtée avant la fin. Ce qu'elle contient a été vérifié et se restaure, mais des " +
+                    "fichiers peuvent manquer : la reprendre sur l'ancienne machine si elle est encore disponible",
+                    PreviewLineKind.Caution));
+
             if (others > 0)
                 measurements.Add(new PreviewLine("Autres sauvegardes",
                     others + " plus ancienne(s) dans le même dossier, laissée(s) de côté", PreviewLineKind.Caution));
@@ -211,7 +244,31 @@ namespace LDI12.Actions.Backup
             if (blockedByProcess.Count > 0)
                 measurements.Add(new PreviewLine("Programmes ouverts",
                     string.Join(", ", blockedByProcess) + ". Leurs données ne seront pas restaurées tant qu'ils ne sont " +
-                    "pas fermés : les fermer, puis préparer de nouveau", PreviewLineKind.Caution));
+                    "pas fermés. Le bouton « Fermer navigateurs et messagerie » les ferme, y compris en arrière-plan " +
+                    "(Edge y reste souvent), et prépare de nouveau", PreviewLineKind.Caution));
+
+            // La durée : les deux supports doivent avoir été mesurés, la sauvegarde qu'on lit et le
+            // disque qui reçoit. Les pilotes et les applications n'y figurent pas : les premiers
+            // prennent quelques minutes, les secondes dépendent de la connexion.
+            var sourceSpeed = ReadSpeed.Decode(context.Parameter(SourceSpeedParameter));
+            var targetSpeed = CopySpeed.Decode(context.Parameter(TargetSpeedParameter));
+            string? duration = null;
+            if (files > 0 && sourceSpeed != null && targetSpeed != null)
+            {
+                duration = CopyEstimate.Describe(CopyEstimate.RestoreDuration(bytes, files, sourceSpeed, targetSpeed));
+                measurements.Add(new PreviewLine("Durée estimée",
+                    duration + " pour les fichiers, d'après la mesure des deux disques : sauvegarde en " +
+                    CopyEstimate.Speeds(sourceSpeed) + ", cette machine en " + CopyEstimate.Speeds(targetSpeed) +
+                    ". Sans compter les applications, qui dépendent de la connexion"));
+
+                if (CopyEstimate.Advice(sourceSpeed) is string advice)
+                    measurements.Add(new PreviewLine("Support lent", advice, PreviewLineKind.Caution));
+            }
+            else if (files > 0)
+            {
+                measurements.Add(new PreviewLine("Durée estimée",
+                    "non estimée : les deux disques n'ont pas encore été mesurés"));
+            }
 
             if (missing.Count > 0)
                 measurements.Add(new PreviewLine("Logiciels à réinstaller",
@@ -223,8 +280,12 @@ namespace LDI12.Actions.Backup
                 var item = folder.Item;
                 if (item.Mode == RestoreMode.ChromiumLocalState)
                 {
-                    willDo.Add("Ajouter les profils restaurés à la liste des profils de " + item.Application +
-                               ", sans reprendre l'ancienne clé de chiffrement");
+                    willDo.Add(context.Files.FileExists(KeyFile(item))
+                        ? "Ajouter les profils restaurés à la liste des profils de " + item.Application + ", et lui remettre la " +
+                          "clé des mots de passe de la sauvegarde, rechiffrée pour ce compte : les mots de passe enregistrés " +
+                          "reviennent. Les profils de " + item.Application + " qui ne viennent pas de la sauvegarde perdront les leurs"
+                        : "Ajouter les profils restaurés à la liste des profils de " + item.Application +
+                          ", sans reprendre l'ancienne clé de chiffrement : les mots de passe enregistrés ne reviendront pas");
                     continue;
                 }
 
@@ -241,6 +302,10 @@ namespace LDI12.Actions.Backup
             if (wifi.Count > 0)
                 willDo.Add("Réimporter " + wifi.Count + " profil(s) Wi-Fi pour ce compte");
 
+            foreach (var drive in drives)
+                willDo.Add("Reconnecter le lecteur réseau " + drive.Letter + " à " + drive.Path +
+                           (drive.User == null ? string.Empty : ", avec le compte " + drive.User));
+
             var willNotDo = new List<string>
             {
                 "Ne supprime rien sur cette machine : un profil remplacé est renommé et laissé à côté, à effacer une " +
@@ -251,11 +316,14 @@ namespace LDI12.Actions.Backup
                 "Ne réinstalle aucun logiciel : ceux qui manquent sont listés ci-dessous.",
             };
 
-            if (HasChromium(folders))
+            if (HasChromium(folders) && !HasBrowserKey(context, folders))
                 willNotDo.Add("Ne ramène pas les mots de passe ni les connexions aux sites de Chrome et d'Edge : ils étaient " +
                               "chiffrés pour l'ancienne installation. Favoris, historique, extensions et réglages reviennent. " +
                               "Le navigateur peut aussi remettre à zéro sa page d'accueil et son moteur de recherche, qu'il " +
                               "lie à la machine.");
+
+            foreach (var letter in taken)
+                willNotDo.Add("Ne reconnecte pas le lecteur réseau " + letter + " : cette lettre est déjà prise sur cette machine.");
 
             if (!withWifi && layout.WifiProfiles.Count > 0)
                 willNotDo.Add("Ne réimporte pas les " + layout.WifiProfiles.Count + " profil(s) Wi-Fi : l'option n'est pas cochée.");
@@ -268,7 +336,8 @@ namespace LDI12.Actions.Backup
             {
                 Outcome = PreviewOutcome.Ready,
                 Summary = ValueFormat.Bytes(bytes) + " en " + files + " fichier(s) seront restaurés depuis « " +
-                          Path.GetFileName(backup) + " », puis relus un par un.",
+                          Path.GetFileName(backup) + " », puis relus un par un." +
+                          (duration == null ? string.Empty : " Durée estimée : " + duration + "."),
                 WillDo = willDo,
                 WillNotDo = willNotDo,
                 Measurements = measurements,
@@ -278,6 +347,7 @@ namespace LDI12.Actions.Backup
                     Folders = folders,
                     WifiProfiles = wifi,
                     MissingSoftware = missing,
+                    NetworkDrives = drives,
                     Bytes = bytes,
                     Files = files,
                 },
@@ -304,6 +374,13 @@ namespace LDI12.Actions.Backup
             long written = 0;
             var itemsFailed = 0;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Restauration de");
+
+            // Plein, ou sauvegarde disparue : chaque fichier restant échouerait. Vérifié sur les fils
+            // de copie, seulement après un échec.
+            var copier = new BatchCopier(context.Files, tracker, result =>
+                result.Outcome == FileCopyOutcome.NoSpace ||
+                (result.Outcome != FileCopyOutcome.Copied && result.Outcome != FileCopyOutcome.AlreadyPresent &&
+                 !context.Files.DirectoryExists(plan.Backup)));
 
             foreach (var folder in plan.Folders)
             {
@@ -345,19 +422,19 @@ namespace LDI12.Actions.Backup
                 }
 
                 int here = 0, hereSkipped = 0, hereFailed = 0;
+                var noSpace = false;
+
+                var items = new List<(FileEntry File, string Target)>(folder.Files.Count);
                 foreach (var file in folder.Files)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     var relative = file.Path.Length > item.Source.Length
                         ? file.Path.Substring(item.Source.Length).TrimStart('\\', '/')
                         : Path.GetFileName(file.Path);
+                    items.Add((file, Path.Combine(item.Destination, relative)));
+                }
 
-                    var result = context.Files.Copy(
-                        new FileCopyRequest(file, Path.Combine(item.Destination, relative)) { Progressed = tracker.Bytes },
-                        cancellationToken);
-                    tracker.FileDone(file.SizeBytes);
-
+                var completed = copier.Run(items, (_, result) =>
+                {
                     switch (result.Outcome)
                     {
                         case FileCopyOutcome.Copied: here++; written += result.Bytes; break;
@@ -365,17 +442,35 @@ namespace LDI12.Actions.Backup
                         default: hereFailed++; break;
                     }
 
-                    if (result.Outcome == FileCopyOutcome.NoSpace)
+                    noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+                }, cancellationToken);
+
+                if (!completed)
+                {
+                    copied += here; skipped += hereSkipped; failed += hereFailed;
+
+                    if (noSpace)
                     {
                         details.Add(item.Label + " : restauration interrompue, le disque est plein.");
-                        copied += here; skipped += hereSkipped; failed += hereFailed;
-                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch, true);
+                        return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
+                            " : restauration interrompue, le disque est plein.");
                     }
+
+                    // Le support de la sauvegarde débranché : chaque fichier restant échouerait.
+                    // Ce qui est déjà restauré porte son vrai nom et a été vérifié : relancer la
+                    // restauration le reconnaîtra et ne refera que le reste.
+                    details.Add(item.Label + " : restauration interrompue, le support de la sauvegarde ne répond plus.");
+                    return Finish(plan, copied, skipped, failed, written, itemsFailed + 1, details, stopwatch,
+                        " : restauration interrompue, le support de la sauvegarde ne répond plus. Rebranchez-le et " +
+                        "relancez : les fichiers déjà restaurés ne seront pas recopiés.");
                 }
 
                 copied += here;
                 skipped += hereSkipped;
                 failed += hereFailed;
+
+                if (item.AfterCopy != RestoreAfterCopy.None && here + hereSkipped > 0)
+                    details.Add(item.Label + " : " + await AfterCopyAsync(context, item, items, cancellationToken).ConfigureAwait(false));
 
                 var text = item.Label + " : " + here + " fichier(s) restaurés";
                 if (hereSkipped > 0) text += ", " + hereSkipped + " déjà présent(s)";
@@ -389,17 +484,30 @@ namespace LDI12.Actions.Backup
                 details.Add("Wi-Fi : " + await WifiAsync(context, plan.WifiProfiles, cancellationToken).ConfigureAwait(false));
             }
 
+            if (plan.NetworkDrives.Count > 0)
+            {
+                progress?.Report(new ActionProgress("Reconnexion des lecteurs réseau…", 1));
+                details.Add("Lecteurs réseau : " + await NetworkDrivesAsync(context, plan.NetworkDrives, cancellationToken).ConfigureAwait(false));
+            }
+
             if (plan.MissingSoftware.Count > 0)
                 details.Add("Logiciels encore à réinstaller : " + string.Join(", ", plan.MissingSoftware) + ".");
 
-            return Finish(plan, copied, skipped, failed, written, itemsFailed, details, stopwatch, false);
+            return Finish(plan, copied, skipped, failed, written, itemsFailed, details, stopwatch, null);
+        }
+
+        private static string? Text(ActionContext context, string path)
+        {
+            var text = context.Files.ReadText(path);
+            return text.HasValue ? text.Value : null;
         }
 
         private static ActionOutcome Finish(
             RestorePlan plan, int copied, int skipped, int failed, long written, int itemsFailed,
-            List<string> details, Stopwatch stopwatch, bool interrupted)
+            List<string> details, Stopwatch stopwatch, string? interruption)
         {
             stopwatch.Stop();
+            var interrupted = interruption != null;
 
             var status = interrupted || failed > 0 || itemsFailed > 0
                 ? copied > 0 ? ActionStatus.PartiallySucceeded : ActionStatus.Failed
@@ -408,7 +516,7 @@ namespace LDI12.Actions.Backup
             var summary = copied + " fichier(s) restaurés et vérifiés, " + ValueFormat.Bytes(written) + " écrits";
             if (skipped > 0) summary += ", " + skipped + " déjà présent(s)";
             if (failed > 0) summary += ", " + failed + " non restauré(s)";
-            summary += interrupted ? " : restauration interrompue, le disque est plein." : ".";
+            summary += interruption ?? ".";
 
             return new ActionOutcome { Status = status, Summary = summary, Details = details, Duration = stopwatch.Elapsed };
         }
@@ -425,12 +533,31 @@ namespace LDI12.Actions.Backup
             var merged = ChromiumLocalState.Merge(saved.Value, exists ? current.Value : null, item.Profiles);
             if (merged == null) return "la liste des profils de la sauvegarde est illisible, elle n'a pas été reprise.";
 
+            // La clé des mots de passe, quand la sauvegarde l'a emportée : rechiffrée pour ce compte.
+            string? keyNote = null;
+            var keyFile = KeyFile(item);
+            if (context.Files.FileExists(keyFile))
+            {
+                var document = context.Files.ReadText(keyFile);
+                var key = BrowserKeys.Read(document.HasValue ? document.Value : null);
+                var installed = key == null ? null : BrowserKeys.Install(context.Secrets, merged, key);
+                if (installed != null)
+                {
+                    merged = installed;
+                    keyNote = " Mots de passe : clé de la sauvegarde remise, rechiffrée pour ce compte.";
+                }
+                else
+                {
+                    keyNote = " Mots de passe : la clé de la sauvegarde n'a pas pu être remise, ils ne se liront pas.";
+                }
+            }
+
             if (!exists)
             {
                 var parent = Path.GetDirectoryName(item.Destination);
                 if (!string.IsNullOrEmpty(parent)) context.Files.CreateDirectory(parent!);
                 return context.Files.WriteText(item.Destination, merged)
-                    ? "reprise de la sauvegarde, sans l'ancienne clé de chiffrement."
+                    ? keyNote == null ? "reprise de la sauvegarde, sans l'ancienne clé de chiffrement." : "reprise de la sauvegarde." + keyNote
                     : "la liste des profils n'a pas pu être écrite.";
             }
 
@@ -440,9 +567,145 @@ namespace LDI12.Actions.Backup
                 return "la liste actuelle des profils n'a pas pu être mise de côté, elle est laissée telle quelle.";
 
             return context.Files.ReplaceText(item.Destination, merged)
-                ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
+                ? keyNote == null
+                    ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
+                    : "profils restaurés ajoutés à la liste du navigateur." + keyNote
                 : "la liste des profils n'a pas pu être mise à jour.";
         }
+
+        /// <summary>
+        /// Ce qui suit la copie : les polices s'inscrivent pour le compte, le fond d'écran se remet.
+        /// </summary>
+        /// <remarks>
+        /// Une police posée dans le dossier du compte n'existe pour Windows qu'une fois inscrite dans
+        /// le registre du compte, ce que fait l'installation par clic droit. Elle est utilisable à la
+        /// prochaine ouverture de session.
+        /// </remarks>
+        private static async Task<string> AfterCopyAsync(
+            ActionContext context, RestoreItem item, IReadOnlyList<(FileEntry File, string Target)> files,
+            CancellationToken cancellationToken)
+        {
+            var script = new StringBuilder("[Console]::OutputEncoding = [Text.Encoding]::UTF8\ntry {\n");
+            var count = 0;
+
+            if (item.AfterCopy == RestoreAfterCopy.RegisterFonts)
+            {
+                script.Append("$key = 'HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'\n")
+                    .Append("if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }\n");
+                foreach (var (_, target) in files)
+                {
+                    if (!AppDataCatalog.IsFont(Path.GetFileName(target))) continue;
+                    count++;
+                    var name = Path.GetFileNameWithoutExtension(target) +
+                               (target.EndsWith(".fon", StringComparison.OrdinalIgnoreCase) ? string.Empty : " (TrueType)");
+                    script.Append("New-ItemProperty -Path $key -Name ").Append(MachineSettings.Quote(name))
+                        .Append(" -Value ").Append(MachineSettings.Quote(target)).Append(" -PropertyType String -Force | Out-Null\n");
+                }
+
+                if (count == 0) return "aucune police à inscrire.";
+            }
+            else
+            {
+                var source = Path.Combine(item.Destination, "TranscodedWallpaper");
+                var image = Path.Combine(item.Destination, "fond-ecran.jpg");
+                script.Append("if (-not (Test-Path ").Append(MachineSettings.Quote(image)).Append(")) { Copy-Item ")
+                    .Append(MachineSettings.Quote(source)).Append(' ').Append(MachineSettings.Quote(image)).Append(" -ErrorAction Stop }\n")
+                    .Append("Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class LdiWallpaper { ")
+                    .Append("[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(int a, int b, string c, int d); }'\n")
+                    .Append("if (-not [LdiWallpaper]::SystemParametersInfo(20, 0, ").Append(MachineSettings.Quote(image))
+                    .Append(", 3)) { throw 'Windows a refusé l''image' }\n");
+            }
+
+            script.Append("'OK'\n} catch { 'ERREUR ' + $_.Exception.Message }\n");
+
+            var run = await context.Processes.RunAsync(MachineSettings.PowerShell(script.ToString(), TimeSpan.FromMinutes(2)),
+                cancellationToken).ConfigureAwait(false);
+
+            string? last = null;
+            foreach (var line in run.StandardOutput.Split('\r', '\n'))
+                if (line.Trim().Length > 0) last = line.Trim();
+
+            var ok = run.Completed && last == "OK";
+            return item.AfterCopy == RestoreAfterCopy.RegisterFonts
+                ? ok ? count + " police(s) inscrite(s), utilisables à la prochaine ouverture de session."
+                     : "les polices sont copiées mais n'ont pas pu être inscrites : les installer par clic droit, Installer."
+                : ok ? "remis." : "image copiée dans Images\\Fond d'écran, mais Windows ne l'a pas appliquée : la choisir dans Paramètres, Personnalisation.";
+        }
+
+        private static bool HasBrowserKey(ActionContext context, IReadOnlyList<RestoreFolder> folders)
+        {
+            foreach (var folder in folders)
+                if (folder.Item.Mode == RestoreMode.ChromiumLocalState && context.Files.FileExists(KeyFile(folder.Item))) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Reconnecte les lecteurs réseau, dans la session : un lecteur monté par un compte élevé
+        /// resterait invisible dans l'Explorateur.
+        /// </summary>
+        /// <remarks>
+        /// <c>net use</c> le monte tout de suite quand le partage répond. Sinon (serveur éteint,
+        /// mot de passe demandé), le lecteur est inscrit pour le compte comme Windows le fait
+        /// lui-même : il apparaît dans l'Explorateur et se connecte, mot de passe demandé, au
+        /// premier clic.
+        /// </remarks>
+        internal static async Task<string> NetworkDrivesAsync(
+            ActionContext context, IReadOnlyList<NetworkDrive> drives, CancellationToken cancellationToken)
+        {
+            var mounted = new List<string>();
+            var registered = new List<string>();
+            var failed = new List<string>();
+
+            foreach (var drive in drives)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var run = await context.Processes.RunAsync(
+                    new ProcessRequest("net.exe", "use " + drive.Letter + " \"" + drive.Path + "\" /persistent:yes")
+                    {
+                        Timeout = TimeSpan.FromSeconds(45),
+                        OutputEncoding = ConsoleOutputEncoding.OemCodePage,
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                if (run.Completed && run.ExitCode == 0)
+                {
+                    mounted.Add(drive.Letter);
+                    continue;
+                }
+
+                var key = "HKCU\\Network\\" + drive.Letter.Substring(0, 1);
+                var ok = true;
+                foreach (var value in new[]
+                         {
+                             "/v RemotePath /t REG_SZ /d \"" + drive.Path + "\"",
+                             "/v UserName /t REG_SZ /d \"" + (drive.User ?? string.Empty) + "\"",
+                             "/v ProviderName /t REG_SZ /d \"Microsoft Windows Network\"",
+                             "/v ProviderType /t REG_DWORD /d 131072",
+                             "/v ConnectionType /t REG_DWORD /d 1",
+                             "/v DeferFlags /t REG_DWORD /d 4",
+                         })
+                {
+                    var add = await context.Processes.RunAsync(
+                        new ProcessRequest("reg.exe", "add \"" + key + "\" " + value + " /f") { Timeout = TimeSpan.FromSeconds(30) },
+                        cancellationToken).ConfigureAwait(false);
+                    ok &= add.Completed && add.ExitCode == 0;
+                }
+
+                if (ok) registered.Add(drive.Letter);
+                else failed.Add(drive.Letter + " (" + drive.Path + ")");
+            }
+
+            var parts = new List<string>();
+            if (mounted.Count > 0) parts.Add(string.Join(", ", mounted) + " reconnecté(s)");
+            if (registered.Count > 0)
+                parts.Add(string.Join(", ", registered) + " inscrit(s), le partage ne répond pas encore : connexion au premier clic dans l'Explorateur");
+            if (failed.Count > 0) parts.Add(string.Join(", ", failed) + " non remis");
+            return string.Join(" ; ", parts) + ".";
+        }
+
+        /// <summary>La clé des mots de passe déposée à côté de « Local State » dans la sauvegarde.</summary>
+        private static string KeyFile(RestoreItem item)
+            => Path.Combine(Path.GetDirectoryName(item.Source) ?? string.Empty, BrowserKeys.FileName);
 
         /// <summary>
         /// Réimporte les profils Wi-Fi, un par un.

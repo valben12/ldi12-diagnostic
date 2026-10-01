@@ -1,5 +1,6 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:LDI12.App">
 
     <!-- Aucun DropShadowEffect ni BlurEffect nulle part : ce sont des nuanceurs de pixels qui
          repeignent des zones entières à chaque image en rendu logiciel : situation courante en
@@ -11,6 +12,34 @@
          grande surface, elles restent donc actives même en rendu logiciel, où la fréquence
          d'images est de toute façon plafonnée (voir App.ApplyRenderingProfile). Les animations
          coûteuses passent par LDI12.App.Motion et disparaissent sur ces machines. -->
+
+    <!-- Anneau de focus clavier.
+         Sans lui, la navigation à la touche Tab faisait dessiner à Windows son rectangle
+         pointillé d'origine, carré, noir sur fond sombre : la seule chose de l'interface qui
+         n'avait pas été dessinée pour elle. L'anneau suit l'arrondi des contrôles, à deux
+         points de distance, et n'apparaît qu'au clavier, jamais au clic. -->
+    <Style x:Key="Focus.Ring">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="-3" CornerRadius="11" BorderThickness="2"
+                            BorderBrush="{DynamicResource Brush.BrandRed}" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Le même, posé sur la pilule de navigation, qui a ses propres marges. -->
+    <Style x:Key="Focus.Ring.Nav">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="8,0" CornerRadius="10" BorderThickness="2"
+                            BorderBrush="{DynamicResource Brush.BrandRed}" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- Tracé d'icône Lucide : au trait, jamais rempli. -->
     <Style x:Key="Icon" TargetType="Path">
@@ -46,6 +75,7 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Padding" Value="18,9" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -121,6 +151,7 @@
         <Setter Property="FontSize" Value="{DynamicResource Font.Size.Small}" />
         <Setter Property="Padding" Value="12,7" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -200,6 +231,7 @@
          3 × 18 points : son coût est celui d'un rectangle. -->
     <Style x:Key="NavItem" TargetType="ListBoxItem">
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring.Nav}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -295,24 +327,51 @@
             <Setter Property="SelectionBrush" Value="{DynamicResource Brush.BrandRed}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="10,8" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <!-- Tag porte l'indication affichée dans le champ vide : « E:\Sauvegardes », « Nom du
+                 technicien ». Un champ vide sans rien dedans ne dit pas ce qu'il attend. -->
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border x:Name="Bd" Background="{DynamicResource Brush.SurfaceHover}"
                                 BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1"
                                 CornerRadius="{DynamicResource Radius.Control}">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="Center" />
+                            <!-- La marge intérieure n'est posée qu'une fois : WPF la reporte déjà sur la
+                                 zone de saisie. Posée aussi ici, elle comptait double, et les champs
+                                 faisaient cinquante points de haut, texte décalé (vu sur les captures). -->
+                            <Grid>
+                                <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Visibility="Collapsed"
+                                           Foreground="{DynamicResource Brush.TextTertiary}" IsHitTestVisible="False"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           Margin="{TemplateBinding Padding}" Padding="2,0,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush"
-                                        Value="{DynamicResource Brush.BrandRed}" />
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value="" />
+                                    <Condition Property="IsKeyboardFocusWithin" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5" />
                             </Trigger>
+                            <!-- Le survol d'abord, la saisie ensuite : le dernier déclencheur l'emporte,
+                                 et un champ où l'on tape doit garder son contour rouge sous la souris. -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush"
                                         Value="{DynamicResource Brush.BorderStrong}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource Brush.BrandRed}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -431,6 +490,42 @@
                 <Setter Property="Template" Value="{StaticResource ScrollBar.Horizontal}" />
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- Zone de défilement à barres flottantes.
+         Le gabarit d'origine réserve une colonne à la barre quand elle apparaît : un écran court
+         était donc plus large qu'un écran long, et tout le contenu sautait de côté en passant de
+         l'un à l'autre (relevé sur les captures, Surveillance contre Réparations). La barre flotte
+         désormais par-dessus la marge droite du contenu, comme sous Windows 11 : la largeur ne
+         dépend plus de la longueur de la page. -->
+    <Style TargetType="ScrollViewer">
+        <Setter Property="local:Motion.SmoothScroll" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollViewer">
+                    <Grid Background="{TemplateBinding Background}">
+                        <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                Margin="{TemplateBinding Padding}"
+                                                CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                CanHorizontallyScroll="False" CanVerticallyScroll="False"
+                                                Content="{TemplateBinding Content}"
+                                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        <ScrollBar x:Name="PART_VerticalScrollBar" HorizontalAlignment="Right"
+                                   Orientation="Vertical" Cursor="Arrow" Minimum="0"
+                                   Maximum="{TemplateBinding ScrollableHeight}"
+                                   ViewportSize="{TemplateBinding ViewportHeight}"
+                                   Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        <ScrollBar x:Name="PART_HorizontalScrollBar" VerticalAlignment="Bottom"
+                                   Orientation="Horizontal" Cursor="Arrow" Minimum="0"
+                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                   Value="{Binding HorizontalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- Barre de progression fine, sans balayage perpétuel : l'indéterminé de WPF anime en

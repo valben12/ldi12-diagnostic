@@ -306,8 +306,12 @@
                                         Visibility="{Binding HasSourceDriverChoices, Converter={StaticResource BoolToVisibility}}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllSourceDriversCommand}" />
-                                            <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoSourceDriversCommand}"
+                                            <Button Style="{StaticResource Button.Ghost}" Content="Même PC : tout" Command="{Binding AllSourceDriversCommand}"
+                                                ToolTip="Pour réinstaller ce même PC : tous ses pilotes servent." />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="PC neuf : périphériques seulement"
+                                                Command="{Binding NewPcSourceDriversCommand}" Margin="10,0,0,0"
+                                                ToolTip="Pour passer sur un autre PC : seuls les pilotes des périphériques qui suivent le client (imprimante, scanner, webcam, appareils USB). Ceux de l'ancienne carte mère, du chipset ou de la carte graphique ne servent à rien ailleurs." />
+                                            <Button Style="{StaticResource Button.Ghost}" Content="Aucun" Command="{Binding NoSourceDriversCommand}"
                                                     Margin="10,0,0,0" />
                                         </StackPanel>
                                         <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
@@ -477,8 +481,12 @@
                                     Visibility="{Binding HasDriverChoices, Converter={StaticResource BoolToVisibility}}">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
-                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllDriversCommand}" />
-                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoDriversCommand}"
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Même PC : tout" Command="{Binding AllDriversCommand}"
+                                                ToolTip="Pour réinstaller ce même PC : tous ses pilotes servent." />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="PC neuf : périphériques seulement"
+                                                Command="{Binding NewPcDriversCommand}" Margin="10,0,0,0"
+                                                ToolTip="Pour passer sur un autre PC : seuls les pilotes des périphériques qui suivent le client (imprimante, scanner, webcam, appareils USB). Ceux de l'ancienne carte mère, du chipset ou de la carte graphique ne servent à rien ailleurs." />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Aucun" Command="{Binding NoDriversCommand}"
                                                 Margin="10,0,0,0" />
                                     </StackPanel>
                                     <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
@@ -647,8 +655,12 @@
                                     Visibility="{Binding HasRestoreDriverChoices, Converter={StaticResource BoolToVisibility}}">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
-                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllRestoreDriversCommand}" />
-                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoRestoreDriversCommand}"
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Même PC : tout" Command="{Binding AllRestoreDriversCommand}"
+                                                ToolTip="Pour réinstaller ce même PC : tous ses pilotes servent." />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="PC neuf : périphériques seulement"
+                                                Command="{Binding NewPcRestoreDriversCommand}" Margin="10,0,0,0"
+                                                ToolTip="Pour passer sur un autre PC : seuls les pilotes des périphériques qui suivent le client (imprimante, scanner, webcam, appareils USB). Ceux de l'ancienne carte mère, du chipset ou de la carte graphique ne servent à rien ailleurs." />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Aucun" Command="{Binding NoRestoreDriversCommand}"
                                                 Margin="10,0,0,0" />
                                     </StackPanel>
                                     <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">

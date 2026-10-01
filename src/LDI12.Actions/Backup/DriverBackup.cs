@@ -26,6 +26,118 @@ namespace LDI12.Actions.Backup
         public string? Manufacturer { get; init; }
 
         public string? Version { get; init; }
+
+        /// <summary>Périphérique qu'on emporte sur un PC neuf, ou composant propre à cette machine.</summary>
+        public DriverKind Kind { get; init; }
+    }
+
+    public enum DriverKind
+    {
+        /// <summary>Ni le bus ni la classe ne tranchent : à juger par le technicien.</summary>
+        Unknown = 0,
+
+        /// <summary>Imprimante, scanner, webcam, appareil USB : il suit le client sur un PC neuf.</summary>
+        Peripheral = 1,
+
+        /// <summary>Chipset, carte graphique, contrôleur, audio intégré : il reste avec cette machine.</summary>
+        Machine = 2,
+    }
+
+    /// <summary>
+    /// Ce qu'un pilote équipe : un périphérique qu'on branche, ou un composant de la machine.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pourquoi le tri.</b> Pour réinstaller le même PC, tous ses pilotes servent. Pour passer
+    /// sur un PC neuf, ceux de l'ancienne carte mère, de son chipset ou de sa carte graphique ne
+    /// servent à rien, et peuvent même gêner : seuls comptent ceux des périphériques qui suivent
+    /// le client, l'imprimante, le scanner, la webcam, la tablette graphique.
+    /// <para>
+    /// <b>Le bus d'abord.</b> Chaque pilote nomme le matériel qu'il équipe par un identifiant qui
+    /// commence par son bus : « USB\… » ou « USBPRINT\… » pour ce qui se branche, « PCI\… »,
+    /// « ACPI\… » ou « HDAUDIO\… » pour ce qui est soudé ou enfiché dans la machine. C'est plus
+    /// sûr que la classe : une souris USB et le pavé tactile d'un portable sont tous deux de
+    /// classe « Mouse ». La classe ne tranche que les cas sans ambiguïté (imprimante, scanner,
+    /// téléphone d'un côté ; chipset, carte graphique, micrologiciel de l'autre).
+    /// </para>
+    /// </remarks>
+    public static class DriverKinds
+    {
+        /// <summary>Classes qui ne désignent que des périphériques.</summary>
+        private static readonly HashSet<string> PeripheralClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Printer", "Image", "Camera", "WPD", "SmartCardReader", "Modem", "PrinterUpgrade", "MultiPortSerial",
+        };
+
+        /// <summary>Bus des périphériques qu'on branche.</summary>
+        private static readonly HashSet<string> PeripheralBuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "USB", "USBPRINT", "USBSTOR", "WSDPRINT", "LPTENUM", "BTHENUM", "BTHLEDEVICE", "HID-VID",
+            "WPDBUSENUMROOT", "USBAUDIO", "FTDIBUS",
+        };
+
+        /// <summary>Bus des composants de la machine.</summary>
+        private static readonly HashSet<string> MachineBuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PCI", "ACPI", "HDAUDIO", "INTELAUDIO", "ROOT", "SWC", "UEFI", "DISPLAY", "MONITOR", "INTELPEP", "AMDI2C",
+            "SCSI", "STORAGE", "IDE", "INTC", "ACPI_HAL", "ISAPNP", "HID",
+        };
+
+        /// <summary>
+        /// Classes de composants intégrés que leur bus ferait passer pour des périphériques : la
+        /// puce Bluetooth et le lecteur d'empreintes d'un portable sont reliés en USB, à l'intérieur.
+        /// </summary>
+        private static readonly HashSet<string> BuiltInClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Bluetooth", "Biometric", "System", "Firmware", "Extension", "SoftwareComponent", "Processor", "SecurityDevices",
+        };
+
+        /// <summary>Classes qui ne désignent que des composants de la machine.</summary>
+        private static readonly HashSet<string> MachineClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "System", "Display", "HDC", "SCSIAdapter", "Firmware", "SoftwareComponent", "Extension", "Battery",
+            "Monitor", "Sensor", "Processor", "SecurityDevices", "Computer", "Biometric", "Bluetooth", "Net",
+            "MEDIA", "HIDClass", "Mouse", "Keyboard", "USB", "DiskDrive", "Volume", "Ports", "SDHost", "MTD",
+        };
+
+        public static DriverKind Classify(string? deviceClass, IReadOnlyCollection<string> buses)
+        {
+            if (deviceClass != null && PeripheralClasses.Contains(deviceClass)) return DriverKind.Peripheral;
+            if (deviceClass != null && BuiltInClasses.Contains(deviceClass)) return DriverKind.Machine;
+
+            // HID : une souris USB s'annonce « HID\VID_… », relevé « HID-VID » ; le pavé tactile
+            // d'un portable, « HID\SYNA… » ou « ACPI\… » (voir InfSummary).
+            var peripheral = 0;
+            var machine = 0;
+            foreach (var bus in buses)
+            {
+                if (PeripheralBuses.Contains(bus)) peripheral++;
+                else if (MachineBuses.Contains(bus)) machine++;
+            }
+
+            if (peripheral > 0 && machine == 0) return DriverKind.Peripheral;
+            if (machine > 0) return DriverKind.Machine;
+            if (deviceClass != null && MachineClasses.Contains(deviceClass)) return DriverKind.Machine;
+            return DriverKind.Unknown;
+        }
+
+        /// <summary>Périphériques d'abord, puis la machine, puis le reste ; par classe, puis par nom.</summary>
+        public static void Sort(List<DriverChoice> drivers)
+            => drivers.Sort((a, b) =>
+            {
+                var byKind = Rank(a.Kind).CompareTo(Rank(b.Kind));
+                if (byKind != 0) return byKind;
+                var byClass = string.Compare(a.DeviceClass, b.DeviceClass, StringComparison.CurrentCultureIgnoreCase);
+                return byClass != 0 ? byClass : string.Compare(a.Label, b.Label, StringComparison.CurrentCultureIgnoreCase);
+            });
+
+        public static string Describe(DriverKind kind) => kind switch
+        {
+            DriverKind.Peripheral => "Périphérique",
+            DriverKind.Machine => "Propre à ce PC",
+            _ => "À vérifier",
+        };
+
+        private static int Rank(DriverKind kind) => kind == DriverKind.Peripheral ? 0 : kind == DriverKind.Machine ? 1 : 2;
     }
 
     /// <summary>
@@ -604,6 +716,17 @@ namespace LDI12.Actions.Backup
         public static IReadOnlyList<(string Folder, string Label)> Packages(IFileSystemGateway files, string backup)
         {
             var result = new List<(string, string)>();
+            foreach (var package in Describe(files, backup)) result.Add((package.Folder, package.Label));
+            return result;
+        }
+
+        /// <summary>
+        /// Les pilotes de la sauvegarde, avec leur libellé et leur famille : périphérique, ou propre
+        /// à la machine d'origine. Le technicien qui restaure sur un PC neuf n'y reprend que les premiers.
+        /// </summary>
+        public static IReadOnlyList<(string Folder, string Label, DriverKind Kind)> Describe(IFileSystemGateway files, string backup)
+        {
+            var result = new List<(string, string, DriverKind)>();
             var root = Path.Combine(backup, DriverBackup.Folder);
             if (!files.DirectoryExists(root)) return result;
 
@@ -623,20 +746,25 @@ namespace LDI12.Actions.Backup
                     if (file.Path.EndsWith(".inf", StringComparison.OrdinalIgnoreCase)) { inf = file.Path; break; }
                 if (inf == null) continue;
 
-                var name = Path.GetFileName(directory);
-                if (labels.TryGetValue(name + ".inf", out var label) && label.Length > 0)
-                {
-                    result.Add((directory, label + " (" + name + ")"));
-                    continue;
-                }
-
-                // Un export par DISM n'a pas de liste : le .inf dit lui-même ce qu'il installe.
                 var text = files.ReadText(inf);
                 var summary = text.HasValue ? OfflineDrivers.Parse(text.Value) : new InfSummary();
-                var described = summary.Label(name);
-                result.Add((directory, described == name
-                    ? name
-                    : described + (summary.Version == null ? string.Empty : ", version " + summary.Version) + " (" + name + ")"));
+                var name = Path.GetFileName(directory);
+
+                string label;
+                if (labels.TryGetValue(name + ".inf", out var listed) && listed.Length > 0)
+                {
+                    label = listed + " (" + name + ")";
+                }
+                else
+                {
+                    // Un export par DISM n'a pas de liste : le .inf dit lui-même ce qu'il installe.
+                    var described = summary.Label(name);
+                    label = described == name
+                        ? name
+                        : described + (summary.Version == null ? string.Empty : ", version " + summary.Version) + " (" + name + ")";
+                }
+
+                result.Add((directory, label, summary.Kind));
             }
 
             return result;

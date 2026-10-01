@@ -116,15 +116,19 @@ namespace LDI12.App.ViewModels
             CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
+            NewPcDriversCommand = new RelayCommand(() => { CheckPeripherals(DriverChoices); Invalidate(); });
             AllSourceDriversCommand = new RelayCommand(() => CheckAll(SourceDriverChoices, true));
             NoSourceDriversCommand = new RelayCommand(() => CheckAll(SourceDriverChoices, false));
+            NewPcSourceDriversCommand = new RelayCommand(() => { CheckPeripherals(SourceDriverChoices); Invalidate(); });
             AllRestoreDriversCommand = new RelayCommand(() => CheckAllRestore(RestoreDriverChoices, true));
             NoRestoreDriversCommand = new RelayCommand(() => CheckAllRestore(RestoreDriverChoices, false));
+            NewPcRestoreDriversCommand = new RelayCommand(() => { CheckPeripherals(RestoreDriverChoices); InvalidateRestore(); });
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
             AllApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, true));
             NoApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, false));
 
             StartDriveWatch();
+            _ = LoadDriversAsync(null);
         }
 
         // ---------- supports branchés
@@ -542,6 +546,7 @@ namespace LDI12.App.ViewModels
 
         public ICommand AllSourceDriversCommand { get; }
         public ICommand NoSourceDriversCommand { get; }
+        public ICommand NewPcSourceDriversCommand { get; }
 
         private int _sourceDriversListing;
 
@@ -951,6 +956,7 @@ namespace LDI12.App.ViewModels
 
         public ICommand AllDriversCommand { get; }
         public ICommand NoDriversCommand { get; }
+        public ICommand NewPcDriversCommand { get; }
         public ICommand ListApplicationsCommand { get; }
         public ICommand AllApplicationsCommand { get; }
         public ICommand NoApplicationsCommand { get; }
@@ -982,7 +988,7 @@ namespace LDI12.App.ViewModels
         /// <summary>Une case par pilote : ce qu'il fait fonctionner, puis de quoi le reconnaître.</summary>
         private ChoiceItem DriverItem(DriverChoice driver)
         {
-            var detail = new List<string>();
+            var detail = new List<string> { DriverKinds.Describe(driver.Kind) };
             if (!string.IsNullOrEmpty(driver.DeviceClass)) detail.Add(driver.DeviceClass!);
             if (!string.IsNullOrEmpty(driver.Manufacturer)) detail.Add(driver.Manufacturer!);
             if (!string.IsNullOrEmpty(driver.Version)) detail.Add("version " + driver.Version);
@@ -991,27 +997,83 @@ namespace LDI12.App.ViewModels
             return new ChoiceItem(driver.InfName, driver.Label, string.Join(" · ", detail), true, Invalidate) { Driver = driver };
         }
 
+        /// <summary>
+        /// Pour un PC neuf : les périphériques seulement. Ce qui équipe l'ancienne carte mère, son
+        /// chipset ou sa carte graphique n'a rien à faire sur une autre machine.
+        /// </summary>
+        private static void CheckPeripherals(IEnumerable<ChoiceItem> items)
+        {
+            foreach (var item in items) item.SetSilently(item.Driver?.Kind == DriverKind.Peripheral);
+        }
+
         private void CheckAllRestore(IEnumerable<ChoiceItem> items, bool value)
         {
             foreach (var item in items) item.SetSilently(value);
             InvalidateRestore();
         }
 
-        private void LoadDrivers(SystemSnapshot? snapshot)
-        {
-            DriverChoices.Clear();
+        private int _driverListing;
 
-            foreach (var driver in DriverBackup.Choices(snapshot))
+        /// <summary>
+        /// Les pilotes tiers de ce PC, lus dans ses fichiers <c>Windows\INF\oemNN.inf</c>.
+        /// </summary>
+        /// <remarks>
+        /// La liste venait du diagnostic complet, qui ne tourne pas à l'ouverture : elle restait
+        /// vide, et disait à tort qu'il n'y avait aucun pilote. Lue sur le disque, elle est là tout
+        /// de suite, sans droits particuliers. Quand un diagnostic complet a été fait, les noms des
+        /// périphériques qu'il a vus remplacent ceux que les fichiers donnent. Ce qui a été coché ou
+        /// décoché est gardé d'une relecture à l'autre.
+        /// </remarks>
+        private async Task LoadDriversAsync(SystemSnapshot? snapshot)
+        {
+            var ticket = ++_driverListing;
+            IReadOnlyList<DriverChoice> listed;
+            try
             {
-                DriverChoices.Add(DriverItem(driver));
+                var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
+                var root = System.IO.Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
+                listed = await Task.Run(() => OfflineDrivers.List(services.Files, root)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Les pilotes de cette machine n'ont pas pu être listés.", ex);
+                listed = Array.Empty<DriverChoice>();
             }
 
-            DriversNote = snapshot == null
-                ? "Les pilotes se listent à partir d'une analyse : lancez-en une depuis l'accueil."
-                : DriverChoices.Count == 0
-                    ? "L'analyse n'a relevé aucun pilote tiers : tout ce que cette machine utilise revient avec Windows."
-                    : DriverChoices.Count + " pilote(s) tiers relevés par l'analyse. Ceux fournis avec Windows reviennent avec lui " +
-                      "et ne sont pas listés.";
+            if (ticket != _driverListing) return;
+
+            var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var device in DriverBackup.Choices(snapshot)) seen[device.InfName] = device.Label;
+
+            var previous = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in DriverChoices) previous[item.Key] = item.IsChecked;
+
+            DriverChoices.Clear();
+            var peripherals = 0;
+            foreach (var driver in listed)
+            {
+                var shown = seen.TryGetValue(driver.InfName, out var label) && label.Length > 0
+                    ? new DriverChoice
+                    {
+                        InfName = driver.InfName,
+                        Label = label,
+                        DeviceClass = driver.DeviceClass,
+                        Manufacturer = driver.Manufacturer,
+                        Version = driver.Version,
+                        Kind = driver.Kind,
+                    }
+                    : driver;
+
+                var item = DriverItem(shown);
+                if (previous.TryGetValue(driver.InfName, out var wasChecked)) item.SetSilently(wasChecked);
+                DriverChoices.Add(item);
+                if (driver.Kind == DriverKind.Peripheral) peripherals++;
+            }
+
+            DriversNote = DriverChoices.Count == 0
+                ? "Aucun pilote tiers sur cette machine : tout ce qu'elle utilise revient avec Windows."
+                : DriverChoices.Count + " pilote(s) tiers, dont " + peripherals + " de périphériques. Pour réinstaller ce PC, " +
+                  "gardez-les tous ; pour passer sur un PC neuf, « PC neuf » ne garde que les périphériques.";
 
             Raise(nameof(HasDriverChoices));
             Invalidate();
@@ -1265,6 +1327,7 @@ namespace LDI12.App.ViewModels
 
         public ICommand AllRestoreDriversCommand { get; }
         public ICommand NoRestoreDriversCommand { get; }
+        public ICommand NewPcRestoreDriversCommand { get; }
 
         public bool HasRestoreChoice => RestoreBackups.Count > 1;
 
@@ -1283,12 +1346,12 @@ namespace LDI12.App.ViewModels
                     var found = RestoreCatalog.Find(services.Files, source, out _);
                     if (found == null)
                         return ((IReadOnlyList<BackupEntry>)Array.Empty<BackupEntry>(), (string?)null,
-                            (IReadOnlyList<(string Folder, string Label)>)Array.Empty<(string, string)>());
+                            (IReadOnlyList<(string Folder, string Label, DriverKind Kind)>)Array.Empty<(string, string, DriverKind)>());
 
                     // Une sauvegarde désignée elle-même : ses voisines sont dans le dossier au-dessus.
                     var folder = SameRoot(found, source) ? System.IO.Path.GetDirectoryName(found.TrimEnd('\\')) : source;
                     return (RestoreCatalog.List(services.Files, folder ?? source), found,
-                        RestoreDriversAction.Packages(services.Files, found));
+                        RestoreDriversAction.Describe(services.Files, found));
                 }).ConfigureAwait(true);
 
                 // Une frappe plus récente dans le champ a déjà pris le relais.
@@ -1301,12 +1364,18 @@ namespace LDI12.App.ViewModels
                         IsSelected = chosen != null && SameRoot(entry.Path, chosen),
                     });
 
+                // Périphériques d'abord : ce sont eux qu'on garde en passant sur un PC neuf.
                 RestoreDriverChoices.Clear();
-                foreach (var (folder, label) in packages)
-                {
-                    var name = System.IO.Path.GetFileName(folder);
-                    RestoreDriverChoices.Add(new ChoiceItem(name, label, null, true, InvalidateRestore));
-                }
+                foreach (var kind in new[] { DriverKind.Peripheral, DriverKind.Machine, DriverKind.Unknown })
+                    foreach (var (folder, label, packageKind) in packages)
+                    {
+                        if (packageKind != kind) continue;
+                        var name = System.IO.Path.GetFileName(folder);
+                        RestoreDriverChoices.Add(new ChoiceItem(name, label, DriverKinds.Describe(kind), true, InvalidateRestore)
+                        {
+                            Driver = new DriverChoice { InfName = name, Label = label, Kind = kind },
+                        });
+                    }
             }
             catch (Exception ex)
             {
@@ -2083,7 +2152,7 @@ namespace LDI12.App.ViewModels
         public void Update(SystemSnapshot snapshot)
         {
             _snapshot = snapshot;
-            LoadDrivers(snapshot);
+            _ = LoadDriversAsync(snapshot);
             _ = DescribePlanAsync();
         }
 

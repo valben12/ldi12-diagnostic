@@ -139,7 +139,8 @@ namespace LDI12.Actions.Backup
                         Publisher = entry.Publisher,
                         Version = entry.Version,
                         Scope = scope,
-                        RegistryKey = entry.Key,
+
+                        // Pas de clé de registre : celle-ci n'existe que le temps de la lecture.
                     });
                 }
             }

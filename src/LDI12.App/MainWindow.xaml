@@ -419,7 +419,7 @@
                             </RadialGradientBrush>
                         </Border.Background>
                     </Border>
-                    <controls:TransitionPresenter Content="{Binding CurrentContent}" />
+                    <controls:TransitionPresenter Page="{Binding CurrentContent}" />
 
                     <!-- ================= Écran d'analyse =================
                          Pendant une collecte, la zone de contenu est entièrement remplacée. Ce

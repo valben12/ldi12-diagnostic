@@ -35,6 +35,20 @@ namespace LDI12.App.Controls
             nameof(MinColumnWidth), typeof(double), typeof(PairGrid),
             new FrameworkPropertyMetadata(300d, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
+        /// <summary>
+        /// Vrai : les éléments d'une même rangée prennent la hauteur du plus haut. Pour des cartes
+        /// posées côte à côte, dont les bas inégaux dessinaient un escalier.
+        /// </summary>
+        public static readonly DependencyProperty StretchRowsProperty = DependencyProperty.Register(
+            nameof(StretchRows), typeof(bool), typeof(PairGrid),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsArrange));
+
+        public bool StretchRows
+        {
+            get => (bool)GetValue(StretchRowsProperty);
+            set => SetValue(StretchRowsProperty, value);
+        }
+
         public int Columns
         {
             get => (int)GetValue(ColumnsProperty);
@@ -94,8 +108,17 @@ namespace LDI12.App.Controls
                 var column = i % columns;
                 rowHeight = Math.Max(rowHeight, child.DesiredSize.Height);
 
+                var height = child.DesiredSize.Height;
+                if (StretchRows)
+                {
+                    // La hauteur de la rangée entière, connue en relisant ses voisins.
+                    var first = i - column;
+                    for (var j = first; j < Math.Min(first + columns, InternalChildren.Count); j++)
+                        height = Math.Max(height, InternalChildren[j].DesiredSize.Height);
+                }
+
                 child.Arrange(new Rect(
-                    column * (columnWidth + ColumnGap), top, columnWidth, child.DesiredSize.Height));
+                    column * (columnWidth + ColumnGap), top, columnWidth, height));
 
                 if ((i + 1) % columns != 0) continue;
 

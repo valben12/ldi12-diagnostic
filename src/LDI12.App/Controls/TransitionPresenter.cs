@@ -20,9 +20,58 @@ namespace LDI12.App.Controls
     {
         private readonly TranslateTransform _slide = new TranslateTransform();
 
+        /// <summary>Les écrans déjà construits, par modèle de vue.</summary>
+        private readonly System.Collections.Generic.Dictionary<object, FrameworkElement> _views =
+            new System.Collections.Generic.Dictionary<object, FrameworkElement>();
+
         public TransitionPresenter()
         {
             RenderTransform = _slide;
+        }
+
+        /// <summary>
+        /// Le modèle de l'écran à afficher.
+        /// </summary>
+        /// <remarks>
+        /// <b>Chaque écran n'est construit qu'une fois.</b> Lié directement au contenu, un écran
+        /// était reconstruit à chaque passage : des centaines de contrôles pour celui des données,
+        /// un à-coup au clic, et la page qui remontait en haut à chaque retour. Gardé, il revient
+        /// tel qu'on l'a laissé, défilement compris. Les modèles de vue vivent aussi longtemps que
+        /// la fenêtre : garder leurs vues ne retient rien de plus.
+        /// </remarks>
+        public static readonly DependencyProperty PageProperty = DependencyProperty.Register(
+            nameof(Page), typeof(object), typeof(TransitionPresenter),
+            new PropertyMetadata(null, (d, e) => ((TransitionPresenter)d).Show(e.NewValue)));
+
+        public object? Page
+        {
+            get => GetValue(PageProperty);
+            set => SetValue(PageProperty, value);
+        }
+
+        private void Show(object? page)
+        {
+            if (page == null)
+            {
+                Content = null;
+                return;
+            }
+
+            if (!_views.TryGetValue(page, out var view))
+            {
+                // Sans gabarit déclaré pour ce modèle, le contenu est confié tel quel à WPF.
+                if (!(TryFindResource(new DataTemplateKey(page.GetType())) is DataTemplate template) ||
+                    !(template.LoadContent() is FrameworkElement built))
+                {
+                    Content = page;
+                    return;
+                }
+
+                built.DataContext = page;
+                _views[page] = view = built;
+            }
+
+            Content = view;
         }
 
         protected override void OnContentChanged(object oldContent, object newContent)

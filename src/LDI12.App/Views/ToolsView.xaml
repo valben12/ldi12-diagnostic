@@ -25,13 +25,20 @@
                      étirerait sinon toutes les autres tuiles à sa hauteur. -->
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <controls:PairGrid Columns="2" ColumnGap="10" MinColumnWidth="360" />
+                        <controls:PairGrid Columns="2" ColumnGap="10" MinColumnWidth="360" StretchRows="True" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Style="{StaticResource ToolCard}" Padding="18,15" Margin="0,0,0,10"
                                 local:Motion.Entrance="True">
+                            <!-- Le bouton en pied : d'une carte à sa voisine de rangée, les deux
+                                 « Ouvrir » sont alignés. -->
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Bottom" Style="{StaticResource Button.Ghost}" Content="Ouvrir"
+                                        HorizontalAlignment="Left" Margin="0,12,0,0"
+                                        Command="{Binding LaunchCommand}"
+                                        Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}" />
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -60,12 +67,8 @@
                                            Foreground="{DynamicResource Brush.StatusWarning}"
                                            Margin="0,8,0,0"
                                            Visibility="{Binding HasReason, Converter={StaticResource BoolToVisibility}}" />
-
-                                <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir"
-                                        HorizontalAlignment="Left" Margin="0,12,0,0"
-                                        Command="{Binding LaunchCommand}"
-                                        Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}" />
                             </StackPanel>
+                            </DockPanel>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

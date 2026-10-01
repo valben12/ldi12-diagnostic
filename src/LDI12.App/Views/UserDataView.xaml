@@ -300,6 +300,7 @@
                             <!-- Largeur posée : un champ vide aligné à gauche se réduit à son contenu,
                                  c'est-à-dire à rien, et étiré il se centre au milieu de la carte. -->
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
+                                     Tag="E:\Sauvegardes, ou \\serveur\partage"
                                      Text="{Binding BackupDestination, UpdateSourceTrigger=PropertyChanged}" />
 
                             <!-- Mesuré d'office dès que le support est choisi, et jamais pendant une copie. -->
@@ -412,10 +413,12 @@
                                 <TextBlock Grid.Column="0" Text="Types de fichiers" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Style="{StaticResource Field}" Width="220" Margin="10,0,0,0"
                                          ToolTip="Extensions séparées par des virgules : iso, vhdx, mkv"
+                                         Tag="iso, vhdx, mkv"
                                          Text="{Binding ExcludeExtensions, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Grid.Column="2" Text="Fichiers de plus de (Go)" Style="{StaticResource Text.Muted}"
                                            VerticalAlignment="Center" Margin="20,0,0,0" />
                                 <TextBox Grid.Column="3" Style="{StaticResource Field}" Width="80" Margin="10,0,0,0"
+                                         Tag="aucune"
                                          Text="{Binding MaxFileSize, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
 
@@ -572,6 +575,7 @@
 
                             <TextBlock Text="Ou un dossier précis" Style="{StaticResource Text.Muted}" Margin="0,4,0,6" />
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"
+                                     Tag="E:\, ou le dossier d'une sauvegarde LDI12"
                                      Text="{Binding RestoreSource, UpdateSourceTrigger=PropertyChanged}" />
 
                             <!-- Mesurés d'office : la sauvegarde en lecture seule, ce disque une fois par session. -->

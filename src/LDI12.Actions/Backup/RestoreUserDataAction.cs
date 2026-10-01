@@ -467,6 +467,9 @@ namespace LDI12.Actions.Backup
                 skipped += hereSkipped;
                 failed += hereFailed;
 
+                if (item.AfterCopy != RestoreAfterCopy.None && here + hereSkipped > 0)
+                    details.Add(item.Label + " : " + await AfterCopyAsync(context, item, items, cancellationToken).ConfigureAwait(false));
+
                 var text = item.Label + " : " + here + " fichier(s) restaurés";
                 if (hereSkipped > 0) text += ", " + hereSkipped + " déjà présent(s)";
                 if (hereFailed > 0) text += ", " + hereFailed + " non restauré(s), le plus souvent parce qu'un fichier différent porte déjà ce nom";
@@ -566,6 +569,65 @@ namespace LDI12.Actions.Backup
                     ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
                     : "profils restaurés ajoutés à la liste du navigateur." + keyNote
                 : "la liste des profils n'a pas pu être mise à jour.";
+        }
+
+        /// <summary>
+        /// Ce qui suit la copie : les polices s'inscrivent pour le compte, le fond d'écran se remet.
+        /// </summary>
+        /// <remarks>
+        /// Une police posée dans le dossier du compte n'existe pour Windows qu'une fois inscrite dans
+        /// le registre du compte, ce que fait l'installation par clic droit. Elle est utilisable à la
+        /// prochaine ouverture de session.
+        /// </remarks>
+        private static async Task<string> AfterCopyAsync(
+            ActionContext context, RestoreItem item, IReadOnlyList<(FileEntry File, string Target)> files,
+            CancellationToken cancellationToken)
+        {
+            var script = new StringBuilder("[Console]::OutputEncoding = [Text.Encoding]::UTF8\ntry {\n");
+            var count = 0;
+
+            if (item.AfterCopy == RestoreAfterCopy.RegisterFonts)
+            {
+                script.Append("$key = 'HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'\n")
+                    .Append("if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }\n");
+                foreach (var (_, target) in files)
+                {
+                    if (!AppDataCatalog.IsFont(Path.GetFileName(target))) continue;
+                    count++;
+                    var name = Path.GetFileNameWithoutExtension(target) +
+                               (target.EndsWith(".fon", StringComparison.OrdinalIgnoreCase) ? string.Empty : " (TrueType)");
+                    script.Append("New-ItemProperty -Path $key -Name ").Append(MachineSettings.Quote(name))
+                        .Append(" -Value ").Append(MachineSettings.Quote(target)).Append(" -PropertyType String -Force | Out-Null\n");
+                }
+
+                if (count == 0) return "aucune police à inscrire.";
+            }
+            else
+            {
+                var source = Path.Combine(item.Destination, "TranscodedWallpaper");
+                var image = Path.Combine(item.Destination, "fond-ecran.jpg");
+                script.Append("if (-not (Test-Path ").Append(MachineSettings.Quote(image)).Append(")) { Copy-Item ")
+                    .Append(MachineSettings.Quote(source)).Append(' ').Append(MachineSettings.Quote(image)).Append(" -ErrorAction Stop }\n")
+                    .Append("Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class LdiWallpaper { ")
+                    .Append("[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(int a, int b, string c, int d); }'\n")
+                    .Append("if (-not [LdiWallpaper]::SystemParametersInfo(20, 0, ").Append(MachineSettings.Quote(image))
+                    .Append(", 3)) { throw 'Windows a refusé l''image' }\n");
+            }
+
+            script.Append("'OK'\n} catch { 'ERREUR ' + $_.Exception.Message }\n");
+
+            var run = await context.Processes.RunAsync(MachineSettings.PowerShell(script.ToString(), TimeSpan.FromMinutes(2)),
+                cancellationToken).ConfigureAwait(false);
+
+            string? last = null;
+            foreach (var line in run.StandardOutput.Split('\r', '\n'))
+                if (line.Trim().Length > 0) last = line.Trim();
+
+            var ok = run.Completed && last == "OK";
+            return item.AfterCopy == RestoreAfterCopy.RegisterFonts
+                ? ok ? count + " police(s) inscrite(s), utilisables à la prochaine ouverture de session."
+                     : "les polices sont copiées mais n'ont pas pu être inscrites : les installer par clic droit, Installer."
+                : ok ? "remis." : "image copiée dans Images\\Fond d'écran, mais Windows ne l'a pas appliquée : la choisir dans Paramètres, Personnalisation.";
         }
 
         private static bool HasBrowserKey(ActionContext context, IReadOnlyList<RestoreFolder> folders)

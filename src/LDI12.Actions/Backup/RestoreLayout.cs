@@ -61,6 +61,18 @@ namespace LDI12.Actions.Backup
         ChromiumLocalState = 2,
     }
 
+    /// <summary>Ce qui reste à faire une fois les fichiers d'un dossier remis.</summary>
+    public enum RestoreAfterCopy
+    {
+        None = 0,
+
+        /// <summary>Inscrire les polices restaurées pour le compte.</summary>
+        RegisterFonts = 1,
+
+        /// <summary>Remettre le fond d'écran.</summary>
+        SetWallpaper = 2,
+    }
+
     /// <summary>Un dossier de la sauvegarde, et l'endroit où il revient.</summary>
     public sealed class RestoreItem
     {
@@ -83,6 +95,8 @@ namespace LDI12.Actions.Backup
 
         /// <summary>Profils à reprendre dans « Local State », pour <see cref="RestoreMode.ChromiumLocalState"/>.</summary>
         public IReadOnlyList<string> Profiles { get; init; } = Array.Empty<string>();
+
+        public RestoreAfterCopy AfterCopy { get; init; }
     }
 
     /// <summary>Une sauvegarde trouvée sur un disque.</summary>
@@ -387,6 +401,72 @@ namespace LDI12.Actions.Backup
 
                 case "Microsoft Edge":
                     Chromium(files, directory, name, Combine(targets.LocalAppData, @"Microsoft\Edge\User Data"), "msedge.exe", items);
+                    return;
+
+                case "Brave":
+                    Chromium(files, directory, name, Combine(targets.LocalAppData, @"BraveSoftware\Brave-Browser\User Data"), "brave.exe", items);
+                    return;
+
+                case "Vivaldi":
+                    Chromium(files, directory, name, Combine(targets.LocalAppData, @"Vivaldi\User Data"), "vivaldi.exe", items);
+                    return;
+
+                case "Opera":
+                    items.Add(Replace(name, name, directory, Combine(targets.RoamingAppData, @"Opera Software\Opera Stable"), "opera.exe"));
+                    return;
+
+                case "Opera GX":
+                    items.Add(Replace(name, name, directory, Combine(targets.RoamingAppData, @"Opera Software\Opera GX Stable"), "opera.exe"));
+                    return;
+
+                case "Office":
+                    foreach (var (folder, destination) in new[]
+                             {
+                                 ("Dictionnaires", @"Microsoft\UProof"),
+                                 ("Modèles", @"Microsoft\Templates"),
+                                 ("Insertions automatiques", @"Microsoft\Document Building Blocks"),
+                                 ("Correction automatique", @"Microsoft\Office"),
+                             })
+                    {
+                        var source = Path.Combine(directory, folder);
+                        if (files.DirectoryExists(source))
+                            items.Add(new RestoreItem
+                            {
+                                Label = "Office / " + folder.ToLowerInvariant(),
+                                Application = "Office",
+                                Source = source,
+                                Destination = Combine(targets.RoamingAppData, destination),
+                                Mode = RestoreMode.Merge,
+                                Processes = new[] { "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe" },
+                            });
+                    }
+
+                    return;
+
+                case "Environnement":
+                    var wallpaper = Path.Combine(directory, "Fond d'écran");
+                    if (files.DirectoryExists(wallpaper))
+                        items.Add(new RestoreItem
+                        {
+                            Label = "Fond d'écran",
+                            Application = "Fond d'écran",
+                            Source = wallpaper,
+                            Destination = Combine(targets.Pictures, "Fond d'écran"),
+                            Mode = RestoreMode.Merge,
+                            AfterCopy = RestoreAfterCopy.SetWallpaper,
+                        });
+
+                    var fonts = Path.Combine(directory, "Polices");
+                    if (files.DirectoryExists(fonts))
+                        items.Add(new RestoreItem
+                        {
+                            Label = "Polices",
+                            Application = "Polices",
+                            Source = fonts,
+                            Destination = Combine(targets.LocalAppData, @"Microsoft\Windows\Fonts"),
+                            Mode = RestoreMode.Merge,
+                            AfterCopy = RestoreAfterCopy.RegisterFonts,
+                        });
                     return;
 
                 case "Mozilla Firefox":

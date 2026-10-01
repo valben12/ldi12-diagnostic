@@ -1486,7 +1486,11 @@ namespace LDI12.App.ViewModels
                     _restorePrinters ??= ActionCatalog.Find(ActionIds.RestorePrinters, _logger);
                     if (_restorePrinters != null)
                     {
-                        _restorePrintersPreview = await runner.PreviewAsync(_restorePrinters, source, CancellationToken.None)
+                        var printers = new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase)
+                        {
+                            [RestorePrintersAction.SessionUserParameter] = Environment.UserName,
+                        };
+                        _restorePrintersPreview = await runner.PreviewAsync(_restorePrinters, printers, CancellationToken.None)
                             .ConfigureAwait(true);
                         if (_restorePrintersPreview.Outcome != PreviewOutcome.NothingToDo)
                         {

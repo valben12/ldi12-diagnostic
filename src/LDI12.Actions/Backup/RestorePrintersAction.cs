@@ -36,6 +36,9 @@ namespace LDI12.Actions.Backup
     {
         public const string SourceParameter = "source";
 
+        /// <summary>Le compte de la session du client, pour savoir si l'invite a pris un autre compte.</summary>
+        public const string SessionUserParameter = "session-user";
+
         public ActionDescriptor Descriptor { get; } = new ActionDescriptor
         {
             Id = ActionIds.RestorePrinters,
@@ -107,6 +110,19 @@ namespace LDI12.Actions.Backup
                     : "Recréer l'imprimante réseau « " + printer.Name + " » à l'adresse " + printer.Host + ", pilote « " + printer.Driver + " »");
             if (fallbackDefault != null) willDo.Add("Remettre « " + fallbackDefault + " » comme imprimante par défaut");
 
+            // L'invite administrateur a pu demander un autre compte que celui du client : les
+            // imprimantes partagées et l'imprimante par défaut sont propres à chaque compte.
+            var measurements = new List<PreviewLine>
+            {
+                new PreviewLine("Pilotes", "une imprimante réseau demande son pilote : réinstaller d'abord les pilotes de la sauvegarde"),
+            };
+            var sessionUser = context.Parameter(SessionUserParameter);
+            if (sessionUser != null && !string.Equals(sessionUser, Environment.UserName, StringComparison.OrdinalIgnoreCase))
+                measurements.Add(new PreviewLine("Autre compte",
+                    "l'invite administrateur a ouvert le compte « " + Environment.UserName + " », pas celui du client (« " + sessionUser +
+                    " ») : les imprimantes partagées et l'imprimante par défaut iront sur ce compte. Les ajouter depuis la " +
+                    "session du client, d'après la fiche", PreviewLineKind.Caution));
+
             var willNotDo = new List<string>
             {
                 "Ne supprime ni ne modifie aucune imprimante déjà installée : une imprimante qui existe sous ce nom est laissée telle quelle.",
@@ -121,10 +137,7 @@ namespace LDI12.Actions.Backup
                 Summary = recreate.Count + " imprimante(s) seront remises en place.",
                 WillDo = willDo,
                 WillNotDo = willNotDo,
-                Measurements = new[]
-                {
-                    new PreviewLine("Pilotes", "une imprimante réseau demande son pilote : réinstaller d'abord les pilotes de la sauvegarde"),
-                },
+                Measurements = measurements,
                 Plan = new PrinterRestorePlan { Printers = recreate, Default = fallbackDefault },
             });
         }

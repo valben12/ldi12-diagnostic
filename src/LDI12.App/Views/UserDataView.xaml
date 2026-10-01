@@ -4,6 +4,40 @@
              xmlns:local="clr-namespace:LDI12.App">
 
     <UserControl.Resources>
+        <!-- Une étape du formulaire : un numéro dans une pastille neutre, puis son titre. Le
+             formulaire de sauvegarde se lisait d'un seul tenant, sur quatre écrans de haut : il
+             se parcourt désormais comme une suite de questions, dans l'ordre où on les règle.
+             Pastille grise et non rouge : le rouge reste à l'action principale. -->
+        <Style x:Key="Step" TargetType="ContentControl">
+            <Setter Property="Margin" Value="0,24,0,10" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+            <Setter Property="FontSize" Value="{DynamicResource Font.Size.Emphasis}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="22" Height="22" CornerRadius="11" VerticalAlignment="Center"
+                                    Background="{DynamicResource Brush.SurfaceHover}"
+                                    BorderBrush="{DynamicResource Brush.BorderStrong}" BorderThickness="1">
+                                <TextBlock Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                           FontSize="{DynamicResource Font.Size.Small}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.TextPrimary}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Une tuile par support branché. Un bouton plutôt qu'une case : on choisit un disque
              comme on l'ouvrirait dans l'Explorateur, d'un clic. Le cadre rouge dit lequel est
              retenu ; l'épaisseur ne change pas, pour que la grille ne bouge pas au clic. -->
@@ -232,7 +266,7 @@
                             <!-- La source : le compte ouvert, ou un disque branché. Un disque qui porte un
                                  Windows se sauvegarde par comptes, comme ce PC ; un disque de données, par
                                  dossiers. À l'atelier, c'est le disque du PC du client, branché ici. -->
-                            <TextBlock Text="Que sauvegarder ?" Style="{StaticResource Text.Muted}" Margin="0,16,0,8" />
+                            <ContentControl Style="{StaticResource Step}" Tag="1" Content="Que sauvegarder ?" />
                             <ItemsControl ItemsSource="{Binding Sources}" ItemsPanel="{StaticResource TilePanel}"
                                           ItemTemplate="{StaticResource PlainTileTemplate}" />
 
@@ -283,8 +317,10 @@
                                 </Border>
                             </StackPanel>
 
-                            <TextBlock Text="Support de destination" Style="{StaticResource Text.Muted}"
-                                       Margin="0,16,0,8" />
+                            <ContentControl Style="{StaticResource Step}" Tag="2" Content="Où copier ?" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
+                                       MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="Le disque ou la clé de destination. Il apparaît ici dès qu'il est branché, et sa vitesse est mesurée d'elle-même." />
                             <!-- Les supports branchés, relus toutes les trois secondes : brancher le disque
                                  suffit à le voir apparaître. Le disque de Windows n'y figure jamais. -->
                             <ItemsControl ItemsSource="{Binding BackupDrives}" ItemsPanel="{StaticResource TilePanel}"
@@ -318,6 +354,7 @@
                                 </StackPanel>
                             </CheckBox>
 
+                            <ContentControl Style="{StaticResource Step}" Tag="3" Content="Ce qui part avec" />
                             <!-- Les trois options. La dernière est décochée à chaque ouverture : les clés
                                  Wi-Fi sortent en clair, et ce choix se refait pour chaque client. -->
                             <StackPanel Visibility="{Binding ShowAccountOptions, Converter={StaticResource BoolToVisibility}}">
@@ -480,7 +517,11 @@
                             </Border>
                             </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <ContentControl Style="{StaticResource Step}" Tag="4" Content="Préparer, puis copier" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
+                                       MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="La préparation relève tout sans rien écrire : durée, place, programmes ouverts, mises en garde. La copie ne démarre qu'au clic sur « Copier et vérifier »." />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
                                         Command="{Binding PrepareBackupCommand}" />
                                 <Button Style="{StaticResource Button.Ghost}" Content="Fermer navigateurs et messagerie"
@@ -555,8 +596,10 @@
                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                        Text="Remet dans ce compte les dossiers personnels, les données d'applications et les profils Wi-Fi d'une sauvegarde LDI12. Indiquez le disque ou le dossier : la sauvegarde la plus récente qu'il contient est retrouvée. Rien n'est supprimé sur la machine, rien n'est écrasé, et la sauvegarde n'est pas modifiée. Fermez les navigateurs et la messagerie avant de lancer." />
 
-                            <TextBlock Text="Support de la sauvegarde" Style="{StaticResource Text.Muted}"
-                                       Margin="0,16,0,8" />
+                            <ContentControl Style="{StaticResource Step}" Tag="1" Content="Quelle sauvegarde ?" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
+                                       MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="Le support qui la porte : il apparaît ici dès qu'il est branché. S'il en porte plusieurs, choisissez laquelle." />
                             <!-- Seuls les supports qui portent une sauvegarde LDI12 : la plus récente est retenue. -->
                             <ItemsControl ItemsSource="{Binding RestoreDrives}" ItemsPanel="{StaticResource TilePanel}"
                                           ItemTemplate="{StaticResource DriveTileTemplate}"
@@ -582,7 +625,8 @@
                             <TextBlock Text="{Binding RestoreSpeedNote}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0"
                                        TextWrapping="Wrap" MaxWidth="960" HorizontalAlignment="Left" />
 
-                            <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0" IsChecked="{Binding RestoreWifi}">
+                            <ContentControl Style="{StaticResource Step}" Tag="2" Content="Ce qui revient avec les données" />
+                            <CheckBox Style="{StaticResource Check}" Margin="0,4,0,0" IsChecked="{Binding RestoreWifi}">
                                 <StackPanel>
                                     <TextBlock Text="Réimporter les profils Wi-Fi" Style="{StaticResource Text.Body}"
                                                Foreground="{DynamicResource Brush.TextPrimary}" />
@@ -629,7 +673,11 @@
                                 </StackPanel>
                             </CheckBox>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <ContentControl Style="{StaticResource Step}" Tag="3" Content="Préparer, puis restaurer" />
+                            <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
+                                       MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="La préparation relit la sauvegarde sans rien écrire sur ce PC. Fermez les navigateurs et la messagerie avant de lancer : le bouton ci-dessous s'en charge." />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la restauration"
                                         Command="{Binding PrepareRestoreCommand}" />
                                 <Button Style="{StaticResource Button.Ghost}" Content="Fermer navigateurs et messagerie"

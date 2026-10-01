@@ -82,6 +82,11 @@ namespace LDI12.App.ViewModels
         public bool HasCapMessage { get => _hasCapMessage; private set => Set(ref _hasCapMessage, value); }
         public string FindingSummary { get => _findingSummary; private set => Set(ref _findingSummary, value); }
 
+        /// <summary>Les constats par gravité, en compteurs : ils se lisent d'un regard, la phrase se lit.</summary>
+        public IReadOnlyList<SeverityCount> SeverityCounts { get => _severityCounts; private set => Set(ref _severityCounts, value); }
+
+        private IReadOnlyList<SeverityCount> _severityCounts = Array.Empty<SeverityCount>();
+
         public string? CompatibilityMessage { get => _compatibilityMessage; private set => Set(ref _compatibilityMessage, value); }
         public bool HasCompatibilityMessage { get => _hasCompatibilityMessage; private set => Set(ref _hasCompatibilityMessage, value); }
         public string? ElevationMessage { get => _elevationMessage; private set => Set(ref _elevationMessage, value); }
@@ -125,9 +130,33 @@ namespace LDI12.App.ViewModels
             }
 
             FindingSummary = BuildFindingSummary(snapshot.Findings);
+            SeverityCounts = CountBySeverity(snapshot.Findings);
             UpdateCompatibility(snapshot);
             UpdateElevation(snapshot);
             UpdateScope(snapshot);
+        }
+
+        private static IReadOnlyList<SeverityCount> CountBySeverity(IReadOnlyList<Finding> findings)
+        {
+            int critical = 0, problem = 0, warning = 0, info = 0;
+            foreach (var finding in findings)
+            {
+                switch (finding.Severity)
+                {
+                    case Severity.Critical: critical++; break;
+                    case Severity.Problem: problem++; break;
+                    case Severity.Warning: warning++; break;
+                    default: info++; break;
+                }
+            }
+
+            return new[]
+            {
+                new SeverityCount(Severity.Critical, critical, critical > 1 ? "critiques" : "critique"),
+                new SeverityCount(Severity.Problem, problem, problem > 1 ? "problèmes" : "problème"),
+                new SeverityCount(Severity.Warning, warning, "à surveiller"),
+                new SeverityCount(Severity.Info, info, info > 1 ? "informations" : "information"),
+            };
         }
 
         private static string BuildFindingSummary(IReadOnlyList<Finding> findings)
@@ -241,5 +270,23 @@ namespace LDI12.App.ViewModels
                 ". Relancer l'analyse en tant qu'administrateur donnerait une image complète.";
             HasElevationMessage = true;
         }
+    }
+
+    /// <summary>Un compteur de constats d'une gravité.</summary>
+    public sealed class SeverityCount
+    {
+        public SeverityCount(Severity severity, int count, string label)
+        {
+            Severity = severity;
+            Count = count;
+            Label = label;
+        }
+
+        public Severity Severity { get; }
+        public int Count { get; }
+        public string Label { get; }
+
+        /// <summary>Un compteur à zéro reste à sa place, éteint : la grille ne bouge pas d'une analyse à l'autre.</summary>
+        public bool IsZero => Count == 0;
     }
 }

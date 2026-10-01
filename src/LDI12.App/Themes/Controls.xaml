@@ -338,11 +338,15 @@
                         <Border x:Name="Bd" Background="{DynamicResource Brush.SurfaceHover}"
                                 BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1"
                                 CornerRadius="{DynamicResource Radius.Control}">
-                            <Grid Margin="{TemplateBinding Padding}">
+                            <!-- La marge intérieure n'est posée qu'une fois : WPF la reporte déjà sur la
+                                 zone de saisie. Posée aussi ici, elle comptait double, et les champs
+                                 faisaient cinquante points de haut, texte décalé (vu sur les captures). -->
+                            <Grid>
                                 <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Visibility="Collapsed"
                                            Foreground="{DynamicResource Brush.TextTertiary}" IsHitTestVisible="False"
                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                           Margin="2,0,0,0" TextTrimming="CharacterEllipsis" />
+                                           Margin="{TemplateBinding Padding}" Padding="2,0,0,0"
+                                           TextTrimming="CharacterEllipsis" />
                                 <ScrollViewer x:Name="PART_ContentHost"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             </Grid>

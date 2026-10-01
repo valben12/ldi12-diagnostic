@@ -365,6 +365,7 @@ namespace LDI12.Platform.Gateways
                     throw;
                 }
 
+                KeepAttributes(destination, info.Attributes);
                 return FileCopyResult.Of(FileCopyOutcome.Copied, written);
             }
             catch (PathTooLongException)
@@ -395,11 +396,39 @@ namespace LDI12.Platform.Gateways
 
                 return FileCopyResult.Of(FileCopyOutcome.Locked, 0, ex.Message);
             }
+            catch (OperationCanceledException)
+            {
+                // Arrêt demandé au milieu d'un fichier : sa copie partielle est déjà retirée. Ce
+                // n'est pas un échec du fichier, il sera copié en entier à la reprise.
+                throw;
+            }
             catch (Exception ex)
             {
                 _log.Debug("Copie impossible de " + source.Path + " : " + ex.Message);
                 return FileCopyResult.Of(FileCopyOutcome.Failed, 0, ex.Message);
             }
+        }
+
+        /// <summary>Les attributs qu'une copie garde de sa source.</summary>
+        private const FileAttributes KeptAttributes =
+            FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System | FileAttributes.Archive;
+
+        /// <summary>
+        /// Reporte les attributs de la source sur la copie, après son renommage.
+        /// </summary>
+        /// <remarks>
+        /// Sans eux, les « desktop.ini » cachés du Bureau, des Documents et des Images revenaient
+        /// visibles à la restauration, posés en icônes sur le Bureau du client. Posés après le
+        /// renommage : un fichier en lecture seule ne se renommerait plus sur certains supports.
+        /// Un refus ne fait pas échouer la copie, dont le contenu est déjà vérifié.
+        /// </remarks>
+        private static void KeepAttributes(string destination, FileAttributes source)
+        {
+            var kept = source & KeptAttributes;
+            if (kept == 0 || kept == FileAttributes.Archive) return;
+
+            try { File.SetAttributes(destination, kept); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
         }
 
         /// <summary>

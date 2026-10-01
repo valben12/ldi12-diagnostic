@@ -36,6 +36,14 @@ namespace LDI12.ProbeHost
         private const string Category = "Elevated";
 
         private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
+
+        /// <summary>
+        /// Délai quand un relevé attend son exécution : le technicien a préparé la restauration,
+        /// puis relit le relevé, ferme les navigateurs du client, répond au téléphone. L'hôte qui
+        /// se refermait au bout d'un quart d'heure faisait alors échouer les pilotes et les
+        /// imprimantes au clic sur « Restaurer ».
+        /// </summary>
+        private static readonly TimeSpan PendingTimeout = TimeSpan.FromHours(4);
         private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
 
         /// <summary>Chemins transmis pour affichage. Le relevé complet reste ici.</summary>
@@ -103,7 +111,7 @@ namespace LDI12.ProbeHost
             while (!cancellationToken.IsCancellationRequested)
             {
                 // Sans opération en cours, un hôte oublié ne doit pas rester en vie indéfiniment.
-                var waitFor = running ?? (Task)Task.Delay(IdleTimeout, cancellationToken);
+                var waitFor = running ?? (Task)Task.Delay(session.HasPending ? PendingTimeout : IdleTimeout, cancellationToken);
                 var done = await Task.WhenAny(lineTask, waitFor).ConfigureAwait(false);
 
                 if (done != lineTask)
@@ -196,6 +204,18 @@ namespace LDI12.ProbeHost
             private readonly Dictionary<string, Pending> _pending =
                 new Dictionary<string, Pending>(StringComparer.Ordinal);
 
+            /// <summary>Les relevés en attente, du plus ancien au plus récent.</summary>
+            private readonly Queue<string> _order = new Queue<string>();
+
+            /// <summary>
+            /// Relevés gardés au plus. Celui d'un disque entier tient des centaines de milliers de
+            /// fichiers : préparer dix fois de suite ne doit pas les accumuler en mémoire.
+            /// </summary>
+            private const int MaxPending = 12;
+
+            /// <summary>Un relevé attend d'être exécuté.</summary>
+            public bool HasPending => _pending.Count > 0;
+
             private readonly PlatformServices _services;
             private readonly ILdiLogger _logger;
             private readonly IScopedLogger _log;
@@ -247,7 +267,14 @@ namespace LDI12.ProbeHost
                 var preview = await action.PreviewAsync(context, cancellationToken).ConfigureAwait(false);
 
                 var token = Guid.NewGuid().ToString("N");
-                _pending[token] = new Pending(action, preview, context);
+
+                // Seul un relevé exécutable attend : les autres n'ont rien à faire faire.
+                if (preview.CanExecute)
+                {
+                    _pending[token] = new Pending(action, preview, context);
+                    _order.Enqueue(token);
+                    while (_order.Count > MaxPending) _pending.Remove(_order.Dequeue());
+                }
 
                 _journal.Record(
                     InterventionKind.Preview, action.Descriptor.Id, action.Descriptor.DisplayName,

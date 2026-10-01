@@ -42,6 +42,29 @@ jobs:
           name: LDI12-Diagnostic
           path: artifacts/*
 
+      # Captures de chaque écran, sur demande : un commit dont le message contient « [captures] ».
+      # Elles sont déposées dans docs/captures, sur la branche même, pour juger l'interface sur
+      # image. Un commit poussé par ce jeton ne relance pas le flux.
+      - name: Capturer les écrans
+        if: contains(github.event.head_commit.message, '[captures]')
+        shell: powershell
+        run: |
+          $exe = (Get-ChildItem artifacts\*.exe | Select-Object -First 1).FullName
+          .\build\captures.ps1 -Exe $exe -Out docs\captures
+
+      - name: Déposer les captures
+        if: contains(github.event.head_commit.message, '[captures]') && startsWith(github.ref, 'refs/heads/')
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/captures
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host 'Aucune capture nouvelle.'; exit 0 }
+          git commit -m "Captures d'écran de ${{ github.sha }}"
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
+
       # Deux façons de demander une release : pousser une étiquette « v… », ou pousser sur une
       # branche le fichier .github/publier qui contient le nom de l'étiquette voulue. La seconde
       # sert quand l'étiquette ne peut pas être poussée directement ; GitHub la crée alors sur le

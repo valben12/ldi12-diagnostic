@@ -264,9 +264,23 @@
                                         <TextBlock Text="Pilotes de ce Windows" Style="{StaticResource Text.Body}"
                                                    Foreground="{DynamicResource Brush.TextPrimary}" />
                                         <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
-                                                   Text="Exportés du disque par DISM, sans les pilotes livrés avec Windows. Réinstallés d'office à la restauration sur le nouveau PC." />
+                                                   Text="Les pilotes tiers de ce Windows, sans ceux livrés avec lui. Copiés et vérifiés avec les fichiers, puis réinstallés à la restauration sur le nouveau PC. Décochez ceux qui n'y serviront pas." />
                                     </StackPanel>
                                 </CheckBox>
+                                <Border Style="{StaticResource Card}" Padding="14,10" Margin="28,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                        IsEnabled="{Binding IncludeOfflineDrivers}"
+                                        Visibility="{Binding HasSourceDriverChoices, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllSourceDriversCommand}" />
+                                            <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoSourceDriversCommand}"
+                                                    Margin="10,0,0,0" />
+                                        </StackPanel>
+                                        <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                                            <ItemsControl ItemsSource="{Binding SourceDriverChoices}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
 
                             <TextBlock Text="Support de destination" Style="{StaticResource Text.Muted}"
@@ -534,6 +548,20 @@
                                                Text="Seulement si la sauvegarde en contient. Installés en premier, avant les données : ils ramènent la carte Wi-Fi. Une invite administrateur s'affichera à la préparation." />
                                 </StackPanel>
                             </CheckBox>
+                            <Border Style="{StaticResource Card}" Padding="14,10" Margin="28,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                    IsEnabled="{Binding RestoreDriversChecked}"
+                                    Visibility="{Binding HasRestoreDriverChoices, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout cocher" Command="{Binding AllRestoreDriversCommand}" />
+                                        <Button Style="{StaticResource Button.Ghost}" Content="Tout décocher" Command="{Binding NoRestoreDriversCommand}"
+                                                Margin="10,0,0,0" />
+                                    </StackPanel>
+                                    <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                                        <ItemsControl ItemsSource="{Binding RestoreDriverChoices}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
                             <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding RestoreApplicationsChecked}">
                                 <StackPanel>
                                     <TextBlock Text="Réinstaller les applications" Style="{StaticResource Text.Body}"

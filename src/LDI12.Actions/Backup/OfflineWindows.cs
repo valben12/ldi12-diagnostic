@@ -21,6 +21,9 @@ namespace LDI12.Actions.Backup
 
         public SoftwareInventory? Software { get; init; }
 
+        /// <summary>Le dossier du magasin de pilotes de chaque pilote tiers, par nom publié (« oem12.inf »).</summary>
+        public IReadOnlyDictionary<string, string> DriverPackages { get; init; } = new Dictionary<string, string>();
+
         /// <summary>Pourquoi le registre n'a pas pu être lu, quand il ne l'a pas été.</summary>
         public string? Failure { get; init; }
     }
@@ -58,6 +61,8 @@ namespace LDI12.Actions.Backup
                     Description = context.Platform.Profile.ShortName + ", build " +
                                   context.Platform.Profile.Build.ToString(CultureInfo.InvariantCulture),
                     Software = await SoftwareAsync(context, @"HKLM\SOFTWARE", cancellationToken).ConfigureAwait(false),
+                    DriverPackages = OfflineDrivers.ParsePackages(
+                        await QueryAsync(context, @"HKLM\SYSTEM\DriverDatabase\DriverInfFiles", true, cancellationToken).ConfigureAwait(false)),
                 };
 
             var suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -66,6 +71,7 @@ namespace LDI12.Actions.Backup
 
             string? machine = null, description = null, failure = null;
             SoftwareInventory? programs = null;
+            IReadOnlyDictionary<string, string> packages = new Dictionary<string, string>();
 
             if (await LoadAsync(context, system, Path.Combine(root, @"Windows\System32\config\SYSTEM"), cancellationToken).ConfigureAwait(false))
             {
@@ -74,6 +80,8 @@ namespace LDI12.Actions.Backup
                     var values = await QueryAsync(context, system + @"\ControlSet001\Control\ComputerName\ComputerName", false, cancellationToken)
                         .ConfigureAwait(false);
                     machine = Value(values, "ComputerName");
+                    packages = OfflineDrivers.ParsePackages(
+                        await QueryAsync(context, system + @"\DriverDatabase\DriverInfFiles", true, cancellationToken).ConfigureAwait(false));
                 }
                 finally
                 {
@@ -114,7 +122,7 @@ namespace LDI12.Actions.Backup
                 failure ??= "le registre SOFTWARE de ce Windows n'a pas pu être chargé";
             }
 
-            return new OfflineWindowsInfo { MachineName = machine, Description = description, Software = programs, Failure = failure };
+            return new OfflineWindowsInfo { MachineName = machine, Description = description, Software = programs, Failure = failure, DriverPackages = packages };
         }
 
         /// <summary>Les logiciels installés pour la machine, vue 64 et 32 bits, tels que les liste le panneau de configuration.</summary>

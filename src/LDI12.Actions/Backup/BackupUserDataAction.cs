@@ -94,8 +94,11 @@ namespace LDI12.Actions.Backup
 
         public SoftwareInventory? Software { get; init; }
 
-        /// <summary>Le volume d'un autre Windows dont les pilotes sont à exporter ; nul sinon.</summary>
+        /// <summary>Le volume d'un autre Windows dont tous les pilotes sont à exporter par DISM ; nul sinon.</summary>
         public string? OfflineDriversVolume { get; init; }
+
+        /// <summary>Les pilotes cochés d'un autre Windows, copiés avec les fichiers sous « Pilotes\oemNN ».</summary>
+        public IReadOnlyList<DriverChoice> OfflineDrivers { get; init; } = Array.Empty<DriverChoice>();
     }
 
     /// <summary>
@@ -197,8 +200,8 @@ namespace LDI12.Actions.Backup
         public const string ProfileParameter = "profile";
 
         /// <summary>
-        /// « 1 » : exporter tous les pilotes tiers du Windows de <see cref="ProfileParameter"/>,
-        /// par DISM, dans la sauvegarde.
+        /// Les pilotes tiers du Windows de <see cref="ProfileParameter"/> à emporter : la liste
+        /// cochée (voir <see cref="DriverBackup.Encode"/>), ou « 1 » pour tous, exportés par DISM.
         /// </summary>
         public const string OfflineDriversParameter = "offline-drivers";
 
@@ -282,6 +285,7 @@ namespace LDI12.Actions.Backup
             SoftwareInventory? software;
             string? offlineVolume = null;
             string? offlineFailure = null;
+            IReadOnlyDictionary<string, string> offlinePackages = new Dictionary<string, string>();
 
             if (profile != null)
             {
@@ -292,6 +296,7 @@ namespace LDI12.Actions.Backup
                 windowsDescription = info.Description;
                 software = info.Software;
                 offlineFailure = info.Failure;
+                offlinePackages = info.DriverPackages;
 
                 // Ni Wi-Fi ni winget pour un Windows qui ne tourne pas : ses clés Wi-Fi sont
                 // chiffrées pour sa machine, et winget ne voit que le Windows en cours.
@@ -375,6 +380,36 @@ namespace LDI12.Actions.Backup
                     ExcludeRelative = extra.IsVolumeRoot ? ExtraFolders.SystemDirectories : Array.Empty<string>(),
                 }, extra.IsVolumeRoot ? ExtraFolders.KeepAtRoot : null, extra.Target, null, cancellationToken));
             }
+
+            // Les pilotes cochés d'un autre Windows : leur paquet, pris tel quel dans son magasin de
+            // pilotes, part avec les fichiers. Copié, relu, repris après interruption comme eux.
+            var offlineChoice = context.Parameter(OfflineDriversParameter);
+            var offlineDrivers = new List<DriverChoice>();
+            var unresolvedDrivers = new List<string>();
+            if (profile != null && offlineChoice != null && offlineChoice != OfflineDrivers.All)
+                foreach (var driver in DriverBackup.Decode(offlineChoice))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var folder = offlinePackages.TryGetValue(driver.InfName, out var package)
+                        ? OfflineDrivers.Repository(offlineVolume!, package)
+                        : null;
+                    var surveyed = folder == null
+                        ? null
+                        : Survey(context, DriverBackup.Folder + " / " + driver.Label, folder, new DirectoryScanRequest(folder)
+                        {
+                            MaxFiles = MaxFilesPerFolder,
+                            Budget = ScanBudget,
+                        }, null, DriverBackup.Folder + "\\" + System.IO.Path.GetFileNameWithoutExtension(driver.InfName), null, cancellationToken);
+
+                    if (surveyed == null)
+                    {
+                        unresolvedDrivers.Add(driver.Label + " (" + driver.InfName + ")");
+                        continue;
+                    }
+
+                    Take(surveyed);
+                    offlineDrivers.Add(driver);
+                }
 
             if (files == 0 && !withWifi && winget.Count == 0 && !withDrivers)
                 return new ActionPreview
@@ -527,8 +562,14 @@ namespace LDI12.Actions.Backup
                         PreviewLineKind.Caution));
                 willNotDo.Add("Ne copie pas les profils Wi-Fi ni la liste winget de ce Windows : ses clés Wi-Fi sont " +
                               "chiffrées pour sa machine, et winget ne voit que le Windows en cours.");
-                if (context.Parameter(OfflineDriversParameter) == "1")
+                if (offlineChoice == OfflineDrivers.All)
                     willDo.Add("Exporter tous les pilotes tiers de ce Windows par DISM, dans « " + DriverBackup.Folder + " »");
+                if (offlineDrivers.Count > 0)
+                    willDo.Add("Copier " + offlineDrivers.Count + " pilote(s) de ce Windows dans « " + DriverBackup.Folder +
+                               " », pour les réinstaller sur le nouveau PC");
+                if (unresolvedDrivers.Count > 0)
+                    measurements.Add(new PreviewLine("Pilotes introuvables", string.Join(", ", unresolvedDrivers) +
+                        " : absents du magasin de pilotes de ce Windows, ils ne seront pas sauvegardés", PreviewLineKind.Caution));
             }
             if (running.Count > 0)
                 measurements.Add(new PreviewLine(
@@ -594,7 +635,8 @@ namespace LDI12.Actions.Backup
                     Account = account,
                     WindowsDescription = windowsDescription,
                     Software = software,
-                    OfflineDriversVolume = profile != null && context.Parameter(OfflineDriversParameter) == "1" ? offlineVolume : null,
+                    OfflineDriversVolume = profile != null && offlineChoice == OfflineDrivers.All ? offlineVolume : null,
+                    OfflineDrivers = offlineDrivers,
                     ExtraFolders = extras,
                     AlreadyBytes = already,
                     Folders = plan,
@@ -793,6 +835,10 @@ namespace LDI12.Actions.Backup
             // Support parti : plus rien ne peut s'y écrire, et chaque tentative prendrait son délai.
             if (lost)
                 return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+
+            if (plan.OfflineDrivers.Count > 0 &&
+                !Deposit(context, plan, System.IO.Path.Combine(DriverBackup.Folder, DriverBackup.ListFileName), DriverBackup.Csv(plan.OfflineDrivers)))
+                details.Add("La liste des pilotes n'a pas pu être écrite : la restauration les nommera par leur fichier.");
 
             if (plan.OfflineDriversVolume != null && !interrupted)
             {

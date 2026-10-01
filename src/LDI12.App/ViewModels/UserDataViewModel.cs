@@ -105,6 +105,10 @@ namespace LDI12.App.ViewModels
             CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
             AllDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, true));
             NoDriversCommand = new RelayCommand(() => CheckAll(DriverChoices, false));
+            AllSourceDriversCommand = new RelayCommand(() => CheckAll(SourceDriverChoices, true));
+            NoSourceDriversCommand = new RelayCommand(() => CheckAll(SourceDriverChoices, false));
+            AllRestoreDriversCommand = new RelayCommand(() => CheckAllRestore(RestoreDriverChoices, true));
+            NoRestoreDriversCommand = new RelayCommand(() => CheckAllRestore(RestoreDriverChoices, false));
             ListApplicationsCommand = new AsyncRelayCommand(ListApplicationsAsync, () => !IsCopying && !IsListingApplications);
             AllApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, true));
             NoApplicationsCommand = new RelayCommand(() => CheckAll(ApplicationChoices, false));
@@ -520,7 +524,40 @@ namespace LDI12.App.ViewModels
         /// <summary>Les pilotes d'un autre Windows : ceux de ce PC se choisissent un par un, plus bas.</summary>
         public bool ShowOfflineDrivers => IsWindowsSource && _selectedSource?.Volume?.IsSystem == false;
 
-        /// <summary>Exporter les pilotes du Windows choisi, par DISM. Coché par défaut.</summary>
+        /// <summary>Les pilotes tiers du Windows choisi, lus sur son disque, tous cochés au départ.</summary>
+        public ObservableCollection<ChoiceItem> SourceDriverChoices { get; } = new ObservableCollection<ChoiceItem>();
+
+        public bool HasSourceDriverChoices => SourceDriverChoices.Count > 0;
+
+        public ICommand AllSourceDriversCommand { get; }
+        public ICommand NoSourceDriversCommand { get; }
+
+        private int _sourceDriversListing;
+
+        private async Task ListSourceDriversAsync(SourceVolume volume)
+        {
+            var ticket = ++_sourceDriversListing;
+            IReadOnlyList<DriverChoice> drivers;
+            try
+            {
+                var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
+                drivers = await Task.Run(() => OfflineDrivers.List(services.Files, volume.Root)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Les pilotes du disque " + volume.Root + " n'ont pas pu être listés.", ex);
+                drivers = Array.Empty<DriverChoice>();
+            }
+
+            if (ticket != _sourceDriversListing || _selectedSource?.Volume != volume) return;
+
+            SourceDriverChoices.Clear();
+            foreach (var driver in drivers) SourceDriverChoices.Add(DriverItem(driver));
+            Raise(nameof(HasSourceDriverChoices));
+            Invalidate();
+        }
+
+        /// <summary>Exporter les pilotes du Windows choisi. Coché par défaut.</summary>
         public bool IncludeOfflineDrivers
         {
             get => _includeOfflineDrivers;
@@ -567,6 +604,9 @@ namespace LDI12.App.ViewModels
             {
                 SourceAccounts.Clear();
                 SourceFolders.Clear();
+                SourceDriverChoices.Clear();
+                Raise(nameof(HasSourceDriverChoices));
+                if (tile.Volume is { HasWindows: true, IsSystem: false }) _ = ListSourceDriversAsync(tile.Volume);
 
                 var volume = tile.Volume;
                 if (volume != null)
@@ -620,8 +660,14 @@ namespace LDI12.App.ViewModels
                 parameters[BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0";
                 if (driversAsked)
                 {
-                    // Les pilotes sont ceux du Windows, pas d'un compte : exportés une fois.
-                    parameters[BackupUserDataAction.OfflineDriversParameter] = "1";
+                    // Les pilotes sont ceux du Windows, pas d'un compte : emportés une fois. Sans liste
+                    // lisible sur le disque, ils partent tous, par DISM.
+                    var chosen = new List<DriverChoice>();
+                    foreach (var item in SourceDriverChoices)
+                        if (item.IsChecked && item.Driver != null) chosen.Add(item.Driver);
+
+                    if (!HasSourceDriverChoices) parameters[BackupUserDataAction.OfflineDriversParameter] = OfflineDrivers.All;
+                    else if (chosen.Count > 0) parameters[BackupUserDataAction.OfflineDriversParameter] = DriverBackup.Encode(chosen);
                     driversAsked = false;
                 }
 
@@ -920,22 +966,31 @@ namespace LDI12.App.ViewModels
             return result;
         }
 
+        /// <summary>Une case par pilote : ce qu'il fait fonctionner, puis de quoi le reconnaître.</summary>
+        private ChoiceItem DriverItem(DriverChoice driver)
+        {
+            var detail = new List<string>();
+            if (!string.IsNullOrEmpty(driver.DeviceClass)) detail.Add(driver.DeviceClass!);
+            if (!string.IsNullOrEmpty(driver.Manufacturer)) detail.Add(driver.Manufacturer!);
+            if (!string.IsNullOrEmpty(driver.Version)) detail.Add("version " + driver.Version);
+            detail.Add(driver.InfName);
+
+            return new ChoiceItem(driver.InfName, driver.Label, string.Join(" · ", detail), true, Invalidate) { Driver = driver };
+        }
+
+        private void CheckAllRestore(IEnumerable<ChoiceItem> items, bool value)
+        {
+            foreach (var item in items) item.SetSilently(value);
+            InvalidateRestore();
+        }
+
         private void LoadDrivers(SystemSnapshot? snapshot)
         {
             DriverChoices.Clear();
 
             foreach (var driver in DriverBackup.Choices(snapshot))
             {
-                var detail = new List<string>();
-                if (!string.IsNullOrEmpty(driver.DeviceClass)) detail.Add(driver.DeviceClass!);
-                if (!string.IsNullOrEmpty(driver.Manufacturer)) detail.Add(driver.Manufacturer!);
-                if (!string.IsNullOrEmpty(driver.Version)) detail.Add("version " + driver.Version);
-                detail.Add(driver.InfName);
-
-                DriverChoices.Add(new ChoiceItem(driver.InfName, driver.Label, string.Join(" · ", detail), true, Invalidate)
-                {
-                    Driver = driver,
-                });
+                DriverChoices.Add(DriverItem(driver));
             }
 
             DriversNote = snapshot == null
@@ -1190,6 +1245,14 @@ namespace LDI12.App.ViewModels
         /// </summary>
         public ObservableCollection<BackupEntryTile> RestoreBackups { get; } = new ObservableCollection<BackupEntryTile>();
 
+        /// <summary>Les pilotes de la sauvegarde retenue, tous cochés : on décoche ceux qui n'ont rien à faire sur ce PC.</summary>
+        public ObservableCollection<ChoiceItem> RestoreDriverChoices { get; } = new ObservableCollection<ChoiceItem>();
+
+        public bool HasRestoreDriverChoices => RestoreDriverChoices.Count > 0;
+
+        public ICommand AllRestoreDriversCommand { get; }
+        public ICommand NoRestoreDriversCommand { get; }
+
         public bool HasRestoreChoice => RestoreBackups.Count > 1;
 
         private int _restoreListing;
@@ -1202,14 +1265,17 @@ namespace LDI12.App.ViewModels
             try
             {
                 var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
-                var (entries, chosen) = await Task.Run(() =>
+                var (entries, chosen, packages) = await Task.Run(() =>
                 {
                     var found = RestoreCatalog.Find(services.Files, source, out _);
-                    if (found == null) return ((IReadOnlyList<BackupEntry>)Array.Empty<BackupEntry>(), (string?)null);
+                    if (found == null)
+                        return ((IReadOnlyList<BackupEntry>)Array.Empty<BackupEntry>(), (string?)null,
+                            (IReadOnlyList<(string Folder, string Label)>)Array.Empty<(string, string)>());
 
                     // Une sauvegarde désignée elle-même : ses voisines sont dans le dossier au-dessus.
                     var folder = SameRoot(found, source) ? System.IO.Path.GetDirectoryName(found.TrimEnd('\\')) : source;
-                    return (RestoreCatalog.List(services.Files, folder ?? source), found);
+                    return (RestoreCatalog.List(services.Files, folder ?? source), found,
+                        RestoreDriversAction.Packages(services.Files, found));
                 }).ConfigureAwait(true);
 
                 // Une frappe plus récente dans le champ a déjà pris le relais.
@@ -1221,15 +1287,24 @@ namespace LDI12.App.ViewModels
                     {
                         IsSelected = chosen != null && SameRoot(entry.Path, chosen),
                     });
+
+                RestoreDriverChoices.Clear();
+                foreach (var (folder, label) in packages)
+                {
+                    var name = System.IO.Path.GetFileName(folder);
+                    RestoreDriverChoices.Add(new ChoiceItem(name, label, null, true, InvalidateRestore));
+                }
             }
             catch (Exception ex)
             {
                 if (ticket != _restoreListing) return;
                 RestoreBackups.Clear();
+                RestoreDriverChoices.Clear();
                 _logger.Error(Category, "Les sauvegardes du support n'ont pas pu être listées.", ex);
             }
 
             Raise(nameof(HasRestoreChoice));
+            Raise(nameof(HasRestoreDriverChoices));
         }
 
         /// <summary>Réimporter les profils Wi-Fi que la sauvegarde contient. Coché par défaut : ils ont été exportés exprès.</summary>
@@ -1318,13 +1393,24 @@ namespace LDI12.App.ViewModels
                     [RestoreDriversAction.SourceParameter] = RestoreSource.Trim(),
                 };
 
-                if (RestoreDriversChecked && backup != null &&
+                // Tout décoché vaut « pas de pilotes » : un paramètre vide se lirait « tous ».
+                var drivers = new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
+                var anyDriver = true;
+                if (HasRestoreDriverChoices)
+                {
+                    var names = new List<string>();
+                    foreach (var item in RestoreDriverChoices) if (item.IsChecked) names.Add(item.Key);
+                    drivers[RestoreDriversAction.PackagesParameter] = string.Join("\n", names);
+                    anyDriver = names.Count > 0;
+                }
+
+                if (RestoreDriversChecked && anyDriver && backup != null &&
                     runner.Context.Files.DirectoryExists(System.IO.Path.Combine(backup, DriverBackup.Folder)))
                 {
                     _restoreDrivers ??= ActionCatalog.Find(ActionIds.RestoreDrivers, _logger);
                     if (_restoreDrivers != null)
                     {
-                        _restoreDriversPreview = await runner.PreviewAsync(_restoreDrivers, source, CancellationToken.None)
+                        _restoreDriversPreview = await runner.PreviewAsync(_restoreDrivers, drivers, CancellationToken.None)
                             .ConfigureAwait(true);
                         RestoreLines.Add("Pilotes. " + _restoreDriversPreview.Summary);
                         Show(RestoreLines, _restoreDriversPreview);

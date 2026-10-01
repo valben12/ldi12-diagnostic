@@ -457,6 +457,12 @@ namespace LDI12.Actions.Backup
     {
         public const string SourceParameter = "source";
 
+        /// <summary>
+        /// Les paquets à réinstaller, un nom de dossier par ligne (« oem12 »). Absent : tous ceux
+        /// de la sauvegarde.
+        /// </summary>
+        public const string PackagesParameter = "packages";
+
         public ActionDescriptor Descriptor { get; } = new ActionDescriptor
         {
             Id = ActionIds.RestoreDrivers,
@@ -491,6 +497,23 @@ namespace LDI12.Actions.Backup
                 return Task.FromResult(Blocked("Aucune sauvegarde LDI12 n'a été trouvée dans « " + source + " »."));
 
             var packages = Packages(context.Files, backup);
+            var chosen = context.Parameter(PackagesParameter);
+            if (chosen != null)
+            {
+                var wanted = new HashSet<string>(chosen.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries),
+                    StringComparer.OrdinalIgnoreCase);
+                var kept = new List<(string, string)>();
+                foreach (var package in packages)
+                    if (wanted.Contains(Path.GetFileName(package.Folder))) kept.Add(package);
+                if (kept.Count == 0)
+                    return Task.FromResult(new ActionPreview
+                    {
+                        Outcome = PreviewOutcome.NothingToDo,
+                        Summary = "Aucun pilote de la sauvegarde n'est coché.",
+                    });
+                packages = kept;
+            }
+
             if (packages.Count == 0)
                 return Task.FromResult(new ActionPreview
                 {
@@ -578,7 +601,7 @@ namespace LDI12.Actions.Backup
         }
 
         /// <summary>Les dossiers de la sauvegarde qui contiennent un pilote, avec leur libellé.</summary>
-        internal static IReadOnlyList<(string Folder, string Label)> Packages(IFileSystemGateway files, string backup)
+        public static IReadOnlyList<(string Folder, string Label)> Packages(IFileSystemGateway files, string backup)
         {
             var result = new List<(string, string)>();
             var root = Path.Combine(backup, DriverBackup.Folder);
@@ -595,15 +618,25 @@ namespace LDI12.Actions.Backup
                     CancellationToken.None);
                 if (!scan.HasValue) continue;
 
-                var hasInf = false;
+                string? inf = null;
                 foreach (var file in scan.Value.Files)
-                    if (file.Path.EndsWith(".inf", StringComparison.OrdinalIgnoreCase)) { hasInf = true; break; }
-                if (!hasInf) continue;
+                    if (file.Path.EndsWith(".inf", StringComparison.OrdinalIgnoreCase)) { inf = file.Path; break; }
+                if (inf == null) continue;
 
                 var name = Path.GetFileName(directory);
-                result.Add((directory, labels.TryGetValue(name + ".inf", out var label) && label.Length > 0
-                    ? label + " (" + name + ")"
-                    : name));
+                if (labels.TryGetValue(name + ".inf", out var label) && label.Length > 0)
+                {
+                    result.Add((directory, label + " (" + name + ")"));
+                    continue;
+                }
+
+                // Un export par DISM n'a pas de liste : le .inf dit lui-même ce qu'il installe.
+                var text = files.ReadText(inf);
+                var summary = text.HasValue ? OfflineDrivers.Parse(text.Value) : new InfSummary();
+                var described = summary.Label(name);
+                result.Add((directory, described == name
+                    ? name
+                    : described + (summary.Version == null ? string.Empty : ", version " + summary.Version) + " (" + name + ")"));
             }
 
             return result;

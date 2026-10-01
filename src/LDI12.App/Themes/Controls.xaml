@@ -1,5 +1,6 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:LDI12.App">
 
     <!-- Aucun DropShadowEffect ni BlurEffect nulle part : ce sont des nuanceurs de pixels qui
          repeignent des zones entières à chaque image en rendu logiciel : situation courante en
@@ -498,6 +499,7 @@
          désormais par-dessus la marge droite du contenu, comme sous Windows 11 : la largeur ne
          dépend plus de la longueur de la page. -->
     <Style TargetType="ScrollViewer">
+        <Setter Property="local:Motion.SmoothScroll" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollViewer">

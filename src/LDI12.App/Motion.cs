@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -146,6 +148,99 @@ namespace LDI12.App
                 Duration = duration,
                 EasingFunction = EaseOut,
             });
+        }
+            // ---------------------------------------------------------------- défilement doux
+
+        /// <summary>
+        /// Défilement à la molette qui glisse vers sa position au lieu d'y sauter.
+        /// </summary>
+        /// <remarks>
+        /// WPF fait défiler par sauts secs de quarante-huit points : l'œil perd la ligne qu'il
+        /// lisait à chaque cran. La page glisse désormais vers sa cible en quelques images,
+        /// comme dans un navigateur. Les crans rapides s'additionnent à la cible au lieu de
+        /// repartir de la position courante : la page suit la molette sans traîner.
+        /// <para>
+        /// Une liste intérieure qui défile elle-même (pilotes, applications) garde la main quand
+        /// la souris est dessus. Les listes virtualisées, qui défilent par élément et non par
+        /// point, ne sont pas concernées. En rendu logiciel, le défilement reste celui de WPF.
+        /// </para>
+        /// </remarks>
+        public static readonly DependencyProperty SmoothScrollProperty = DependencyProperty.RegisterAttached(
+            "SmoothScroll", typeof(bool), typeof(Motion), new PropertyMetadata(false, OnSmoothScrollChanged));
+
+        public static bool GetSmoothScroll(DependencyObject element) => (bool)element.GetValue(SmoothScrollProperty);
+        public static void SetSmoothScroll(DependencyObject element, bool value) => element.SetValue(SmoothScrollProperty, value);
+
+        /// <summary>Points parcourus par cran de molette : un peu plus que WPF, la glissade le rend lisible.</summary>
+        private const double PointsPerNotch = 72;
+
+        private static readonly Dictionary<ScrollViewer, double> Targets = new Dictionary<ScrollViewer, double>();
+        private static bool _rendering;
+
+        private static void OnSmoothScrollChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(d is ScrollViewer viewer)) return;
+
+            viewer.PreviewMouseWheel -= OnWheel;
+            if (e.NewValue is bool on && on) viewer.PreviewMouseWheel += OnWheel;
+        }
+
+        private static void OnWheel(object sender, MouseWheelEventArgs e)
+        {
+            var viewer = (ScrollViewer)sender;
+            if (!Enabled || e.Handled || viewer.CanContentScroll || viewer.ScrollableHeight <= 0) return;
+            if (InnerScrollerUnder(e.OriginalSource as DependencyObject, viewer)) return;
+
+            var from = Targets.TryGetValue(viewer, out var pending) ? pending : viewer.VerticalOffset;
+            var target = Math.Max(0, Math.Min(viewer.ScrollableHeight, from - e.Delta / 120.0 * PointsPerNotch));
+            Targets[viewer] = target;
+            e.Handled = true;
+
+            if (_rendering) return;
+            _rendering = true;
+            CompositionTarget.Rendering += OnRendering;
+        }
+
+        private static void OnRendering(object? sender, EventArgs e)
+        {
+            var done = new List<ScrollViewer>();
+            foreach (var pair in Targets)
+            {
+                var viewer = pair.Key;
+                var current = viewer.VerticalOffset;
+                var target = Math.Min(pair.Value, viewer.ScrollableHeight);
+
+                // Un quart du chemin restant à chaque image : rapide au départ, posé à l'arrivée.
+                var next = current + (target - current) * 0.24;
+                if (Math.Abs(target - next) < 0.6 || !viewer.IsLoaded)
+                {
+                    next = target;
+                    done.Add(viewer);
+                }
+
+                viewer.ScrollToVerticalOffset(next);
+            }
+
+            foreach (var viewer in done) Targets.Remove(viewer);
+            if (Targets.Count > 0) return;
+
+            CompositionTarget.Rendering -= OnRendering;
+            _rendering = false;
+        }
+
+        /// <summary>Vrai si la souris est sur une zone qui défile elle-même, à l'intérieur de celle-ci.</summary>
+        private static bool InnerScrollerUnder(DependencyObject? source, ScrollViewer outer)
+        {
+            var node = source;
+            while (node != null && !ReferenceEquals(node, outer))
+            {
+                if (node is ScrollViewer inner && inner.ScrollableHeight > 0) return true;
+                node = node is Visual || node is System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(node)
+                    : LogicalTreeHelper.GetParent(node);
+            }
+
+            return false;
         }
     }
 }

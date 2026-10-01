@@ -87,6 +87,11 @@ namespace LDI12.App.ViewModels
 
         private IReadOnlyList<SeverityCount> _severityCounts = Array.Empty<SeverityCount>();
 
+        /// <summary>Aucun constat : la phrase le dit, les compteurs à zéro ne suffiraient pas.</summary>
+        public bool HasNoFinding { get => _hasNoFinding; private set => Set(ref _hasNoFinding, value); }
+
+        private bool _hasNoFinding;
+
         public string? CompatibilityMessage { get => _compatibilityMessage; private set => Set(ref _compatibilityMessage, value); }
         public bool HasCompatibilityMessage { get => _hasCompatibilityMessage; private set => Set(ref _hasCompatibilityMessage, value); }
         public string? ElevationMessage { get => _elevationMessage; private set => Set(ref _elevationMessage, value); }
@@ -131,6 +136,7 @@ namespace LDI12.App.ViewModels
 
             FindingSummary = BuildFindingSummary(snapshot.Findings);
             SeverityCounts = CountBySeverity(snapshot.Findings);
+            HasNoFinding = snapshot.Findings.Count == 0;
             UpdateCompatibility(snapshot);
             UpdateElevation(snapshot);
             UpdateScope(snapshot);

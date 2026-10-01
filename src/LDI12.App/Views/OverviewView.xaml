@@ -208,7 +208,9 @@
                         <TextBlock Text="ÉTAT GÉNÉRAL DE LA MACHINE" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Text="{Binding BandLabel}" Style="{StaticResource BandTitle}"
                                    Margin="0,6,0,0" />
-                        <TextBlock Text="{Binding FindingSummary}" Style="{StaticResource Text.Body}" Margin="0,8,0,0" />
+                        <!-- Les compteurs disent déjà les constats : la phrase ne reste que lorsqu'il n'y en a aucun. -->
+                        <TextBlock Text="{Binding FindingSummary}" Style="{StaticResource Text.Body}" Margin="0,8,0,0"
+                                   Visibility="{Binding HasNoFinding, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding ConfidenceText}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" />
                         <TextBlock Text="{Binding CapMessage}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0"
                                    Foreground="{DynamicResource Brush.StatusWarning}" MaxWidth="900" HorizontalAlignment="Left"

@@ -151,5 +151,62 @@ namespace LDI12.Tests
             var plan = Assert.IsType<DriverRestorePlan>(preview.Plan);
             Assert.Equal(new[] { backup + @"\Pilotes\oem4" }, plan.Packages.Select(package => package.Folder));
         }
+    
+        private static string InfOf(string deviceClass, params string[] hardwareIds)
+            => "[Version]\r\nClass = " + deviceClass + "\r\nProvider = %P%\r\n" +
+               "[Manufacturer]\r\n%P% = Models, NTamd64\r\n" +
+               "[Models.NTamd64]\r\n%Dev% = Install, " + string.Join(", ", hardwareIds) + "\r\n" +
+               "[Strings]\r\nP = \"Fabricant\"\r\nDev = \"Appareil\"\r\n";
+
+        [Theory]
+        [InlineData("Printer", "USBPRINT\\HPOfficejet_Pro_8020A1E8", DriverKind.Peripheral)]
+        [InlineData("Image", "USB\\VID_04A9&PID_190F", DriverKind.Peripheral)]
+        [InlineData("Display", "PCI\\VEN_10DE&DEV_2504", DriverKind.Machine)]
+        [InlineData("Mouse", "HID\\VID_046D&PID_C52B", DriverKind.Peripheral)]
+        [InlineData("Mouse", "HID\\SYNA2393", DriverKind.Machine)]
+        [InlineData("Mouse", "ACPI\\SYN1234", DriverKind.Machine)]
+        [InlineData("MEDIA", "HDAUDIO\\FUNC_01&VEN_10EC&DEV_0257", DriverKind.Machine)]
+        [InlineData("MEDIA", "USB\\VID_1235&PID_8210", DriverKind.Peripheral)]
+        [InlineData("Bluetooth", "USB\\VID_8087&PID_0026", DriverKind.Machine)]
+        [InlineData("Net", "USB\\VID_0BDA&PID_8179", DriverKind.Peripheral)]
+        [InlineData("Net", "PCI\\VEN_8086&DEV_2723", DriverKind.Machine)]
+        [InlineData("System", "PCI\\VEN_8086&DEV_A0A3", DriverKind.Machine)]
+        [InlineData("Ports", "FTDIBUS\\COMPORT&VID_0403&PID_6001", DriverKind.Peripheral)]
+        public void Un_pilote_se_range_d_apres_le_materiel_qu_il_equipe(string deviceClass, string hardwareId, DriverKind expected)
+            => Assert.Equal(expected, OfflineDrivers.Parse(InfOf(deviceClass, hardwareId)).Kind);
+
+        [Fact]
+        public void La_liste_de_ce_PC_met_les_peripheriques_en_tete()
+        {
+            var files = new FakeFileSystemGateway()
+                .WithFile(@"C:\Windows\INF", @"C:\Windows\INF\oem1.inf")
+                .WithFile(@"C:\Windows\INF", @"C:\Windows\INF\oem2.inf");
+            files.Texts[@"C:\Windows\INF\oem1.inf"] = InfOf("Display", "PCI\\VEN_10DE&DEV_2504");
+            files.Texts[@"C:\Windows\INF\oem2.inf"] = InfOf("Printer", "USBPRINT\\Canon");
+
+            var drivers = OfflineDrivers.List(files, @"C:\");
+
+            Assert.Equal(new[] { "oem2.inf", "oem1.inf" }, drivers.Select(driver => driver.InfName));
+            Assert.Equal(DriverKind.Peripheral, drivers[0].Kind);
+            Assert.Equal(DriverKind.Machine, drivers[1].Kind);
+        }
+
+        [Fact]
+        public void Les_pilotes_d_une_sauvegarde_disent_leur_famille()
+        {
+            const string backup = @"F:\LDI12-Sauvegarde-PC-2026-09-30-1400";
+            var files = new FakeFileSystemGateway()
+                .WithFile(backup + @"\Pilotes\oem3", backup + @"\Pilotes\oem3\nvlt.inf")
+                .WithFile(backup + @"\Pilotes\oem4", backup + @"\Pilotes\oem4\canon.inf");
+            files.Directories.Add(backup + @"\Pilotes");
+            files.Children[backup + @"\Pilotes"] = new List<string> { backup + @"\Pilotes\oem3", backup + @"\Pilotes\oem4" };
+            files.Texts[backup + @"\Pilotes\oem3\nvlt.inf"] = InfOf("Display", "PCI\\VEN_10DE&DEV_2504");
+            files.Texts[backup + @"\Pilotes\oem4\canon.inf"] = InfOf("Image", "USB\\VID_04A9&PID_190F");
+
+            var packages = RestoreDriversAction.Describe(files, backup);
+
+            Assert.Equal(DriverKind.Machine, packages.Single(package => package.Folder.EndsWith("oem3", StringComparison.Ordinal)).Kind);
+            Assert.Equal(DriverKind.Peripheral, packages.Single(package => package.Folder.EndsWith("oem4", StringComparison.Ordinal)).Kind);
+        }
     }
 }

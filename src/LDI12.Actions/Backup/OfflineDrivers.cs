@@ -18,6 +18,12 @@ namespace LDI12.Actions.Backup
         /// <summary>Le premier périphérique qu'il déclare : « NVIDIA GeForce RTX 3060 ».</summary>
         public string? Device { get; init; }
 
+        /// <summary>Les bus des matériels qu'il équipe, d'après leurs identifiants : « USB », « PCI », « HDAUDIO ».</summary>
+        public IReadOnlyCollection<string> Buses { get; init; } = Array.Empty<string>();
+
+        /// <summary>Périphérique ou propre à ce PC.</summary>
+        public DriverKind Kind => DriverKinds.Classify(DeviceClass, Buses);
+
         /// <summary>Ce que le technicien lit sur la case.</summary>
         public string Label(string fallback)
             => Device ?? (Provider != null ? Provider + (DeviceClass != null ? " · " + DeviceClass : string.Empty) : fallback);
@@ -66,14 +72,11 @@ namespace LDI12.Actions.Backup
                     DeviceClass = summary.DeviceClass,
                     Manufacturer = summary.Provider,
                     Version = summary.Version,
+                    Kind = summary.Kind,
                 });
             }
 
-            result.Sort((a, b) =>
-            {
-                var byClass = string.Compare(a.DeviceClass, b.DeviceClass, StringComparison.CurrentCultureIgnoreCase);
-                return byClass != 0 ? byClass : string.Compare(a.Label, b.Label, StringComparison.CurrentCultureIgnoreCase);
-            });
+            DriverKinds.Sort(result);
             return result;
         }
 
@@ -135,7 +138,10 @@ namespace LDI12.Actions.Backup
                 }
 
             // [Manufacturer] : « %Fab% = Section, NTamd64 » ; le premier modèle de « Section.NTamd64 »
-            // ou de « Section » donne le premier périphérique.
+            // ou de « Section » donne le premier périphérique. Chaque modèle (« %Desc% = Install,
+            // USB\VID_046D&PID_C52B ») nomme aussi le matériel qu'il équipe : son bus dit si c'est
+            // un périphérique qu'on branche ou un composant de la machine.
+            var buses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (sections.TryGetValue("Manufacturer", out var manufacturers))
                 foreach (var line in manufacturers)
                 {
@@ -151,15 +157,33 @@ namespace LDI12.Actions.Backup
                     foreach (var candidate in candidates)
                     {
                         if (!sections.TryGetValue(candidate, out var models) || models.Count == 0) continue;
-                        var (description, _) = Pair(models[0]);
-                        device = Resolve(description);
-                        if (device != null) break;
-                    }
+                        if (device == null)
+                        {
+                            var (description, _) = Pair(models[0]);
+                            device = Resolve(description);
+                        }
 
-                    if (device != null) break;
+                        foreach (var model in models)
+                        {
+                            var (_, install) = Pair(model);
+                            var ids = install.Split(',');
+                            for (var index = 1; index < ids.Length; index++)
+                            {
+                                var id = ids[index].Trim();
+                                var slash = id.IndexOf('\\');
+                                if (slash <= 0) continue;
+                                var bus = id.Substring(0, slash).ToUpperInvariant();
+
+                                // HID : une souris ou un clavier qu'on branche porte l'identifiant
+                                // de son fabricant USB (« VID_ ») ; le pavé tactile d'un portable, non.
+                                if (bus == "HID") bus = id.IndexOf("VID", StringComparison.OrdinalIgnoreCase) >= 0 ? "HID-VID" : "HID";
+                                buses.Add(bus);
+                            }
+                        }
+                    }
                 }
 
-            return new InfSummary { DeviceClass = deviceClass, Provider = provider, Version = version, Device = device };
+            return new InfSummary { DeviceClass = deviceClass, Provider = provider, Version = version, Device = device, Buses = buses };
         }
 
         /// <summary>

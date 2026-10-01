@@ -58,6 +58,13 @@ namespace LDI12.Actions.Backup
 
         public bool Interrupted { get; init; }
 
+        /// <summary>Ce que les filtres ont écarté ; nul sans filtre.</summary>
+        public string? FilterText { get; init; }
+
+        public int ExcludedFiles { get; init; }
+
+        public long ExcludedBytes { get; init; }
+
         /// <summary>Imprimantes, lecteurs réseau et clés de produit ; nul s'ils n'ont pas été relevés.</summary>
         public MachineSettingsRecord? Settings { get; init; }
     }
@@ -82,6 +89,8 @@ namespace LDI12.Actions.Backup
         public const string FileName = "fiche-reinstallation.html";
 
         public const string SoftwareFileName = "logiciels.csv";
+
+        public const string ReportFileName = "rapport-sauvegarde.html";
 
         private const string Css = @"
 *{box-sizing:border-box}
@@ -147,6 +156,107 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
                 .Append(string.IsNullOrEmpty(model.ToolVersion) ? string.Empty : " " + E(model.ToolVersion!))
                 .Append(". Le détail fichier par fichier de la copie est dans manifeste.csv, et la liste des ")
                 .Append("logiciels, prête pour un tableur, dans ").Append(SoftwareFileName).Append(".</footer>")
+                .Append("</main></body></html>");
+
+            return html.ToString();
+        }
+
+        /// <summary>
+        /// Le rapport à remettre au client : ce qui a été sauvegardé, vérifié, et ce qui ne l'a pas été.
+        /// </summary>
+        /// <remarks>
+        /// La fiche de réinstallation parle au technicien. Ce rapport parle au client, sans jargon :
+        /// il dit ce qui est en sécurité et ce qui ne l'est pas, et se signe des deux côtés. C'est
+        /// lui qui tranche, des semaines plus tard, la question « mes photos étaient-elles dedans ? ».
+        /// </remarks>
+        public static string RenderReport(ReinstallSheetModel model)
+        {
+            int copied = 0, already = 0, failed = 0;
+            long bytes = 0;
+            foreach (var folder in model.Folders)
+            {
+                copied += folder.Copied;
+                already += folder.Skipped;
+                failed += folder.Failed;
+                bytes += folder.Bytes;
+            }
+
+            var html = new StringBuilder(32 * 1024);
+            html.Append("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\">")
+                .Append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
+                .Append("<title>Rapport de sauvegarde · ").Append(E(model.Machine)).Append("</title>")
+                .Append("<style>").Append(Css)
+                .Append(".verdict{margin-top:18px;padding:14px 16px;border-radius:8px;background:#E9F6EE;border:1px solid #B9E2C8;font-size:14px}")
+                .Append(".verdict.warn{background:#FFF4E0;border-color:#F1D39A}")
+                .Append(".signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}")
+                .Append(".signatures div{border-top:1px solid #9C99A3;padding-top:8px;min-height:90px}")
+                .Append("@media print{.verdict{border-color:#CFCBD6}}")
+                .Append("</style></head><body><main class=\"sheet\">");
+
+            html.Append("<header class=\"masthead\"><p class=\"eyebrow\">Sauvegarde de vos données</p>")
+                .Append("<h1>Rapport de sauvegarde</h1><dl class=\"meta\">");
+            Meta(html, "Ordinateur", model.Machine);
+            Meta(html, "Compte", model.Account);
+            Meta(html, "Date", model.At.ToString("d MMMM yyyy 'à' HH:mm", French));
+            Meta(html, "Emplacement", model.Destination);
+            html.Append("</dl></header>");
+
+            var complete = !model.Interrupted && failed == 0;
+            html.Append("<p class=\"verdict").Append(complete ? string.Empty : " warn").Append("\">")
+                .Append(E(complete
+                    ? (copied + already).ToString("N0", French) + " fichiers sont en sécurité, " + ValueFormat.Bytes(bytes) +
+                      " écrits. Chaque fichier a été relu sur le support et comparé à l'original."
+                    : model.Interrupted
+                        ? "La sauvegarde n'est pas terminée : elle a été arrêtée avant la fin. Elle doit être reprise."
+                        : failed.ToString("N0", French) + " fichier(s) n'ont pas pu être sauvegardés. Les autres, " +
+                          (copied + already).ToString("N0", French) + " fichiers, sont en sécurité et vérifiés."))
+                .Append("</p>");
+
+            html.Append("<h2>Ce qui a été sauvegardé</h2><div class=\"scroll\"><table><thead><tr><th>Élément</th>")
+                .Append("<th class=\"num\">Fichiers</th><th class=\"num\">Taille</th><th>État</th></tr></thead><tbody>");
+            foreach (var folder in model.Folders)
+                html.Append("<tr><td>").Append(E(folder.Label)).Append("</td><td class=\"num\">")
+                    .Append((folder.Copied + folder.Skipped).ToString("N0", French)).Append("</td><td class=\"num\">")
+                    .Append(E(ValueFormat.Bytes(folder.Bytes))).Append("</td><td>")
+                    .Append(folder.Failed == 0
+                        ? "<span class=\"pill\">vérifié</span>"
+                        : "<span class=\"pill warn\">" + folder.Failed.ToString(French) + " non sauvegardé(s)</span>")
+                    .Append("</td></tr>");
+            html.Append("</tbody></table></div>");
+
+            var also = new List<string>();
+            if (model.Wifi != null && model.Wifi.Profiles.Count > 0) also.Add(model.Wifi.Profiles.Count + " réseau(x) Wi-Fi et leurs codes");
+            if (model.Settings != null)
+            {
+                if (model.Settings.Printers.Count > 0) also.Add(model.Settings.Printers.Count + " imprimante(s)");
+                if (model.Settings.Drives.Count > 0) also.Add(model.Settings.Drives.Count + " lecteur(s) réseau");
+                if (model.Settings.Keys.Count > 0) also.Add("la clé de licence de Windows");
+            }
+
+            if (model.Software != null) also.Add("la liste de vos " + model.Software.Programs.Count + " logiciels installés");
+            if (also.Count > 0)
+                html.Append("<h2>Également noté</h2><section class=\"card\"><p>").Append(E(string.Join(", ", also) + ".")).Append("</p></section>");
+
+            var not = new List<string>();
+            if (model.CloudOnlyFiles > 0)
+                not.Add(model.CloudOnlyFiles.ToString("N0", French) + " fichier(s) ne sont stockés que dans votre espace en ligne " +
+                        "(OneDrive ou autre) : ils y restent, accessibles avec votre compte.");
+            if (model.ExcludedFiles > 0 && model.FilterText != null)
+                not.Add(model.ExcludedFiles.ToString("N0", French) + " fichier(s) écartés à votre demande (" + model.FilterText + "), " +
+                        ValueFormat.Bytes(model.ExcludedBytes) + ".");
+            if (failed > 0) not.Add(failed.ToString("N0", French) + " fichier(s) n'ont pas pu être lus ou écrits ; leur liste est dans manifeste.csv.");
+            if (not.Count > 0)
+            {
+                html.Append("<h2>Ce qui n'a pas été sauvegardé</h2><section class=\"todo\"><ul>");
+                foreach (var line in not) html.Append("<li>").Append(E(line)).Append("</li>");
+                html.Append("</ul></section>");
+            }
+
+            html.Append("<div class=\"signatures\"><div><p class=\"eyebrow\">Le technicien</p></div>")
+                .Append("<div><p class=\"eyebrow\">Le client, bon pour accord</p></div></div>")
+                .Append("<footer>Établi par LDI12 Diagnostic")
+                .Append(string.IsNullOrEmpty(model.ToolVersion) ? string.Empty : " " + E(model.ToolVersion!))
+                .Append(". Le détail fichier par fichier est dans manifeste.csv, à côté de ce rapport.</footer>")
                 .Append("</main></body></html>");
 
             return html.ToString();

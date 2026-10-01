@@ -66,6 +66,13 @@ namespace LDI12.Actions.Backup
         /// <summary>La clé de Windows d'un autre disque, lue dans son registre.</summary>
         public string? OfflineProductKey { get; init; }
 
+        /// <summary>Ce que les filtres ont écarté : sa description, et combien.</summary>
+        public string? FilterText { get; init; }
+
+        public int ExcludedFiles { get; init; }
+
+        public long ExcludedBytes { get; init; }
+
         /// <summary>Applications cochées, à réinstaller par winget. Vide : aucune liste déposée.</summary>
         public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
 
@@ -170,6 +177,12 @@ namespace LDI12.Actions.Backup
 
         /// <summary>« 0 » ne relève pas les imprimantes, les lecteurs réseau ni la clé de Windows. Absent : relevés.</summary>
         public const string SettingsParameter = "settings";
+
+        /// <summary>Types de fichiers écartés des dossiers personnels : « iso, vhdx ». Absent : aucun.</summary>
+        public const string ExcludeExtensionsParameter = "exclude";
+
+        /// <summary>Taille au-delà de laquelle un fichier personnel est écarté, en Go. Absent : aucune.</summary>
+        public const string MaxFileSizeParameter = "max-size";
 
         /// <summary>
         /// Les applications à réinstaller, une par ligne, en identifiants winget. Absent : aucune.
@@ -345,6 +358,8 @@ namespace LDI12.Actions.Backup
             // livre que sa clé, lue dans son registre.
             withSettings &= profile == null && label == null;
 
+            var filter = BackupFilter.Parse(context.Parameter(ExcludeExtensionsParameter), context.Parameter(MaxFileSizeParameter));
+
             var plan = new List<BackupFolder>();
             long bytes = 0;
             var files = 0;
@@ -370,7 +385,7 @@ namespace LDI12.Actions.Backup
                 {
                     MaxFiles = MaxFilesPerFolder,
                     Budget = ScanBudget,
-                }, null, null, null, cancellationToken));
+                }, null, null, null, cancellationToken, filter));
             }
 
             var applications = withApplications
@@ -407,7 +422,7 @@ namespace LDI12.Actions.Backup
                     MaxFiles = MaxFilesPerFolder,
                     Budget = ScanBudget,
                     ExcludeRelative = extra.IsVolumeRoot ? ExtraFolders.SystemDirectories : Array.Empty<string>(),
-                }, extra.IsVolumeRoot ? ExtraFolders.KeepAtRoot : null, extra.Target, null, cancellationToken));
+                }, extra.IsVolumeRoot ? ExtraFolders.KeepAtRoot : null, extra.Target, null, cancellationToken, filter));
             }
 
             // Les pilotes cochés d'un autre Windows : leur paquet, pris tel quel dans son magasin de
@@ -487,6 +502,20 @@ namespace LDI12.Actions.Backup
                 new PreviewLine("Place disponible",
                     free.IsReliable ? ValueFormat.Bytes(free.Value) : "non lue"),
             };
+
+            if (!filter.IsEmpty)
+                measurements.Add(new PreviewLine("Écartés par les filtres", filter.ExcludedFiles == 0
+                    ? "aucun fichier (" + filter.Describe() + ")"
+                    : filter.ExcludedFiles + " fichier(s), " + ValueFormat.Bytes(filter.ExcludedBytes) + " : " + filter.Describe()));
+
+            // Ce qui pèse le plus : c'est là qu'on décide quoi écarter quand le support est juste.
+            var largest = BackupFilter.Largest(plan, 5);
+            if (largest.Count > 0 && bytes > 0)
+            {
+                var parts = new List<string>();
+                foreach (var (name, size) in largest) parts.Add(name + " (" + ValueFormat.Bytes(size) + ")");
+                measurements.Add(new PreviewLine("Plus gros dossiers", string.Join(", ", parts)));
+            }
 
             // La durée, avant tout le reste : c'est elle qui décide de lancer maintenant, de changer
             // de port ou de support. À la reprise, seule la part qui reste à copier est comptée.
@@ -690,6 +719,9 @@ namespace LDI12.Actions.Backup
                     BrowserPasswords = withPasswords && chromium > 0,
                     ReadSettings = withSettings,
                     OfflineProductKey = offlineKey,
+                    FilterText = filter.IsEmpty ? null : filter.Describe(),
+                    ExcludedFiles = filter.ExcludedFiles,
+                    ExcludedBytes = filter.ExcludedBytes,
                     WingetPackages = winget,
                     CloudOnlyFiles = cloud,
                 },
@@ -699,7 +731,7 @@ namespace LDI12.Actions.Backup
         /// <summary>Relève un dossier et ne garde que ce qu'une copie emporterait.</summary>
         private static BackupFolder? Survey(
             ActionContext context, string label, string path, DirectoryScanRequest request, Func<string, bool>? keep,
-            string? target, string? application, CancellationToken cancellationToken)
+            string? target, string? application, CancellationToken cancellationToken, BackupFilter? filter = null)
         {
             var scan = context.Files.Scan(request, cancellationToken);
             if (!scan.HasValue) return null;
@@ -711,6 +743,7 @@ namespace LDI12.Actions.Backup
             foreach (var file in scan.Value.Files)
             {
                 if (keep != null && !keep(System.IO.Path.GetFileName(file.Path))) continue;
+                if (filter != null && filter.Excludes(file)) continue;
 
                 if (file.CloudOnly)
                 {
@@ -1002,6 +1035,9 @@ namespace LDI12.Actions.Backup
                 Applications = plan.Applications,
                 Wifi = wifi,
                 Settings = settings,
+                FilterText = plan.FilterText,
+                ExcludedFiles = plan.ExcludedFiles,
+                ExcludedBytes = plan.ExcludedBytes,
                 Software = software,
                 CloudOnlyFiles = plan.CloudOnlyFiles,
                 Interrupted = interrupted,
@@ -1012,6 +1048,11 @@ namespace LDI12.Actions.Backup
             details.Add(written
                 ? "Fiche de réinstallation déposée : " + ReinstallSheet.FileName + "."
                 : "La fiche de réinstallation n'a pas pu être écrite dans le dossier de sauvegarde.");
+
+            if (!Deposit(context, plan, ReinstallSheet.ReportFileName, ReinstallSheet.RenderReport(model)))
+                details.Add("Le rapport de sauvegarde n'a pas pu être écrit dans le dossier de sauvegarde.");
+            else
+                details.Add("Rapport à remettre au client : " + ReinstallSheet.ReportFileName + ".");
 
             if (software != null &&
                 !Deposit(context, plan, ReinstallSheet.SoftwareFileName, ReinstallSheet.SoftwareCsv(software)))

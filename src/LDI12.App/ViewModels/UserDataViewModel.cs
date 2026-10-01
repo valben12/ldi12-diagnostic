@@ -84,6 +84,8 @@ namespace LDI12.App.ViewModels
         private bool _exportWifi;
         private bool _browserPasswords;
         private bool _includeSettings = true;
+        private string _excludeExtensions = string.Empty;
+        private string _maxFileSize = string.Empty;
         private bool _restorePrintersChecked = true;
         private IRepairAction? _restorePrinters;
         private ActionPreview? _restorePrintersPreview;
@@ -712,6 +714,8 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.DestinationParameter] = BackupDestination.Trim(),
                 [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
                 [BackupUserDataAction.ElevatedParameter] = "1",
+                [BackupUserDataAction.ExcludeExtensionsParameter] = ExcludeExtensions.Trim(),
+                [BackupUserDataAction.MaxFileSizeParameter] = MaxFileSize.Trim(),
             };
 
             if (_speeds.TryGetValue(RootOf(BackupDestination), out var speed))
@@ -1682,6 +1686,20 @@ namespace LDI12.App.ViewModels
             set { if (Set(ref _includeSettings, value)) Invalidate(); }
         }
 
+        /// <summary>Types de fichiers à écarter des dossiers personnels : « iso, vhdx ».</summary>
+        public string ExcludeExtensions
+        {
+            get => _excludeExtensions;
+            set { if (Set(ref _excludeExtensions, value ?? string.Empty)) Invalidate(); }
+        }
+
+        /// <summary>Taille, en Go, au-delà de laquelle un fichier personnel est écarté. Vide : aucune.</summary>
+        public string MaxFileSize
+        {
+            get => _maxFileSize;
+            set { if (Set(ref _maxFileSize, value ?? string.Empty)) Invalidate(); }
+        }
+
         /// <summary>Remettre les imprimantes relevées avec la sauvegarde. Demande une invite Windows.</summary>
         public bool RestorePrintersChecked
         {
@@ -1944,6 +1962,8 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
                 [BackupUserDataAction.BrowserPasswordsParameter] = BrowserPasswords ? "1" : "0",
                 [BackupUserDataAction.SettingsParameter] = IncludeSettings ? "1" : "0",
+                [BackupUserDataAction.ExcludeExtensionsParameter] = ExcludeExtensions.Trim(),
+                [BackupUserDataAction.MaxFileSizeParameter] = MaxFileSize.Trim(),
                 [BackupUserDataAction.DriversParameter] = CheckedDrivers().Count > 0 ? "1" : "0",
                 [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
             };

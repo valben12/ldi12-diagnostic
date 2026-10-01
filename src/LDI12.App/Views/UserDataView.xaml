@@ -396,6 +396,29 @@
                             <Button Style="{StaticResource Button.Ghost}" Content="Ajouter des dossiers…" HorizontalAlignment="Left"
                                     Command="{Binding AddExtraFoldersCommand}" Margin="0,8,0,0" />
 
+                            <!-- Filtres : ce qui fait déborder le support ou durer la copie. Les données
+                                 d'applications n'y sont jamais soumises. -->
+                            <TextBlock Text="Écarter des dossiers personnels" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
+                                       Text="Laisser vide pour tout copier. La préparation montre ce qui est écarté et les plus gros dossiers, pour décider en connaissance de cause." />
+                            <Grid Margin="0,8,0,0" HorizontalAlignment="Left">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Types de fichiers" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Style="{StaticResource Field}" Width="220" Margin="10,0,0,0"
+                                         ToolTip="Extensions séparées par des virgules : iso, vhdx, mkv"
+                                         Text="{Binding ExcludeExtensions, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Grid.Column="2" Text="Fichiers de plus de (Go)" Style="{StaticResource Text.Muted}"
+                                           VerticalAlignment="Center" Margin="20,0,0,0" />
+                                <TextBox Grid.Column="3" Style="{StaticResource Field}" Width="80" Margin="10,0,0,0"
+                                         Text="{Binding MaxFileSize, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+
                             <!-- Pilotes et applications de ce PC : ceux d'un autre Windows se choisissent plus haut. -->
                             <StackPanel Visibility="{Binding IsSessionSource, Converter={StaticResource BoolToVisibility}}">
                             <!-- Pilotes : ceux que la réinstallation perdrait, un par paquet. -->

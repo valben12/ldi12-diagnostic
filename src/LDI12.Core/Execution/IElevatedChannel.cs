@@ -66,5 +66,14 @@ namespace LDI12.Core.Execution
         Task<string> SendAsync(
             string request, Func<string, bool>? onNotification, TimeSpan timeout,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Envoie une ligne sans attendre de réponse, y compris pendant un échange en cours.
+        /// </summary>
+        /// <remarks>
+        /// Pour l'ordre d'arrêt : une copie élevée de plusieurs heures doit pouvoir s'interrompre,
+        /// alors même que l'échange qui l'a lancée attend encore sa fin.
+        /// </remarks>
+        Task SignalAsync(string line);
     }
 }

@@ -47,6 +47,9 @@ namespace LDI12.Platform.Elevation
         private NamedPipeServerStream? _pipe;
         private StreamReader? _reader;
         private StreamWriter? _writer;
+
+        /// <summary>Une ligne à la fois sur le tube : la requête d'un échange, ou un signal pendant lui.</summary>
+        private readonly SemaphoreSlim _writeGate = new SemaphoreSlim(1, 1);
         private bool _disposed;
 
         public ElevatedChannel(IPlatformInfo platform, IProcessLauncher launcher, ILdiLogger logger)
@@ -212,7 +215,9 @@ namespace LDI12.Platform.Elevation
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadline.CancelAfter(timeout);
 
-                await _writer.WriteLineAsync(request).ConfigureAwait(false);
+                await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try { await _writer.WriteLineAsync(request).ConfigureAwait(false); }
+                finally { _writeGate.Release(); }
 
                 try
                 {
@@ -228,6 +233,26 @@ namespace LDI12.Platform.Elevation
             finally
             {
                 _gate.Release();
+            }
+        }
+
+        public async Task SignalAsync(string line)
+        {
+            var writer = _writer;
+            if (writer == null) return;
+
+            await _writeGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await writer.WriteLineAsync(line).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
+            {
+                // Hôte déjà parti : il n'y a plus rien à arrêter.
+            }
+            finally
+            {
+                _writeGate.Release();
             }
         }
 

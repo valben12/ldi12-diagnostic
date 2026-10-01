@@ -82,6 +82,20 @@ namespace LDI12.Actions.Backup
 
         /// <summary>Dossiers ajoutés à la main : leur emplacement d'origine est noté dans la sauvegarde.</summary>
         public IReadOnlyList<ExtraFolder> ExtraFolders { get; init; } = Array.Empty<ExtraFolder>();
+
+        /// <summary>La machine d'où viennent les données, pour la fiche et l'état.</summary>
+        public string Machine { get; init; } = string.Empty;
+
+        /// <summary>Le compte d'où viennent les données.</summary>
+        public string Account { get; init; } = string.Empty;
+
+        /// <summary>« Windows 11 Famille, build 22631 ». Nul : ce Windows n'a pas pu être décrit.</summary>
+        public string? WindowsDescription { get; init; }
+
+        public SoftwareInventory? Software { get; init; }
+
+        /// <summary>Le volume d'un autre Windows dont les pilotes sont à exporter ; nul sinon.</summary>
+        public string? OfflineDriversVolume { get; init; }
     }
 
     /// <summary>
@@ -173,6 +187,31 @@ namespace LDI12.Actions.Backup
         public const string ExtraFoldersParameter = "extra";
 
         /// <summary>
+        /// Le dossier d'un compte d'un autre Windows (« E:\Users\Marie ») : sauvegardé comme le
+        /// compte ouvert, depuis ses emplacements par défaut. Absent : le compte de la session.
+        /// </summary>
+        /// <remarks>
+        /// Demande les droits administrateur : le compte d'un autre Windows est protégé par des
+        /// droits qui ne connaissent pas le technicien. L'hôte élevé le lit en mode sauvegarde.
+        /// </remarks>
+        public const string ProfileParameter = "profile";
+
+        /// <summary>
+        /// « 1 » : exporter tous les pilotes tiers du Windows de <see cref="ProfileParameter"/>,
+        /// par DISM, dans la sauvegarde.
+        /// </summary>
+        public const string OfflineDriversParameter = "offline-drivers";
+
+        /// <summary>
+        /// Nom de ce qu'on sauvegarde, pour un disque de données sans Windows : « Disque D ». Il
+        /// nomme le dossier de sauvegarde à la place du nom de la machine.
+        /// </summary>
+        public const string LabelParameter = "label";
+
+        /// <summary>« 1 » : lire avec les droits administrateur, en mode sauvegarde (un autre disque).</summary>
+        public const string ElevatedParameter = "elevated";
+
+        /// <summary>
         /// Marge exigée en plus de la taille des données.
         /// </summary>
         /// <remarks>
@@ -210,9 +249,15 @@ namespace LDI12.Actions.Backup
                 return ActionReadiness.No("Aucun dossier de destination n'a été choisi.",
                     "Choisissez le support sur lequel copier les données.");
 
-            return context.Files.DirectoryExists(destination)
+            if (!context.Files.DirectoryExists(destination))
+                return ActionReadiness.No("Le dossier « " + destination + " » n'existe pas ou n'est pas accessible.");
+
+            // Un autre disque : ses fichiers sont protégés par des droits qui ne connaissent pas le
+            // technicien. Lus par l'hôte élevé, en mode sauvegarde, sans rien y modifier.
+            var elevated = context.Parameter(ProfileParameter) != null || context.Parameter(ElevatedParameter) == "1";
+            return !elevated || context.Platform.IsElevated
                 ? ActionReadiness.Ready
-                : ActionReadiness.No("Le dossier « " + destination + " » n'existe pas ou n'est pas accessible.");
+                : ActionReadiness.Elevation("les fichiers d'un autre disque ne se lisent qu'en administrateur");
         }
 
         public async Task<ActionPreview> PreviewAsync(ActionContext context, CancellationToken cancellationToken)
@@ -225,6 +270,46 @@ namespace LDI12.Actions.Backup
             var withWifi = context.Parameter(WifiParameter) == "1";
             var winget = WingetApplications.Decode(context.Parameter(WingetParameter));
             var withDrivers = context.Parameter(DriversParameter) == "1";
+
+            // D'où viennent les données : le compte ouvert, le compte d'un autre Windows, ou un
+            // disque de données.
+            var profile = context.Parameter(ProfileParameter);
+            var label = context.Parameter(LabelParameter);
+            var roots = profile == null ? ProfileRoots.Current() : ProfileRoots.Offline(profile);
+
+            string machine, account;
+            string? windowsDescription = null;
+            SoftwareInventory? software;
+            string? offlineVolume = null;
+            string? offlineFailure = null;
+
+            if (profile != null)
+            {
+                offlineVolume = Path.GetPathRoot(profile) ?? string.Empty;
+                var info = await OfflineWindows.ReadAsync(context, offlineVolume, cancellationToken).ConfigureAwait(false);
+                machine = info.MachineName ?? "Disque-" + offlineVolume.TrimEnd('\\', ':');
+                account = Path.GetFileName(profile.TrimEnd('\\'));
+                windowsDescription = info.Description;
+                software = info.Software;
+                offlineFailure = info.Failure;
+
+                // Ni Wi-Fi ni winget pour un Windows qui ne tourne pas : ses clés Wi-Fi sont
+                // chiffrées pour sa machine, et winget ne voit que le Windows en cours.
+                withWifi = false;
+                winget = Array.Empty<string>();
+            }
+            else if (label != null)
+            {
+                machine = label;
+                account = "Données";
+                software = null;
+            }
+            else
+            {
+                machine = MachineName(context);
+                account = Environment.UserName;
+                software = Inventory(context);
+            }
 
             var plan = new List<BackupFolder>();
             long bytes = 0;
@@ -244,7 +329,7 @@ namespace LDI12.Actions.Backup
                 unreadable += folder.InaccessibleDirectories;
             }
 
-            foreach (var folder in withPersonal ? Sources(context) : Array.Empty<(string Label, string Path)>())
+            foreach (var folder in withPersonal ? Sources(context, roots) : Array.Empty<(string Label, string Path)>())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Take(Survey(context, folder.Label, folder.Path, new DirectoryScanRequest(folder.Path)
@@ -255,7 +340,7 @@ namespace LDI12.Actions.Backup
             }
 
             var applications = withApplications
-                ? AppDataCatalog.Detect(context.Files)
+                ? AppDataCatalog.Detect(context.Files, roots)
                 : Array.Empty<AppDataApplication>();
 
             foreach (var application in applications)
@@ -301,7 +386,7 @@ namespace LDI12.Actions.Backup
 
             var resume = context.Parameter(ResumeParameter) == "0"
                 ? null
-                : BackupState.FindResumable(context.Files, destination, MachineName(context), Environment.UserName);
+                : BackupState.FindResumable(context.Files, destination, machine, account);
 
             // À la reprise, ce qui est déjà sur le support n'a pas à y trouver de place une seconde fois.
             long already = 0;
@@ -325,7 +410,7 @@ namespace LDI12.Actions.Backup
                     return Blocked("La destination « " + destination + " » est à l'intérieur de « " + folder.Label +
                                    " », qui fait partie de la sauvegarde : choisissez un autre support.");
 
-            var root = resume?.Path ?? Unique(context, Path.Combine(destination, FolderName(context)));
+            var root = resume?.Path ?? Unique(context, Path.Combine(destination, FolderName(machine, profile != null || label != null ? account : null)));
 
             var measurements = new List<PreviewLine>
             {
@@ -416,7 +501,6 @@ namespace LDI12.Actions.Backup
                 willDo.Add("Déposer la liste des " + winget.Count + " application(s) cochée(s), à réinstaller par winget " +
                            "(« " + WingetApplications.FileName + " »), et un script qui les réinstalle d'un double clic");
 
-            var software = Inventory(context);
             willDo.Add(software == null
                 ? "Déposer la fiche de réinstallation et le manifeste de la copie"
                 : "Déposer la fiche de réinstallation (" + software.Programs.Count + " logiciel(s) et " +
@@ -428,7 +512,24 @@ namespace LDI12.Actions.Backup
                     "aucune analyse ne les a relevés, la fiche ne pourra pas les lister",
                     PreviewLineKind.Caution));
 
-            var running = await RunningAsync(context, applications, cancellationToken).ConfigureAwait(false);
+            // Les programmes ouverts ne concernent que la session : un autre disque n'a rien en cours.
+            var running = roots.IsOffline
+                ? (IReadOnlyList<string>)Array.Empty<string>()
+                : await RunningAsync(context, applications, cancellationToken).ConfigureAwait(false);
+
+            if (profile != null)
+            {
+                measurements.Insert(0, new PreviewLine("Source", "compte « " + account + " » du Windows de " + offlineVolume +
+                    (windowsDescription == null ? string.Empty : " (" + windowsDescription + ")") + ", machine " + machine));
+                if (offlineFailure != null)
+                    measurements.Add(new PreviewLine("Registre de ce Windows", offlineFailure +
+                        " : la fiche ne listera pas ses logiciels, la sauvegarde des fichiers se fait quand même",
+                        PreviewLineKind.Caution));
+                willNotDo.Add("Ne copie pas les profils Wi-Fi ni la liste winget de ce Windows : ses clés Wi-Fi sont " +
+                              "chiffrées pour sa machine, et winget ne voit que le Windows en cours.");
+                if (context.Parameter(OfflineDriversParameter) == "1")
+                    willDo.Add("Exporter tous les pilotes tiers de ce Windows par DISM, dans « " + DriverBackup.Folder + " »");
+            }
             if (running.Count > 0)
                 measurements.Add(new PreviewLine(
                     "Programmes ouverts",
@@ -489,6 +590,11 @@ namespace LDI12.Actions.Backup
                 {
                     Destination = root,
                     Resumed = resume != null,
+                    Machine = machine,
+                    Account = account,
+                    WindowsDescription = windowsDescription,
+                    Software = software,
+                    OfflineDriversVolume = profile != null && context.Parameter(OfflineDriversParameter) == "1" ? offlineVolume : null,
                     ExtraFolders = extras,
                     AlreadyBytes = already,
                     Folders = plan,
@@ -688,6 +794,12 @@ namespace LDI12.Actions.Backup
             if (lost)
                 return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
 
+            if (plan.OfflineDriversVolume != null && !interrupted)
+            {
+                progress?.Report(new ActionProgress("Export des pilotes de ce Windows…", 1));
+                details.Add("Pilotes : " + await OfflineDriversAsync(context, plan, cancellationToken).ConfigureAwait(false));
+            }
+
             WifiExportResult? wifi = null;
             if (plan.ExportWifi && !interrupted)
             {
@@ -726,7 +838,7 @@ namespace LDI12.Actions.Backup
         private void SetState(ActionContext context, BackupPlan plan, BackupProgressState state)
             => context.Files.ReplaceText(
                 System.IO.Path.Combine(plan.Destination, BackupState.FileName),
-                BackupState.Render(state, MachineName(context), Environment.UserName));
+                BackupState.Render(state, plan.Machine, plan.Account));
 
         private static bool Succeeded(FileCopyOutcome outcome)
             => outcome == FileCopyOutcome.Copied || outcome == FileCopyOutcome.AlreadyPresent;
@@ -758,16 +870,17 @@ namespace LDI12.Actions.Backup
             ActionContext context, BackupPlan plan, IReadOnlyList<BackupFolderResult> results,
             WifiExportResult? wifi, bool interrupted, ICollection<string> details)
         {
-            var software = Inventory(context);
+            var software = plan.Software;
             var windows = context.Platform.Profile;
 
             var model = new ReinstallSheetModel
             {
-                Machine = MachineName(context),
-                Account = Environment.UserName,
+                Machine = plan.Machine,
+                Account = plan.Account,
                 // Le nom court, pas ProductName : sous Windows 11, le registre annonce toujours
                 // « Windows 10 », et la première fiche d'essai l'a recopié tel quel.
-                Windows = windows.ShortName + ", build " + windows.Build.ToString(CultureInfo.InvariantCulture),
+                Windows = plan.WindowsDescription ??
+                          windows.ShortName + ", build " + windows.Build.ToString(CultureInfo.InvariantCulture),
                 Destination = plan.Destination,
                 ToolVersion = ToolVersion(),
                 Folders = results,
@@ -827,11 +940,41 @@ namespace LDI12.Actions.Backup
         /// de caches de logiciels. Ce qui compte chez lui passe par le catalogue des données
         /// d'applications, qui sait quoi prendre et quoi laisser.
         /// </remarks>
-        private static IEnumerable<(string Label, string Path)> Sources(ActionContext context)
+        private static IEnumerable<(string Label, string Path)> Sources(ActionContext context, ProfileRoots roots)
         {
-            foreach (var entry in UserDataSurveyor.PersonalFolders())
+            foreach (var entry in roots.Personal)
                 if (context.Files.DirectoryExists(entry.Path))
                     yield return entry;
+        }
+
+        /// <summary>
+        /// Exporte les pilotes tiers d'un Windows qui ne tourne pas.
+        /// </summary>
+        /// <remarks>
+        /// DISM sait lire le magasin de pilotes d'une image hors ligne, c'est-à-dire du disque d'un
+        /// PC en panne : tous les pilotes tiers partent, un dossier par paquet, comme pour
+        /// l'export depuis la machine elle-même. Il demande Windows 8.1 ou plus récent sur le PC
+        /// de l'atelier.
+        /// </remarks>
+        private static async Task<string> OfflineDriversAsync(ActionContext context, BackupPlan plan, CancellationToken cancellationToken)
+        {
+            var folder = System.IO.Path.Combine(plan.Destination, DriverBackup.Folder);
+            if (!context.Files.CreateDirectory(folder)) return "le dossier « " + DriverBackup.Folder + " » n'a pas pu être créé.";
+
+            var run = await context.Processes.RunAsync(
+                // Racine sans guillemets : « "E:\" » ferait prendre le guillemet final pour un caractère.
+                new ProcessRequest("dism.exe", "/Image:" + plan.OfflineDriversVolume!.TrimEnd('\\') + "\\ /Export-Driver /Destination:\"" + folder + "\"")
+                {
+                    Timeout = TimeSpan.FromMinutes(30),
+                    OutputEncoding = ConsoleOutputEncoding.OemCodePage,
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            if (!run.Completed || run.ExitCode != 0) return "l'export par DISM a échoué, " + DriverBackup.Tail(run) + ".";
+
+            context.Files.WriteText(System.IO.Path.Combine(folder, DriverBackup.ListFileName),
+                "inf;périphériques;classe;version\r\n");
+            return "pilotes tiers de ce Windows exportés dans « " + DriverBackup.Folder + " ».";
         }
 
         /// <summary>
@@ -901,8 +1044,12 @@ namespace LDI12.Actions.Backup
             return string.IsNullOrWhiteSpace(machine) ? Environment.MachineName : machine!;
         }
 
-        private static string FolderName(ActionContext context)
-            => BackupState.Prefix + Sanitize(MachineName(context)) + "-" +
+        /// <summary>
+        /// « LDI12-Sauvegarde-PC-SALON-2026-09-30-1400 », et le compte en plus quand il ne va pas de
+        /// soi : un autre Windows peut en avoir plusieurs, sauvegardés côte à côte.
+        /// </summary>
+        private static string FolderName(string machine, string? account)
+            => BackupState.Prefix + Sanitize(machine) + (account == null ? string.Empty : "-" + Sanitize(account)) + "-" +
                DateTimeOffset.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
 
         private const long FourGigabytes = 4L * 1024 * 1024 * 1024 - 1;

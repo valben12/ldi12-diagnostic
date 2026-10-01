@@ -68,6 +68,51 @@ namespace LDI12.App.ViewModels
         public bool HasSpeedAdvice => _speedAdvice != null;
     }
 
+    /// <summary>Ce qu'on sauvegarde : le compte ouvert, ou un disque branché.</summary>
+    public sealed class SourceTile : ObservableObject
+    {
+        private bool _isSelected;
+
+        public SourceTile(SourceVolume? volume, Action<SourceTile> select)
+        {
+            Volume = volume;
+            if (select == null) throw new ArgumentNullException(nameof(select));
+            SelectCommand = new RelayCommand(() => select(this));
+        }
+
+        /// <summary>Nul pour le compte ouvert sur ce PC.</summary>
+        public SourceVolume? Volume { get; }
+
+        public string Key => Volume?.Root ?? "session";
+
+        public string Title => Volume?.Title ?? "Ce compte, sur ce PC";
+
+        public string Description
+            => Volume?.Description ?? Environment.UserName + " : dossiers personnels, navigateurs, messagerie, Wi-Fi, logiciels";
+
+        public ICommand SelectCommand { get; }
+
+        public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+    }
+
+    /// <summary>Une sauvegarde d'un disque, à restaurer.</summary>
+    public sealed class BackupEntryTile : ObservableObject
+    {
+        private bool _isSelected;
+
+        public BackupEntryTile(BackupEntry entry, Action<BackupEntryTile> select)
+        {
+            Entry = entry;
+            SelectCommand = new RelayCommand(() => select(this));
+        }
+
+        public BackupEntry Entry { get; }
+        public string Title => Entry.Title;
+        public string Description => Entry.Description;
+        public ICommand SelectCommand { get; }
+        public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+    }
+
     /// <summary>Un dossier ajouté à la main, et de quoi le retirer.</summary>
     public sealed class ExtraFolderItem
     {

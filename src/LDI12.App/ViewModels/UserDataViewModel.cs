@@ -159,6 +159,8 @@ namespace LDI12.App.ViewModels
                 var machine = BackupState.MachineOf(_snapshot);
                 var drives = await Task.Run(() => DestinationDrives.Detect(services.Files, machine, Environment.UserName))
                     .ConfigureAwait(true);
+                var volumes = await Task.Run(() => SourceVolumes.Detect(services.Files)).ConfigureAwait(true);
+                ApplySources(volumes);
 
                 // Rien ne bouge à l'écran tant que rien n'a changé : reconstruire les tuiles toutes
                 // les trois secondes ferait clignoter la sélection et le survol.
@@ -225,7 +227,7 @@ namespace LDI12.App.ViewModels
         private void MarkSelection()
         {
             foreach (var tile in BackupDrives) tile.IsSelected = SameRoot(tile.Root, BackupDestination);
-            foreach (var tile in RestoreDrives) tile.IsSelected = SameRoot(tile.Root, RestoreSource);
+            foreach (var tile in RestoreDrives) tile.IsSelected = SameRoot(tile.Root, RootOf(RestoreSource));
         }
 
         private static bool SameRoot(string root, string path)
@@ -486,6 +488,298 @@ namespace LDI12.App.ViewModels
                                        ex is System.Security.SecurityException)
             {
                 return string.Empty;
+            }
+        }
+
+        // ---------- ce qu'on sauvegarde : le compte ouvert, ou un disque branché
+
+        private string _sourcesSignature = string.Empty;
+        private SourceTile? _selectedSource;
+        private bool _includeOfflineDrivers = true;
+        private readonly List<(IReadOnlyDictionary<string, string> Parameters, ActionPreview Preview, string Title)> _volumeJobs =
+            new List<(IReadOnlyDictionary<string, string>, ActionPreview, string)>();
+
+        /// <summary>Le compte ouvert, puis chaque disque branché qui porte un Windows ou des données.</summary>
+        public ObservableCollection<SourceTile> Sources { get; } = new ObservableCollection<SourceTile>();
+
+        /// <summary>Les comptes du Windows choisi, tous cochés au départ.</summary>
+        public ObservableCollection<ChoiceItem> SourceAccounts { get; } = new ObservableCollection<ChoiceItem>();
+
+        /// <summary>Les dossiers du disque choisi : tous pour un disque de données, ceux hors de Windows sinon.</summary>
+        public ObservableCollection<ChoiceItem> SourceFolders { get; } = new ObservableCollection<ChoiceItem>();
+
+        public bool IsSessionSource => _selectedSource?.Volume == null;
+        public bool IsVolumeSource => !IsSessionSource;
+        public bool IsWindowsSource => _selectedSource?.Volume?.HasWindows == true;
+        public bool HasSourceAccounts => SourceAccounts.Count > 0;
+        public bool HasSourceFolders => SourceFolders.Count > 0;
+
+        /// <summary>Dossiers personnels et données d'applications : pour le compte ouvert et les comptes d'un Windows.</summary>
+        public bool ShowAccountOptions => IsSessionSource || IsWindowsSource;
+
+        /// <summary>Les pilotes d'un autre Windows : ceux de ce PC se choisissent un par un, plus bas.</summary>
+        public bool ShowOfflineDrivers => IsWindowsSource && _selectedSource?.Volume?.IsSystem == false;
+
+        /// <summary>Exporter les pilotes du Windows choisi, par DISM. Coché par défaut.</summary>
+        public bool IncludeOfflineDrivers
+        {
+            get => _includeOfflineDrivers;
+            set { if (Set(ref _includeOfflineDrivers, value)) Invalidate(); }
+        }
+
+        private void ApplySources(IReadOnlyList<SourceVolume> volumes)
+        {
+            var signature = new System.Text.StringBuilder();
+            foreach (var volume in volumes)
+                signature.Append(volume.Root).Append('|').Append(volume.Label).Append('|').Append(volume.HasWindows)
+                    .Append('|').Append(volume.Profiles.Count).Append('|').Append(volume.Folders.Count).Append(';');
+            if (signature.ToString() == _sourcesSignature && Sources.Count > 0) return;
+            _sourcesSignature = signature.ToString();
+
+            var selected = _selectedSource?.Key ?? "session";
+            Sources.Clear();
+            Sources.Add(new SourceTile(null, SelectSource));
+            foreach (var volume in volumes)
+                if (volume.HasWindows ? volume.Profiles.Count > 0 || volume.Folders.Count > 0 : volume.Folders.Count > 0)
+                    Sources.Add(new SourceTile(volume, SelectSource));
+
+            SourceTile? match = null;
+            foreach (var tile in Sources) if (tile.Key == selected) match = tile;
+
+            // Le disque choisi a été débranché : on revient au compte ouvert.
+            if (match == null || !ReferenceEquals(match.Volume?.Root, _selectedSource?.Volume?.Root) && match.Key != selected)
+                match = Sources[0];
+
+            SelectSource(match, keepChoices: match.Key == selected && _selectedSource != null);
+        }
+
+        private void SelectSource(SourceTile tile) => SelectSource(tile, keepChoices: false);
+
+        private void SelectSource(SourceTile tile, bool keepChoices)
+        {
+            if (IsCopying) return;
+
+            var changed = _selectedSource?.Key != tile.Key;
+            _selectedSource = tile;
+            foreach (var candidate in Sources) candidate.IsSelected = ReferenceEquals(candidate, tile);
+
+            if (changed || !keepChoices)
+            {
+                SourceAccounts.Clear();
+                SourceFolders.Clear();
+
+                var volume = tile.Volume;
+                if (volume != null)
+                {
+                    foreach (var (name, path) in volume.Profiles)
+                        SourceAccounts.Add(new ChoiceItem(path, name, path, true, Invalidate));
+
+                    // Un disque de données : tout le disque d'un coup, ou dossier par dossier.
+                    if (!volume.HasWindows)
+                        SourceFolders.Add(new ChoiceItem(volume.Root, "Tout le disque " + volume.Root.TrimEnd('\\'),
+                            "Tous les dossiers et les fichiers de la racine, sans les dossiers système", false, Invalidate));
+
+                    foreach (var folder in volume.Folders)
+                        SourceFolders.Add(new ChoiceItem(folder, System.IO.Path.GetFileName(folder), folder, true, Invalidate));
+                }
+            }
+
+            Raise(nameof(IsSessionSource));
+            Raise(nameof(IsVolumeSource));
+            Raise(nameof(IsWindowsSource));
+            Raise(nameof(HasSourceAccounts));
+            Raise(nameof(HasSourceFolders));
+            Raise(nameof(ShowAccountOptions));
+            Raise(nameof(ShowOfflineDrivers));
+            if (changed) Invalidate();
+        }
+
+        /// <summary>
+        /// Les sauvegardes à mener pour le disque choisi : une par compte coché, et une pour ses
+        /// dossiers et les dossiers ajoutés à la main.
+        /// </summary>
+        /// <remarks>
+        /// Un dossier de sauvegarde par compte : c'est ce qui permet de les restaurer chacun dans
+        /// son compte sur le nouveau PC. Toutes se lisent avec les droits administrateur, en mode
+        /// sauvegarde : une seule invite pour l'ensemble.
+        /// </remarks>
+        private List<(IReadOnlyDictionary<string, string> Parameters, string Title)> VolumeJobs()
+        {
+            var jobs = new List<(IReadOnlyDictionary<string, string>, string)>();
+            var volume = _selectedSource?.Volume;
+            if (volume == null) return jobs;
+
+            var driversAsked = IncludeOfflineDrivers && volume.HasWindows && !volume.IsSystem;
+            foreach (var account in SourceAccounts)
+            {
+                if (!account.IsChecked) continue;
+
+                var parameters = CommonParameters();
+                parameters[BackupUserDataAction.ProfileParameter] = account.Key;
+                parameters[BackupUserDataAction.PersonalParameter] = IncludePersonal ? "1" : "0";
+                parameters[BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0";
+                if (driversAsked)
+                {
+                    // Les pilotes sont ceux du Windows, pas d'un compte : exportés une fois.
+                    parameters[BackupUserDataAction.OfflineDriversParameter] = "1";
+                    driversAsked = false;
+                }
+
+                jobs.Add((parameters, "Compte « " + account.Title + " »"));
+            }
+
+            var folders = new List<string>();
+            var wholeDisk = false;
+            foreach (var item in SourceFolders)
+                if (item.IsChecked)
+                {
+                    if (string.Equals(item.Key, volume.Root, StringComparison.OrdinalIgnoreCase)) wholeDisk = true;
+                    else folders.Add(item.Key);
+                }
+
+            if (wholeDisk) folders = new List<string> { volume.Root };
+            foreach (var item in ExtraFolders) folders.Add(item.Path);
+
+            if (folders.Count > 0)
+            {
+                var parameters = CommonParameters();
+                parameters[BackupUserDataAction.PersonalParameter] = "0";
+                parameters[BackupUserDataAction.ApplicationsParameter] = "0";
+                parameters[BackupUserDataAction.LabelParameter] = "Disque-" + volume.Root.TrimEnd('\\', ':') +
+                    (volume.Label.Length > 0 ? "-" + volume.Label : string.Empty);
+                parameters[BackupUserDataAction.ExtraFoldersParameter] = LDI12.Actions.Backup.ExtraFolders.Encode(folders);
+                jobs.Add((parameters, "Dossiers de " + volume.Title));
+            }
+
+            return jobs;
+        }
+
+        private Dictionary<string, string> CommonParameters()
+        {
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [BackupUserDataAction.DestinationParameter] = BackupDestination.Trim(),
+                [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
+                [BackupUserDataAction.ElevatedParameter] = "1",
+            };
+
+            if (_speeds.TryGetValue(RootOf(BackupDestination), out var speed))
+                parameters[BackupUserDataAction.SpeedParameter] = speed.Encode();
+
+            return parameters;
+        }
+
+        private bool VolumeJobsReady
+        {
+            get
+            {
+                foreach (var job in _volumeJobs) if (job.Preview.CanExecute) return true;
+                return false;
+            }
+        }
+
+        private async Task PrepareVolumeAsync(ActionRunner runner)
+        {
+            var jobs = VolumeJobs();
+            if (jobs.Count == 0)
+            {
+                Status = "Rien n'est coché sur ce disque : cochez un compte ou un dossier.";
+                return;
+            }
+
+            IsCopying = true;
+            BackupLines.Clear();
+            _volumeJobs.Clear();
+            Status = "Relevé du disque en cours, avec les droits administrateur. Aucun fichier n'est encore écrit.";
+            var preparing = StartPreparation();
+
+            try
+            {
+                foreach (var (parameters, title) in jobs)
+                {
+                    var preview = await runner.PreviewAsync(_backup!, parameters, preparing).ConfigureAwait(true);
+                    _volumeJobs.Add((parameters, preview, title));
+
+                    BackupLines.Add(title + ". " + preview.Summary);
+                    Show(BackupLines, preview);
+                }
+
+                var ready = 0;
+                foreach (var job in _volumeJobs) if (job.Preview.CanExecute) ready++;
+                BackupSummary = ready + " sauvegarde(s) prête(s) sur " + _volumeJobs.Count + ".";
+                Status = ready > 0 ? "Relevé terminé. Rien n'a encore été copié." : "Rien ne peut être copié : voir le détail.";
+            }
+            catch (OperationCanceledException)
+            {
+                _volumeJobs.Clear();
+                BackupLines.Clear();
+                Status = "Préparation annulée. Rien n'a été copié.";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Le relevé du disque a échoué.", ex);
+                _volumeJobs.Clear();
+                Status = "Le relevé du disque a échoué : " + ex.Message;
+            }
+            finally
+            {
+                EndPreparation();
+                IsCopying = false;
+                Raise(nameof(HasBackupPreview));
+                RaiseBackupStates();
+            }
+        }
+
+        /// <summary>Les sauvegardes du disque, l'une après l'autre, dans l'hôte élevé.</summary>
+        private async Task CopyVolumeAsync(ActionRunner runner)
+        {
+            await StopMeasuresAsync().ConfigureAwait(true);
+            using var awake = KeepAwake.Start();
+
+            IsCopying = true;
+            IsBackupTransferring = true;
+            Status = "Copie en cours…";
+            var progress = new Progress<ActionProgress>(OnTransfer);
+            var report = new List<string>();
+            var summaries = new List<string>();
+            var token = StartCancellable();
+
+            try
+            {
+                foreach (var (parameters, preview, title) in _volumeJobs)
+                {
+                    if (!preview.CanExecute) continue;
+                    if (token.IsCancellationRequested) break;
+
+                    BeginTransfer(title + " : préparation de la copie…");
+                    var outcome = await runner.ExecuteAsync(_backup!, preview, parameters, progress, token).ConfigureAwait(true);
+                    summaries.Add(title + " : " + outcome.Summary);
+                    Report(report, title, outcome);
+                }
+
+                Status = string.Join(" ", summaries) +
+                         (token.IsCancellationRequested
+                             ? " Relancez la sauvegarde vers le même support : elle reprendra où elle s'est arrêtée."
+                             : string.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La copie du disque a échoué.", ex);
+                Status = "La copie a échoué : " + ex.Message;
+            }
+            finally
+            {
+                EndCancellable();
+                IsCopying = false;
+                IsBackupTransferring = false;
+                _volumeJobs.Clear();
+                BackupLines.Clear();
+                BackupSummary = report.Count > 0 ? "Compte rendu de la sauvegarde :" : string.Empty;
+                foreach (var line in report) BackupLines.Add(line);
+
+                Raise(nameof(HasBackupPreview));
+                RaiseBackupStates();
+                JournalChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -886,7 +1180,56 @@ namespace LDI12.App.ViewModels
                 InvalidateRestore();
                 MarkSelection();
                 ScheduleMeasures();
+                _ = ListRestoreBackupsAsync();
             }
+        }
+
+        /// <summary>
+        /// Les sauvegardes du support choisi, quand il en porte plusieurs : un dossier par compte
+        /// d'un même PC, ou les PC de plusieurs clients. La plus récente est retenue d'office.
+        /// </summary>
+        public ObservableCollection<BackupEntryTile> RestoreBackups { get; } = new ObservableCollection<BackupEntryTile>();
+
+        public bool HasRestoreChoice => RestoreBackups.Count > 1;
+
+        private int _restoreListing;
+
+        private async Task ListRestoreBackupsAsync()
+        {
+            var ticket = ++_restoreListing;
+            var source = RestoreSource.Trim();
+
+            try
+            {
+                var services = await _diagnostics.GetPlatformAsync(CancellationToken.None).ConfigureAwait(true);
+                var (entries, chosen) = await Task.Run(() =>
+                {
+                    var found = RestoreCatalog.Find(services.Files, source, out _);
+                    if (found == null) return ((IReadOnlyList<BackupEntry>)Array.Empty<BackupEntry>(), (string?)null);
+
+                    // Une sauvegarde désignée elle-même : ses voisines sont dans le dossier au-dessus.
+                    var folder = SameRoot(found, source) ? System.IO.Path.GetDirectoryName(found.TrimEnd('\\')) : source;
+                    return (RestoreCatalog.List(services.Files, folder ?? source), found);
+                }).ConfigureAwait(true);
+
+                // Une frappe plus récente dans le champ a déjà pris le relais.
+                if (ticket != _restoreListing) return;
+
+                RestoreBackups.Clear();
+                foreach (var entry in entries)
+                    RestoreBackups.Add(new BackupEntryTile(entry, tile => RestoreSource = tile.Entry.Path)
+                    {
+                        IsSelected = chosen != null && SameRoot(entry.Path, chosen),
+                    });
+            }
+            catch (Exception ex)
+            {
+                if (ticket != _restoreListing) return;
+                RestoreBackups.Clear();
+                _logger.Error(Category, "Les sauvegardes du support n'ont pas pu être listées.", ex);
+            }
+
+            Raise(nameof(HasRestoreChoice));
         }
 
         /// <summary>Réimporter les profils Wi-Fi que la sauvegarde contient. Coché par défaut : ils ont été exportés exprès.</summary>
@@ -1032,8 +1375,10 @@ namespace LDI12.App.ViewModels
             foreach (var line in preview.Measurements)
                 if (line.Kind == PreviewLineKind.Caution) lines.Add("Attention. " + line.Label + " : " + line.Value);
             // La durée est affichée à part, et recalculée à l'arrivée de chaque mesure.
+            // La durée d'une sauvegarde préparée ici est affichée à part, et recalculée à l'arrivée de
+            // chaque mesure. Celle d'une sauvegarde préparée par l'hôte élevé n'a que cette ligne.
             foreach (var line in preview.Measurements)
-                if (line.Kind == PreviewLineKind.Fact && line.Label != "Durée estimée")
+                if (line.Kind == PreviewLineKind.Fact && (line.Label != "Durée estimée" || preview.Plan == null))
                     lines.Add(line.Label + " : " + line.Value + ".");
             foreach (var line in preview.WillDo) lines.Add(line);
             foreach (var line in preview.WillNotDo) lines.Add(line);
@@ -1207,6 +1552,7 @@ namespace LDI12.App.ViewModels
         {
             _backupPreview = null;
             _driversPreview = null;
+            _volumeJobs.Clear();
             RaiseDurations();
             BackupLines.Clear();
             BackupSummary = string.Empty;
@@ -1238,7 +1584,7 @@ namespace LDI12.App.ViewModels
         /// l'exécution n'a rien à copier et le dit. Le bouton grisé ne fait que rendre visible
         /// une règle qui tient déjà toute seule.
         /// </remarks>
-        public bool CanCopy => !IsCopying && _backupPreview != null && _backupPreview.CanExecute;
+        public bool CanCopy => !IsCopying && (IsVolumeSource ? VolumeJobsReady : _backupPreview != null && _backupPreview.CanExecute);
 
         public ICommand PrepareBackupCommand { get; }
         public ICommand RunBackupCommand { get; }
@@ -1253,6 +1599,12 @@ namespace LDI12.App.ViewModels
 
             _backup ??= ActionCatalog.Find(ActionIds.BackupUserData, _logger);
             if (_backup == null) return;
+
+            if (IsVolumeSource)
+            {
+                await PrepareVolumeAsync(runner).ConfigureAwait(true);
+                return;
+            }
 
             IsCopying = true;
             BackupLines.Clear();
@@ -1331,6 +1683,13 @@ namespace LDI12.App.ViewModels
         /// </remarks>
         private async Task CopyAsync()
         {
+            if (IsVolumeSource)
+            {
+                var volumeRunner = _runner == null ? null : await _runner().ConfigureAwait(true);
+                if (volumeRunner != null && _backup != null && VolumeJobsReady) await CopyVolumeAsync(volumeRunner).ConfigureAwait(true);
+                return;
+            }
+
             var preview = _backupPreview;
             var action = _backup;
             var runner = _runner == null ? null : await _runner().ConfigureAwait(true);

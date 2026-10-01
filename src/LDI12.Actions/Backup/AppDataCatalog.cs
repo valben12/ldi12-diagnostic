@@ -104,13 +104,18 @@ namespace LDI12.Actions.Backup
 
         /// <summary>Les applications présentes sur cette machine, dans l'ordre où la fiche les présente.</summary>
         public static IReadOnlyList<AppDataApplication> Detect(IFileSystemGateway files)
+            => Detect(files, ProfileRoots.Current());
+
+        /// <summary>Les applications d'un compte donné : celui de la session, ou celui d'un autre Windows.</summary>
+        public static IReadOnlyList<AppDataApplication> Detect(IFileSystemGateway files, ProfileRoots roots)
         {
             if (files == null) throw new ArgumentNullException(nameof(files));
+            if (roots == null) throw new ArgumentNullException(nameof(roots));
 
-            var local = Special(Environment.SpecialFolder.LocalApplicationData);
-            var roaming = Special(Environment.SpecialFolder.ApplicationData);
-            var profile = Special(Environment.SpecialFolder.UserProfile);
-            var documents = Special(Environment.SpecialFolder.MyDocuments);
+            var local = roots.LocalAppData;
+            var roaming = roots.RoamingAppData;
+            var profile = roots.Profile;
+            var documents = roots.Documents;
 
             var found = new List<AppDataApplication>();
 

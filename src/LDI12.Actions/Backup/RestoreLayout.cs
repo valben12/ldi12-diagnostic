@@ -85,6 +85,29 @@ namespace LDI12.Actions.Backup
         public IReadOnlyList<string> Profiles { get; init; } = Array.Empty<string>();
     }
 
+    /// <summary>Une sauvegarde trouvée sur un disque.</summary>
+    public sealed class BackupEntry
+    {
+        public string Path { get; init; } = string.Empty;
+
+        internal string Stamp { get; init; } = string.Empty;
+
+        public DateTime? Date { get; init; }
+
+        public string Machine { get; init; } = string.Empty;
+
+        /// <summary>Le compte sauvegardé ; nul pour une sauvegarde d'avant la version 1.28.</summary>
+        public string? Account { get; init; }
+
+        public BackupProgressState? State { get; init; }
+
+        public string Title => Machine + (string.IsNullOrEmpty(Account) ? string.Empty : " · " + Account);
+
+        public string Description
+            => (Date.HasValue ? Date.Value.ToString("d MMMM yyyy 'à' HH'h'mm", CultureInfo.GetCultureInfo("fr-FR")) : "date inconnue") +
+               (State == BackupProgressState.Running || State == BackupProgressState.Interrupted ? " · incomplète" : string.Empty);
+    }
+
     /// <summary>Ce que la sauvegarde contient, rapporté à la machine où l'on restaure.</summary>
     public sealed class RestoreLayout
     {
@@ -144,6 +167,56 @@ namespace LDI12.Actions.Backup
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// Toutes les sauvegardes LDI12 d'un disque, de la plus récente à la plus ancienne.
+        /// </summary>
+        /// <remarks>
+        /// Un disque d'atelier en porte souvent plusieurs : un dossier par compte d'un même PC, et
+        /// les PC de plusieurs clients. La plus récente n'est pas forcément celle qu'on veut
+        /// restaurer : on choisit.
+        /// </remarks>
+        public static IReadOnlyList<BackupEntry> List(IFileSystemGateway files, string root)
+        {
+            var result = new List<BackupEntry>();
+            if (string.IsNullOrWhiteSpace(root) || !files.DirectoryExists(root)) return result;
+
+            foreach (var directory in files.EnumerateDirectories(root))
+            {
+                var name = Path.GetFileName(directory.TrimEnd('\\'));
+                if (!name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || !IsBackup(files, directory)) continue;
+
+                var stamp = Stamp(name);
+                var state = files.ReadText(Path.Combine(directory, BackupState.FileName));
+                var record = BackupState.Parse(state.HasValue ? state.Value : null);
+
+                result.Add(new BackupEntry
+                {
+                    Path = directory,
+                    Stamp = stamp,
+                    Date = StampDate(stamp),
+                    Machine = record?.Machine is { Length: > 0 } machine ? machine : MachineOf(name, stamp),
+                    Account = record?.Account,
+                    State = record?.State,
+                });
+            }
+
+            result.Sort((a, b) => string.CompareOrdinal(b.Stamp, a.Stamp));
+            return result;
+        }
+
+        /// <summary>« SALON » dans « LDI12-Sauvegarde-SALON-2026-09-29-1000 » ou « …-1000-2 ».</summary>
+        private static string MachineOf(string name, string stamp)
+        {
+            var stem = name.Substring(Prefix.Length);
+            if (stamp.Length == 0) return stem;
+
+            // Le suffixe éventuel (« -2 ») est rendu sur deux chiffres dans l'horodatage : on retire
+            // la date, puis ce qui la suit dans le nom.
+            var date = stamp.Substring(0, 15);
+            var at = stem.LastIndexOf(date, StringComparison.Ordinal);
+            return at > 0 ? stem.Substring(0, at).TrimEnd('-') : stem;
         }
 
         /// <summary>« yyyy-MM-dd-HHmm » à la fin du nom, le nom de machine pouvant contenir des tirets.</summary>

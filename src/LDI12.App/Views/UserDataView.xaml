@@ -70,6 +70,26 @@
             </Button>
         </DataTemplate>
 
+        <!-- Une source de sauvegarde, ou une sauvegarde à restaurer : un titre, une ligne. -->
+        <DataTemplate x:Key="PlainTileTemplate">
+            <Button Style="{StaticResource DriveTile}" Command="{Binding SelectCommand}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Path Grid.Column="0" Style="{StaticResource Icon}" Width="16" Height="16" Data="{StaticResource Icon.HardDrive}"
+                              Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" Margin="8,0,0,0"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="{Binding Description}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
         <ItemsPanelTemplate x:Key="TilePanel">
             <WrapPanel Orientation="Horizontal" />
         </ItemsPanelTemplate>
@@ -209,6 +229,46 @@
                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                        Text="Les dossiers personnels du compte ouvert sont copiés vers le support choisi, puis chaque fichier est relu et comparé à sa source. Rien n'est déplacé ni effacé à la source, rien n'est écrasé à la destination. Un manifeste de la copie et une fiche de réinstallation, avec les logiciels installés et leurs versions, sont déposés dans le dossier de sauvegarde." />
 
+                            <!-- La source : le compte ouvert, ou un disque branché. Un disque qui porte un
+                                 Windows se sauvegarde par comptes, comme ce PC ; un disque de données, par
+                                 dossiers. À l'atelier, c'est le disque du PC du client, branché ici. -->
+                            <TextBlock Text="Que sauvegarder ?" Style="{StaticResource Text.Muted}" Margin="0,16,0,8" />
+                            <ItemsControl ItemsSource="{Binding Sources}" ItemsPanel="{StaticResource TilePanel}"
+                                          ItemTemplate="{StaticResource PlainTileTemplate}" />
+
+                            <StackPanel Visibility="{Binding IsVolumeSource, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
+                                           Margin="0,0,0,8"
+                                           Text="Les fichiers de ce disque sont lus avec les droits administrateur, en mode sauvegarde : les comptes protégés s'ouvrent aussi. Une invite Windows s'affichera à la préparation. Un dossier de sauvegarde est créé par compte, pour pouvoir restaurer chacun dans le sien." />
+                                <Border Style="{StaticResource Card}" Padding="14,10" MaxWidth="900" HorizontalAlignment="Left"
+                                        Visibility="{Binding HasSourceAccounts, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel>
+                                        <TextBlock Text="Comptes" Style="{StaticResource Text.Body}" Margin="0,0,0,8"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}" />
+                                        <ItemsControl ItemsSource="{Binding SourceAccounts}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
+                                        Visibility="{Binding HasSourceFolders, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel>
+                                        <TextBlock Text="Dossiers" Style="{StaticResource Text.Body}" Margin="0,0,0,8"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}" />
+                                        <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding SourceFolders}" ItemTemplate="{StaticResource ChoiceTemplate}" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+                                <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding IncludeOfflineDrivers}"
+                                          Visibility="{Binding ShowOfflineDrivers, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel>
+                                        <TextBlock Text="Pilotes de ce Windows" Style="{StaticResource Text.Body}"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}" />
+                                        <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                                   Text="Exportés du disque par DISM, sans les pilotes livrés avec Windows. Réinstallés d'office à la restauration sur le nouveau PC." />
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+
                             <TextBlock Text="Support de destination" Style="{StaticResource Text.Muted}"
                                        Margin="0,16,0,8" />
                             <!-- Les supports branchés, relus toutes les trois secondes : brancher le disque
@@ -245,6 +305,7 @@
 
                             <!-- Les trois options. La dernière est décochée à chaque ouverture : les clés
                                  Wi-Fi sortent en clair, et ce choix se refait pour chaque client. -->
+                            <StackPanel Visibility="{Binding ShowAccountOptions, Converter={StaticResource BoolToVisibility}}">
                             <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
                                       IsChecked="{Binding IncludePersonal}">
                                 <StackPanel>
@@ -263,8 +324,10 @@
                                                Text="Chrome, Edge, Firefox, Thunderbird, archives Outlook et signatures, Pense-bêtes, sauvegardes OneNote, arrière-plans Teams, parties de jeux. Sans les caches. Seul ce qui existe sur cette machine est copié." />
                                 </StackPanel>
                             </CheckBox>
+                            </StackPanel>
                             <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0"
-                                      IsChecked="{Binding ExportWifi}">
+                                      IsChecked="{Binding ExportWifi}"
+                                      Visibility="{Binding IsSessionSource, Converter={StaticResource BoolToVisibility}}">
                                 <StackPanel>
                                     <TextBlock Text="Profils Wi-Fi, avec leurs clés" Style="{StaticResource Text.Body}"
                                                Foreground="{DynamicResource Brush.TextPrimary}" />
@@ -299,6 +362,8 @@
                             <Button Style="{StaticResource Button.Ghost}" Content="Ajouter des dossiers…" HorizontalAlignment="Left"
                                     Command="{Binding AddExtraFoldersCommand}" Margin="0,8,0,0" />
 
+                            <!-- Pilotes et applications de ce PC : ceux d'un autre Windows se choisissent plus haut. -->
+                            <StackPanel Visibility="{Binding IsSessionSource, Converter={StaticResource BoolToVisibility}}">
                             <!-- Pilotes : ceux que la réinstallation perdrait, un par paquet. -->
                             <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding IncludeDrivers}">
                                 <StackPanel>
@@ -353,6 +418,7 @@
                                     </ScrollViewer>
                                 </StackPanel>
                             </Border>
+                            </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
@@ -436,6 +502,13 @@
                                        HorizontalAlignment="Left"
                                        Text="Aucun support branché ne porte de sauvegarde LDI12. Branchez le disque de la sauvegarde : il apparaîtra ici de lui-même."
                                        Visibility="{Binding HasNoRestoreDrive, Converter={StaticResource BoolToVisibility}}" />
+
+                            <!-- Plusieurs sauvegardes sur ce support : un compte par dossier, ou plusieurs clients. -->
+                            <StackPanel Visibility="{Binding HasRestoreChoice, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Sauvegarde à restaurer" Style="{StaticResource Text.Muted}" Margin="0,4,0,8" />
+                                <ItemsControl ItemsSource="{Binding RestoreBackups}" ItemsPanel="{StaticResource TilePanel}"
+                                              ItemTemplate="{StaticResource PlainTileTemplate}" />
+                            </StackPanel>
 
                             <TextBlock Text="Ou un dossier précis" Style="{StaticResource Text.Muted}" Margin="0,4,0,6" />
                             <TextBox Style="{StaticResource Field}" Width="620" HorizontalAlignment="Left"

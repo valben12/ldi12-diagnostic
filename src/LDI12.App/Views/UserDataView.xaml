@@ -359,6 +359,16 @@
                                                Text="Chrome, Edge, Brave, Opera, Vivaldi : sans cette option, les mots de passe enregistrés ne se liront pas sur le nouveau PC. La clé qui les ouvre est écrite sur le support de sauvegarde. À effacer une fois la machine rendue." />
                                 </StackPanel>
                             </CheckBox>
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0"
+                                      IsChecked="{Binding IncludeSettings}"
+                                      Visibility="{Binding IsSessionSource, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <TextBlock Text="Imprimantes, lecteurs réseau et licence Windows" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="Relevés dans la fiche de réinstallation, puis remis à la restauration : imprimantes réseau et partagées, imprimante par défaut, lecteurs réseau (Z: vers \\serveur\partage). La clé de Windows est notée dans la fiche." />
+                                </StackPanel>
+                            </CheckBox>
 
                             <!-- Dossiers ajoutés à la main : les données qui ne sont pas là où Windows les attend. -->
                             <TextBlock Text="Autres dossiers" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
@@ -572,6 +582,14 @@
                                     </ScrollViewer>
                                 </StackPanel>
                             </Border>
+                            <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding RestorePrintersChecked}">
+                                <StackPanel>
+                                    <TextBlock Text="Réinstaller les imprimantes" Style="{StaticResource Text.Body}"
+                                               Foreground="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
+                                               Text="Imprimantes réseau et partagées, et l'imprimante par défaut, après les pilotes. Les lecteurs réseau sont reconnectés avec les données. Une invite administrateur s'affichera à la préparation." />
+                                </StackPanel>
+                            </CheckBox>
                             <CheckBox Style="{StaticResource Check}" Margin="0,10,0,0" IsChecked="{Binding RestoreApplicationsChecked}">
                                 <StackPanel>
                                     <TextBlock Text="Réinstaller les applications" Style="{StaticResource Text.Body}"

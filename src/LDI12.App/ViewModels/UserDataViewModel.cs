@@ -83,6 +83,10 @@ namespace LDI12.App.ViewModels
         private bool _includeApplications = true;
         private bool _exportWifi;
         private bool _browserPasswords;
+        private bool _includeSettings = true;
+        private bool _restorePrintersChecked = true;
+        private IRepairAction? _restorePrinters;
+        private ActionPreview? _restorePrintersPreview;
         private string? _lastBackupFolder;
 
         public UserDataViewModel(
@@ -1326,7 +1330,8 @@ namespace LDI12.App.ViewModels
         public bool CanPrepareRestore => !IsRunning && !IsCopying && !string.IsNullOrWhiteSpace(RestoreSource);
 
         public bool CanRestore
-            => !IsCopying && (Ready(_restorePreview) || Ready(_restoreDriversPreview) || Ready(_restoreApplicationsPreview));
+            => !IsCopying && (Ready(_restorePreview) || Ready(_restoreDriversPreview) || Ready(_restoreApplicationsPreview) ||
+                              Ready(_restorePrintersPreview));
 
         private static bool Ready(ActionPreview? preview) => preview != null && preview.CanExecute;
 
@@ -1339,6 +1344,7 @@ namespace LDI12.App.ViewModels
             RaiseDurations();
             _restoreDriversPreview = null;
             _restoreApplicationsPreview = null;
+            _restorePrintersPreview = null;
             RestoreLines.Clear();
             RestoreSummary = string.Empty;
             Raise(nameof(HasRestorePreview));
@@ -1372,7 +1378,7 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             RestoreLines.Clear();
-            _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+            _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
             Status = "Relevé de la sauvegarde en cours. Rien n'est encore écrit sur cette machine.";
             var preparing = StartPreparation();
 
@@ -1418,6 +1424,22 @@ namespace LDI12.App.ViewModels
                     }
                 }
 
+                if (RestorePrintersChecked && backup != null &&
+                    runner.Context.Files.FileExists(System.IO.Path.Combine(backup, MachineSettings.FileName)))
+                {
+                    _restorePrinters ??= ActionCatalog.Find(ActionIds.RestorePrinters, _logger);
+                    if (_restorePrinters != null)
+                    {
+                        _restorePrintersPreview = await runner.PreviewAsync(_restorePrinters, source, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        if (_restorePrintersPreview.Outcome != PreviewOutcome.NothingToDo)
+                        {
+                            RestoreLines.Add("Imprimantes. " + _restorePrintersPreview.Summary);
+                            Show(RestoreLines, _restorePrintersPreview);
+                        }
+                    }
+                }
+
                 if (RestoreApplicationsChecked && backup != null &&
                     runner.Context.Files.FileExists(System.IO.Path.Combine(backup, WingetApplications.FileName)))
                 {
@@ -1437,14 +1459,14 @@ namespace LDI12.App.ViewModels
             }
             catch (OperationCanceledException)
             {
-                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
                 RestoreLines.Clear();
                 Status = "Préparation annulée. Rien n'a été écrit.";
             }
             catch (Exception ex)
             {
                 _logger.Error(Category, "Le relevé de la restauration a échoué.", ex);
-                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
                 Status = "Le relevé de la restauration a échoué : " + ex.Message;
             }
             finally
@@ -1508,6 +1530,16 @@ namespace LDI12.App.ViewModels
                     Report(report, "Pilotes", drivers);
                 }
 
+                // Après les pilotes : une imprimante réseau se recrée avec le sien.
+                if (Ready(_restorePrintersPreview) && _restorePrinters != null)
+                {
+                    BeginTransfer("Réinstallation des imprimantes…");
+                    var printers = await runner.ExecuteAsync(_restorePrinters, _restorePrintersPreview!, null, progress, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    summaries.Add("Imprimantes : " + printers.Summary);
+                    Report(report, "Imprimantes", printers);
+                }
+
                 if (Ready(_restorePreview) && _restore != null)
                 {
                     BeginTransfer("Préparation de la restauration…");
@@ -1537,7 +1569,7 @@ namespace LDI12.App.ViewModels
             finally
             {
                 EndCancellable();
-                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = null;
+                _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
                 RestoreLines.Clear();
                 RestoreSummary = report.Count > 0 ? "Compte rendu de la restauration :" : string.Empty;
                 foreach (var line in report) RestoreLines.Add(line);
@@ -1641,6 +1673,20 @@ namespace LDI12.App.ViewModels
         {
             get => _browserPasswords;
             set { if (Set(ref _browserPasswords, value)) Invalidate(); }
+        }
+
+        /// <summary>Relever les imprimantes, les lecteurs réseau et la clé de Windows. Coché par défaut.</summary>
+        public bool IncludeSettings
+        {
+            get => _includeSettings;
+            set { if (Set(ref _includeSettings, value)) Invalidate(); }
+        }
+
+        /// <summary>Remettre les imprimantes relevées avec la sauvegarde. Demande une invite Windows.</summary>
+        public bool RestorePrintersChecked
+        {
+            get => _restorePrintersChecked;
+            set { if (Set(ref _restorePrintersChecked, value)) InvalidateRestore(); }
         }
 
         public ICommand OpenBackupCommand { get; }
@@ -1897,6 +1943,7 @@ namespace LDI12.App.ViewModels
                 [BackupUserDataAction.ApplicationsParameter] = IncludeApplications ? "1" : "0",
                 [BackupUserDataAction.WifiParameter] = ExportWifi ? "1" : "0",
                 [BackupUserDataAction.BrowserPasswordsParameter] = BrowserPasswords ? "1" : "0",
+                [BackupUserDataAction.SettingsParameter] = IncludeSettings ? "1" : "0",
                 [BackupUserDataAction.DriversParameter] = CheckedDrivers().Count > 0 ? "1" : "0",
                 [BackupUserDataAction.ResumeParameter] = ResumeBackup ? "1" : "0",
             };

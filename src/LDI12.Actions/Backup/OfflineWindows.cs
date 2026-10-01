@@ -24,6 +24,9 @@ namespace LDI12.Actions.Backup
         /// <summary>Le dossier du magasin de pilotes de chaque pilote tiers, par nom publié (« oem12.inf »).</summary>
         public IReadOnlyDictionary<string, string> DriverPackages { get; init; } = new Dictionary<string, string>();
 
+        /// <summary>La clé de produit inscrite dans le registre de ce Windows ; nulle pour une licence numérique.</summary>
+        public string? ProductKey { get; init; }
+
         /// <summary>Pourquoi le registre n'a pas pu être lu, quand il ne l'a pas été.</summary>
         public string? Failure { get; init; }
     }
@@ -69,7 +72,7 @@ namespace LDI12.Actions.Backup
             var system = @"HKLM\LDI12-HL-SYS-" + suffix;
             var software = @"HKLM\LDI12-HL-SW-" + suffix;
 
-            string? machine = null, description = null, failure = null;
+            string? machine = null, description = null, failure = null, productKey = null;
             SoftwareInventory? programs = null;
             IReadOnlyDictionary<string, string> packages = new Dictionary<string, string>();
 
@@ -101,6 +104,7 @@ namespace LDI12.Actions.Backup
                         .ConfigureAwait(false);
                     var product = Value(version, "ProductName");
                     var build = Value(version, "CurrentBuild");
+                    productKey = MachineSettings.Decode(MachineSettings.Hex(Value(version, "DigitalProductId")));
                     if (product != null)
                     {
                         // Windows 11 s'annonce encore « Windows 10 » dans ce champ : le numéro de build tranche.
@@ -122,7 +126,7 @@ namespace LDI12.Actions.Backup
                 failure ??= "le registre SOFTWARE de ce Windows n'a pas pu être chargé";
             }
 
-            return new OfflineWindowsInfo { MachineName = machine, Description = description, Software = programs, Failure = failure, DriverPackages = packages };
+            return new OfflineWindowsInfo { MachineName = machine, Description = description, Software = programs, Failure = failure, DriverPackages = packages, ProductKey = productKey };
         }
 
         /// <summary>Les logiciels installés pour la machine, vue 64 et 32 bits, tels que les liste le panneau de configuration.</summary>

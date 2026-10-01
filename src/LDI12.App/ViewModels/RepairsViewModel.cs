@@ -370,6 +370,7 @@ namespace LDI12.App.ViewModels
                 if (action.Descriptor.Id == ActionIds.ExportDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreApplications ||
+                    action.Descriptor.Id == ActionIds.RestorePrinters ||
                     action.Descriptor.Id == ActionIds.CopyOpenFiles) continue;
 
                 Items.Add(new RepairActionItem(this, action));

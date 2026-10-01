@@ -32,6 +32,7 @@ namespace LDI12.Actions
                 () => new Backup.ExportDriversAction(),
                 () => new Backup.RestoreDriversAction(),
                 () => new Backup.RestoreApplicationsAction(),
+                () => new Backup.RestorePrintersAction(),
                 () => new Backup.OpenFilesAction(),
                 () => new Footprint.RemoveFootprintAction(),
                 () => new FlushDnsAction(),

@@ -56,6 +56,9 @@
         /// <summary>Réinstallation des applications d'une sauvegarde, par winget.</summary>
         public const string RestoreApplications = "RESTORE-APPLICATIONS";
 
+        /// <summary>Réinstallation des imprimantes relevées avec une sauvegarde.</summary>
+        public const string RestorePrinters = "RESTORE-PRINTERS";
+
         /// <summary>Copie, depuis un cliché instantané, des fichiers qu'un programme tenait ouverts.</summary>
         public const string CopyOpenFiles = "BACKUP-OPEN-FILES";
 

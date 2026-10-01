@@ -57,6 +57,9 @@ namespace LDI12.Actions.Backup
         public int CloudOnlyFiles { get; init; }
 
         public bool Interrupted { get; init; }
+
+        /// <summary>Imprimantes, lecteurs réseau et clés de produit ; nul s'ils n'ont pas été relevés.</summary>
+        public MachineSettingsRecord? Settings { get; init; }
     }
 
     /// <summary>
@@ -137,6 +140,7 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
             Copied(html, model);
             Applications(html, model);
             Wifi(html, model);
+            Settings(html, model);
             Software(html, model);
 
             html.Append("<footer>Établie par LDI12 Diagnostic")
@@ -205,8 +209,8 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
                 items.Add(model.Wifi.WithProtectedKey + " code(s) Wi-Fi n'ont pas pu être lus en clair : les relever " +
                           "avant d'effacer, ou relancer la sauvegarde avec les droits administrateur.");
 
-            items.Add("Licences des logiciels payants (suite bureautique, antivirus, logiciels métier) : ce logiciel " +
-                      "ne relève pas les clés. Les retrouver avec le client, ou dans ses courriels d'achat.");
+            items.Add("Licences des logiciels payants (suite bureautique, antivirus, logiciels métier) : seule la clé " +
+                      "de Windows est relevée. Les autres sont à retrouver avec le client, ou dans ses courriels d'achat.");
 
             html.Append("<h2>Avant d'effacer le disque</h2><section class=\"todo\"><ul>");
             foreach (var item in items) html.Append("<li>").Append(E(item)).Append("</li>");
@@ -302,6 +306,51 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
             }
 
             html.Append("</tbody></table></div>");
+        }
+
+        private static void Settings(StringBuilder html, ReinstallSheetModel model)
+        {
+            var settings = model.Settings;
+            if (settings == null || settings.IsEmpty) return;
+
+            if (settings.Keys.Count > 0)
+            {
+                html.Append("<h2>Licence de Windows</h2><div class=\"scroll\"><table><tbody>");
+                foreach (var key in settings.Keys)
+                    html.Append("<tr><td>").Append(E(key.Label)).Append("</td><td class=\"key\">").Append(E(key.Key)).Append("</td></tr>");
+                html.Append("</tbody></table></div><p class=\"muted\">Une machine activée par licence numérique se réactive seule " +
+                            "après réinstallation de la même édition. La clé de la carte mère est reprise automatiquement par Windows.</p>");
+            }
+
+            if (settings.Printers.Count > 0)
+            {
+                html.Append("<h2>Imprimantes</h2><div class=\"scroll\"><table><thead><tr><th>Imprimante</th><th>Raccordement</th>")
+                    .Append("<th>Pilote</th></tr></thead><tbody>");
+                foreach (var printer in settings.Printers)
+                {
+                    var link = printer.Kind switch
+                    {
+                        PrinterKind.Connection => "partagée",
+                        PrinterKind.Network => "réseau, " + printer.Host,
+                        _ => printer.Port,
+                    };
+                    html.Append("<tr><td>").Append(E(printer.Name))
+                        .Append(printer.IsDefault ? " <span class=\"pill\">par défaut</span>" : string.Empty)
+                        .Append("</td><td>").Append(E(link)).Append("</td><td>").Append(E(printer.Driver)).Append("</td></tr>");
+                }
+
+                html.Append("</tbody></table></div>");
+            }
+
+            if (settings.Drives.Count > 0)
+            {
+                html.Append("<h2>Lecteurs réseau</h2><div class=\"scroll\"><table><thead><tr><th>Lettre</th><th>Partage</th>")
+                    .Append("<th>Compte</th></tr></thead><tbody>");
+                foreach (var drive in settings.Drives)
+                    html.Append("<tr><td>").Append(E(drive.Letter)).Append("</td><td class=\"key\">").Append(E(drive.Path))
+                        .Append("</td><td>").Append(E(drive.User ?? "celui de la session")).Append("</td></tr>");
+                html.Append("</tbody></table></div>");
+            }
         }
 
         private static void Software(StringBuilder html, ReinstallSheetModel model)

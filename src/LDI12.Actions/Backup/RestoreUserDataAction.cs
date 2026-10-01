@@ -36,6 +36,9 @@ namespace LDI12.Actions.Backup
 
         public IReadOnlyList<string> MissingSoftware { get; init; } = Array.Empty<string>();
 
+        /// <summary>Les lecteurs réseau à reconnecter dans cette session.</summary>
+        public IReadOnlyList<NetworkDrive> NetworkDrives { get; init; } = Array.Empty<NetworkDrive>();
+
         public long Bytes { get; init; }
 
         public int Files { get; init; }
@@ -65,6 +68,9 @@ namespace LDI12.Actions.Backup
 
         /// <summary>« 0 » : ne pas réimporter les profils Wi-Fi. Absent : ils sont réimportés.</summary>
         public const string WifiParameter = "wifi";
+
+        /// <summary>« 0 » ne reconnecte pas les lecteurs réseau de la sauvegarde. Absent : reconnectés.</summary>
+        public const string NetworkDrivesParameter = "network-drives";
 
         /// <summary>La lecture mesurée du support de la sauvegarde, voir <see cref="ReadSpeed.Encode"/>.</summary>
         public const string SourceSpeedParameter = "source-speed";
@@ -184,7 +190,18 @@ namespace LDI12.Actions.Backup
 
             var wifi = withWifi ? layout.WifiProfiles : Array.Empty<string>();
 
-            if (files == 0 && wifi.Count == 0)
+            // Les lecteurs réseau, sauf ceux dont la lettre est déjà prise ici.
+            var drives = new List<NetworkDrive>();
+            var taken = new List<string>();
+            if (context.Parameter(NetworkDrivesParameter) != "0")
+            {
+                var document = context.Files.ReadText(Path.Combine(backup, MachineSettings.FileName));
+                foreach (var drive in MachineSettings.Read(document.HasValue ? document.Value : null).Drives)
+                    if (context.Files.DirectoryExists(drive.Letter + "\\")) taken.Add(drive.Letter + " (" + drive.Path + ")");
+                    else drives.Add(drive);
+            }
+
+            if (files == 0 && wifi.Count == 0 && drives.Count == 0)
                 return new ActionPreview
                 {
                     Outcome = PreviewOutcome.NothingToDo,
@@ -283,6 +300,10 @@ namespace LDI12.Actions.Backup
             if (wifi.Count > 0)
                 willDo.Add("Réimporter " + wifi.Count + " profil(s) Wi-Fi pour ce compte");
 
+            foreach (var drive in drives)
+                willDo.Add("Reconnecter le lecteur réseau " + drive.Letter + " à " + drive.Path +
+                           (drive.User == null ? string.Empty : ", avec le compte " + drive.User));
+
             var willNotDo = new List<string>
             {
                 "Ne supprime rien sur cette machine : un profil remplacé est renommé et laissé à côté, à effacer une " +
@@ -293,11 +314,14 @@ namespace LDI12.Actions.Backup
                 "Ne réinstalle aucun logiciel : ceux qui manquent sont listés ci-dessous.",
             };
 
-            if (HasChromium(folders))
+            if (HasChromium(folders) && !HasBrowserKey(context, folders))
                 willNotDo.Add("Ne ramène pas les mots de passe ni les connexions aux sites de Chrome et d'Edge : ils étaient " +
                               "chiffrés pour l'ancienne installation. Favoris, historique, extensions et réglages reviennent. " +
                               "Le navigateur peut aussi remettre à zéro sa page d'accueil et son moteur de recherche, qu'il " +
                               "lie à la machine.");
+
+            foreach (var letter in taken)
+                willNotDo.Add("Ne reconnecte pas le lecteur réseau " + letter + " : cette lettre est déjà prise sur cette machine.");
 
             if (!withWifi && layout.WifiProfiles.Count > 0)
                 willNotDo.Add("Ne réimporte pas les " + layout.WifiProfiles.Count + " profil(s) Wi-Fi : l'option n'est pas cochée.");
@@ -321,6 +345,7 @@ namespace LDI12.Actions.Backup
                     Folders = folders,
                     WifiProfiles = wifi,
                     MissingSoftware = missing,
+                    NetworkDrives = drives,
                     Bytes = bytes,
                     Files = files,
                 },
@@ -454,6 +479,12 @@ namespace LDI12.Actions.Backup
                 details.Add("Wi-Fi : " + await WifiAsync(context, plan.WifiProfiles, cancellationToken).ConfigureAwait(false));
             }
 
+            if (plan.NetworkDrives.Count > 0)
+            {
+                progress?.Report(new ActionProgress("Reconnexion des lecteurs réseau…", 1));
+                details.Add("Lecteurs réseau : " + await NetworkDrivesAsync(context, plan.NetworkDrives, cancellationToken).ConfigureAwait(false));
+            }
+
             if (plan.MissingSoftware.Count > 0)
                 details.Add("Logiciels encore à réinstaller : " + string.Join(", ", plan.MissingSoftware) + ".");
 
@@ -535,6 +566,77 @@ namespace LDI12.Actions.Backup
                     ? "profils restaurés ajoutés à la liste du navigateur, qui garde sa propre clé de chiffrement."
                     : "profils restaurés ajoutés à la liste du navigateur." + keyNote
                 : "la liste des profils n'a pas pu être mise à jour.";
+        }
+
+        private static bool HasBrowserKey(ActionContext context, IReadOnlyList<RestoreFolder> folders)
+        {
+            foreach (var folder in folders)
+                if (folder.Item.Mode == RestoreMode.ChromiumLocalState && context.Files.FileExists(KeyFile(folder.Item))) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Reconnecte les lecteurs réseau, dans la session : un lecteur monté par un compte élevé
+        /// resterait invisible dans l'Explorateur.
+        /// </summary>
+        /// <remarks>
+        /// <c>net use</c> le monte tout de suite quand le partage répond. Sinon (serveur éteint,
+        /// mot de passe demandé), le lecteur est inscrit pour le compte comme Windows le fait
+        /// lui-même : il apparaît dans l'Explorateur et se connecte, mot de passe demandé, au
+        /// premier clic.
+        /// </remarks>
+        internal static async Task<string> NetworkDrivesAsync(
+            ActionContext context, IReadOnlyList<NetworkDrive> drives, CancellationToken cancellationToken)
+        {
+            var mounted = new List<string>();
+            var registered = new List<string>();
+            var failed = new List<string>();
+
+            foreach (var drive in drives)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var run = await context.Processes.RunAsync(
+                    new ProcessRequest("net.exe", "use " + drive.Letter + " \"" + drive.Path + "\" /persistent:yes")
+                    {
+                        Timeout = TimeSpan.FromSeconds(45),
+                        OutputEncoding = ConsoleOutputEncoding.OemCodePage,
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                if (run.Completed && run.ExitCode == 0)
+                {
+                    mounted.Add(drive.Letter);
+                    continue;
+                }
+
+                var key = "HKCU\\Network\\" + drive.Letter.Substring(0, 1);
+                var ok = true;
+                foreach (var value in new[]
+                         {
+                             "/v RemotePath /t REG_SZ /d \"" + drive.Path + "\"",
+                             "/v UserName /t REG_SZ /d \"" + (drive.User ?? string.Empty) + "\"",
+                             "/v ProviderName /t REG_SZ /d \"Microsoft Windows Network\"",
+                             "/v ProviderType /t REG_DWORD /d 131072",
+                             "/v ConnectionType /t REG_DWORD /d 1",
+                             "/v DeferFlags /t REG_DWORD /d 4",
+                         })
+                {
+                    var add = await context.Processes.RunAsync(
+                        new ProcessRequest("reg.exe", "add \"" + key + "\" " + value + " /f") { Timeout = TimeSpan.FromSeconds(30) },
+                        cancellationToken).ConfigureAwait(false);
+                    ok &= add.Completed && add.ExitCode == 0;
+                }
+
+                if (ok) registered.Add(drive.Letter);
+                else failed.Add(drive.Letter + " (" + drive.Path + ")");
+            }
+
+            var parts = new List<string>();
+            if (mounted.Count > 0) parts.Add(string.Join(", ", mounted) + " reconnecté(s)");
+            if (registered.Count > 0)
+                parts.Add(string.Join(", ", registered) + " inscrit(s), le partage ne répond pas encore : connexion au premier clic dans l'Explorateur");
+            if (failed.Count > 0) parts.Add(string.Join(", ", failed) + " non remis");
+            return string.Join(" ; ", parts) + ".";
         }
 
         /// <summary>La clé des mots de passe déposée à côté de « Local State » dans la sauvegarde.</summary>

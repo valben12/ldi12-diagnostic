@@ -60,6 +60,12 @@ namespace LDI12.Actions.Backup
         /// <summary>Emporter la clé des mots de passe de chaque navigateur Chromium sauvegardé.</summary>
         public bool BrowserPasswords { get; init; }
 
+        /// <summary>Relever imprimantes, lecteurs réseau et clé de Windows : la session ouverte seulement.</summary>
+        public bool ReadSettings { get; init; }
+
+        /// <summary>La clé de Windows d'un autre disque, lue dans son registre.</summary>
+        public string? OfflineProductKey { get; init; }
+
         /// <summary>Applications cochées, à réinstaller par winget. Vide : aucune liste déposée.</summary>
         public IReadOnlyList<string> WingetPackages { get; init; } = Array.Empty<string>();
 
@@ -161,6 +167,9 @@ namespace LDI12.Actions.Backup
         /// restauration la remette au nouveau compte. Absent : les mots de passe ne suivent pas.
         /// </summary>
         public const string BrowserPasswordsParameter = "browser-passwords";
+
+        /// <summary>« 0 » ne relève pas les imprimantes, les lecteurs réseau ni la clé de Windows. Absent : relevés.</summary>
+        public const string SettingsParameter = "settings";
 
         /// <summary>
         /// Les applications à réinstaller, une par ligne, en identifiants winget. Absent : aucune.
@@ -281,6 +290,7 @@ namespace LDI12.Actions.Backup
             var withApplications = context.Parameter(ApplicationsParameter) != "0";
             var withWifi = context.Parameter(WifiParameter) == "1";
             var withPasswords = context.Parameter(BrowserPasswordsParameter) == "1";
+            var withSettings = context.Parameter(SettingsParameter) != "0";
             var winget = WingetApplications.Decode(context.Parameter(WingetParameter));
             var withDrivers = context.Parameter(DriversParameter) == "1";
 
@@ -296,6 +306,7 @@ namespace LDI12.Actions.Backup
             string? offlineVolume = null;
             string? offlineFailure = null;
             IReadOnlyDictionary<string, string> offlinePackages = new Dictionary<string, string>();
+            string? offlineKey = null;
 
             if (profile != null)
             {
@@ -307,6 +318,7 @@ namespace LDI12.Actions.Backup
                 software = info.Software;
                 offlineFailure = info.Failure;
                 offlinePackages = info.DriverPackages;
+                offlineKey = info.ProductKey;
 
                 // Ni Wi-Fi ni winget pour un Windows qui ne tourne pas : ses clés Wi-Fi sont
                 // chiffrées pour sa machine, et winget ne voit que le Windows en cours.
@@ -328,6 +340,10 @@ namespace LDI12.Actions.Backup
                 account = Environment.UserName;
                 software = Inventory(context);
             }
+
+            // Imprimantes et lecteurs réseau sont ceux de la session ouverte ; un autre Windows ne
+            // livre que sa clé, lue dans son registre.
+            withSettings &= profile == null && label == null;
 
             var plan = new List<BackupFolder>();
             long bytes = 0;
@@ -545,6 +561,10 @@ namespace LDI12.Actions.Backup
                 willNotDo.Add("N'emporte pas la clé des mots de passe des navigateurs : l'option n'est pas cochée, les mots de " +
                               "passe enregistrés dans Chrome ou Edge ne se liront pas sur le nouveau PC.");
 
+            if (withSettings)
+                willDo.Add("Relever les imprimantes, les lecteurs réseau et la clé de Windows, notés dans la fiche et dans « " +
+                           MachineSettings.FileName + " » pour les remettre à la restauration");
+
             if (withWifi)
                 willDo.Add("Exporter les profils Wi-Fi enregistrés dans « " + WifiExport.Folder + " », avec leurs clés " +
                            "en clair quand Windows les livre : le support de sauvegarde devra être gardé en conséquence");
@@ -668,6 +688,8 @@ namespace LDI12.Actions.Backup
                     Applications = applications,
                     ExportWifi = withWifi,
                     BrowserPasswords = withPasswords && chromium > 0,
+                    ReadSettings = withSettings,
+                    OfflineProductKey = offlineKey,
                     WingetPackages = winget,
                     CloudOnlyFiles = cloud,
                 },
@@ -871,6 +893,26 @@ namespace LDI12.Actions.Backup
             }
 
             WifiExportResult? wifi = null;
+            MachineSettingsRecord? settings = null;
+            if (plan.ReadSettings && !interrupted)
+            {
+                progress?.Report(new ActionProgress("Relevé des imprimantes et des lecteurs réseau…", 1));
+                settings = await MachineSettings.ReadAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            else if (plan.OfflineProductKey != null)
+            {
+                settings = new MachineSettingsRecord
+                {
+                    Keys = new[] { new ProductKey { Label = "Windows, clé installée", Key = plan.OfflineProductKey } },
+                };
+            }
+
+            if (settings != null && !settings.IsEmpty)
+                details.Add(Deposit(context, plan, MachineSettings.FileName, MachineSettings.Document(settings))
+                    ? "Réglages : " + settings.Printers.Count + " imprimante(s), " + settings.Drives.Count + " lecteur(s) réseau, " +
+                      (settings.Keys.Count > 0 ? "clé de Windows relevée." : "pas de clé de Windows lisible.")
+                    : "Les réglages de la machine n'ont pas pu être écrits dans la sauvegarde.");
+
             if (plan.BrowserPasswords && !interrupted)
                 details.Add("Mots de passe des navigateurs : " + BrowserPasswordKeys(context, plan));
 
@@ -901,7 +943,7 @@ namespace LDI12.Actions.Backup
             }
 
             progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));
-            Sheet(context, plan, results, wifi, interrupted, details);
+            Sheet(context, plan, results, wifi, settings, interrupted, details);
 
             var outcome = Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
             SetState(context, plan, interrupted ? BackupProgressState.Interrupted : BackupProgressState.Finished);
@@ -941,7 +983,7 @@ namespace LDI12.Actions.Backup
         /// </remarks>
         private void Sheet(
             ActionContext context, BackupPlan plan, IReadOnlyList<BackupFolderResult> results,
-            WifiExportResult? wifi, bool interrupted, ICollection<string> details)
+            WifiExportResult? wifi, MachineSettingsRecord? settings, bool interrupted, ICollection<string> details)
         {
             var software = plan.Software;
             var windows = context.Platform.Profile;
@@ -959,6 +1001,7 @@ namespace LDI12.Actions.Backup
                 Folders = results,
                 Applications = plan.Applications,
                 Wifi = wifi,
+                Settings = settings,
                 Software = software,
                 CloudOnlyFiles = plan.CloudOnlyFiles,
                 Interrupted = interrupted,

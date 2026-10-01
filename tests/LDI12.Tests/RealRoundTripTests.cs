@@ -26,6 +26,7 @@ namespace LDI12.Tests
     /// fichiers, fichier tenu ouvert. Chaque fichier revenu est comparé à l'original, empreinte
     /// et date.
     /// </remarks>
+    [Collection(TimedCollection.Name)]
     public class RealRoundTripTests
     {
         [WindowsFact]
@@ -107,7 +108,7 @@ namespace LDI12.Tests
                 Assert.Single(Directory.GetDirectories(support));
 
                 // Le nouveau PC : la source n'existe plus, tout revient de la sauvegarde.
-                Directory.Delete(Extended(source), recursive: true);
+                RemoveTree(source);
                 var targets = new RestoreTargets
                 {
                     Desktop = Path.Combine(newProfile, "Desktop"),
@@ -143,7 +144,7 @@ namespace LDI12.Tests
             }
             finally
             {
-                try { Directory.Delete(Extended(root), recursive: true); }
+                try { RemoveTree(root); }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
             }
         }
@@ -219,6 +220,14 @@ namespace LDI12.Tests
                 null,
                 parameters,
                 new DpapiSecretProtector());
+
+        /// <summary>Supprime un dossier, fichiers en lecture seule compris.</summary>
+        private static void RemoveTree(string folder)
+        {
+            foreach (var file in Directory.GetFiles(Extended(folder), "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(Extended(folder), recursive: true);
+        }
 
         private static string Extended(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path : @"\\?\" + path;
 

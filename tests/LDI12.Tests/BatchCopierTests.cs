@@ -9,8 +9,19 @@ using Xunit;
 namespace LDI12.Tests
 {
     /// <summary>
+    /// Les tests qui chronomètrent, ou qui chargent le disque : seuls, pour que l'un ne fausse pas
+    /// la mesure de l'autre.
+    /// </summary>
+    [CollectionDefinition(Name, DisableParallelization = true)]
+    public sealed class TimedCollection
+    {
+        public const string Name = "Chronométré";
+    }
+
+    /// <summary>
     /// Plusieurs petits fichiers à la fois, quand et seulement quand le support s'y prête.
     /// </summary>
+    [Collection(TimedCollection.Name)]
     public class BatchCopierTests
     {
         private const string Source = @"C:\Users\client\Documents";

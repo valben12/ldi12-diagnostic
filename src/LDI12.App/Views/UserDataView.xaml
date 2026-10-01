@@ -480,6 +480,9 @@
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la copie"
                                         Command="{Binding PrepareBackupCommand}" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Fermer navigateurs et messagerie"
+                                        ToolTip="Ferme Edge, Chrome, Firefox, Outlook, Thunderbird et Office, y compris en arrière-plan, puis prépare de nouveau. Ce qui n'était pas enregistré dans ces programmes est perdu."
+                                        Command="{Binding CloseProgramsForBackupCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
                                         Command="{Binding CancelPreparationCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Primary}" Content="Copier et vérifier"
@@ -625,6 +628,9 @@
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource Button.Ghost}" Content="Préparer la restauration"
                                         Command="{Binding PrepareRestoreCommand}" />
+                                <Button Style="{StaticResource Button.Ghost}" Content="Fermer navigateurs et messagerie"
+                                        ToolTip="Ferme Edge, Chrome, Firefox, Outlook, Thunderbird et Office, y compris en arrière-plan, puis prépare de nouveau. Edge reste souvent ouvert en arrière-plan sur un PC neuf."
+                                        Command="{Binding CloseProgramsForRestoreCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
                                         Command="{Binding CancelPreparationCommand}" Margin="10,0,0,0" />
                                 <Button Style="{StaticResource Button.Primary}" Content="Restaurer"

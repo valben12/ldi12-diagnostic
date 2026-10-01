@@ -106,6 +106,10 @@ namespace LDI12.App.ViewModels
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
+            CloseProgramsForBackupCommand = new AsyncRelayCommand(
+                () => CloseProgramsAsync(PrepareBackupAsync), () => CanPrepareBackup);
+            CloseProgramsForRestoreCommand = new AsyncRelayCommand(
+                () => CloseProgramsAsync(PrepareRestoreAsync), () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
             AddExtraFoldersCommand = new RelayCommand(AddExtraFolders, () => !IsCopying);
@@ -1340,6 +1344,54 @@ namespace LDI12.App.ViewModels
         private static bool Ready(ActionPreview? preview) => preview != null && preview.CanExecute;
 
         public ICommand PrepareRestoreCommand { get; }
+
+        public ICommand CloseProgramsForBackupCommand { get; }
+        public ICommand CloseProgramsForRestoreCommand { get; }
+
+        /// <summary>
+        /// Les programmes qui tiennent les données qu'on sauvegarde ou qu'on restaure : navigateurs,
+        /// messagerie, Office, Pense-bêtes.
+        /// </summary>
+        private static readonly string[] ClientPrograms =
+        {
+            "msedge.exe", "chrome.exe", "firefox.exe", "brave.exe", "vivaldi.exe", "opera.exe", "thunderbird.exe",
+            "outlook.exe", "winword.exe", "excel.exe", "powerpnt.exe", "onenote.exe", "Microsoft.Notes.exe", "ms-teams.exe",
+        };
+
+        /// <summary>
+        /// Ferme les navigateurs et la messagerie, puis prépare de nouveau.
+        /// </summary>
+        /// <remarks>
+        /// Edge reste ouvert en arrière-plan sur la plupart des Windows 10 et 11, fenêtre fermée :
+        /// sa restauration était alors sautée, et le technicien ne voyait aucune fenêtre à fermer.
+        /// Fermés de force, processus d'arrière-plan compris : ce que le client avait en cours dans
+        /// ces programmes est perdu, d'où le bouton, jamais une fermeture d'office.
+        /// </remarks>
+        private async Task CloseProgramsAsync(Func<Task> prepare)
+        {
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (runner == null) return;
+
+            Status = "Fermeture des navigateurs et de la messagerie…";
+            var arguments = "/f";
+            foreach (var program in ClientPrograms) arguments += " /im " + program;
+
+            try
+            {
+                await runner.Context.Processes.RunAsync(
+                    new ProcessRequest("taskkill.exe", arguments) { Timeout = TimeSpan.FromSeconds(30) },
+                    CancellationToken.None).ConfigureAwait(true);
+
+                // Le temps que Windows relâche les fichiers que ces programmes tenaient.
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Les programmes n'ont pas pu être fermés.", ex);
+            }
+
+            await prepare().ConfigureAwait(true);
+        }
         public ICommand RunRestoreCommand { get; }
 
         private void InvalidateRestore()
@@ -2014,6 +2066,8 @@ namespace LDI12.App.ViewModels
             (RunBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (PrepareRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (CloseProgramsForBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (CloseProgramsForRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (AddExtraFoldersCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseDurations();

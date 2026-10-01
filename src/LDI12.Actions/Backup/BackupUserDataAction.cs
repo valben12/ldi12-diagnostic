@@ -646,8 +646,9 @@ namespace LDI12.Actions.Backup
             if (running.Count > 0)
                 measurements.Add(new PreviewLine(
                     "Programmes ouverts",
-                    string.Join(", ", running) + ". À fermer avant la copie : un fichier tenu ouvert est " +
-                    "refusé, ou copié en cours d'écriture",
+                    string.Join(", ", running) + ". À fermer avant la copie (bouton « Fermer navigateurs et " +
+                    "messagerie ») : un fichier tenu ouvert est récupéré par cliché instantané, mais un profil de " +
+                    "navigateur fermé se copie plus sûrement",
                     PreviewLineKind.Caution));
 
             if (cloud > 0)

@@ -207,7 +207,8 @@ namespace LDI12.Actions.Backup
                     Outcome = PreviewOutcome.NothingToDo,
                     Summary = blockedByProcess.Count > 0
                         ? "Rien ne peut être restauré tant que ces programmes sont ouverts : " +
-                          string.Join(", ", blockedByProcess) + "."
+                          string.Join(", ", blockedByProcess) + ". Le bouton « Fermer navigateurs et messagerie » les ferme, " +
+                          "y compris en arrière-plan, et prépare de nouveau."
                         : "La sauvegarde « " + Path.GetFileName(backup) + " » ne contient rien à remettre sur cette machine.",
                 };
 
@@ -243,7 +244,8 @@ namespace LDI12.Actions.Backup
             if (blockedByProcess.Count > 0)
                 measurements.Add(new PreviewLine("Programmes ouverts",
                     string.Join(", ", blockedByProcess) + ". Leurs données ne seront pas restaurées tant qu'ils ne sont " +
-                    "pas fermés : les fermer, puis préparer de nouveau", PreviewLineKind.Caution));
+                    "pas fermés. Le bouton « Fermer navigateurs et messagerie » les ferme, y compris en arrière-plan " +
+                    "(Edge y reste souvent), et prépare de nouveau", PreviewLineKind.Caution));
 
             // La durée : les deux supports doivent avoir été mesurés, la sauvegarde qu'on lit et le
             // disque qui reçoit. Les pilotes et les applications n'y figurent pas : les premiers

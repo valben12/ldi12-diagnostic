@@ -138,7 +138,9 @@ if ($LASTEXITCODE -ne 0) { throw "Échec de la compilation (code $LASTEXITCODE).
 if (-not $SkipTests) {
     Write-Host ''
     Write-Host 'Tests…' -ForegroundColor Cyan
-    & dotnet test $solution --no-build --configuration Release -v q
+    # Le message et la pile d'un test en échec sont affichés : sans eux, un échec sur la
+    # machine d'intégration ne se lisait qu'en relançant les tests ailleurs.
+    & dotnet test $solution --no-build --configuration Release -v q --logger 'console;verbosity=normal'
     if ($LASTEXITCODE -ne 0) { throw "Échec des tests (code $LASTEXITCODE)." }
 }
 

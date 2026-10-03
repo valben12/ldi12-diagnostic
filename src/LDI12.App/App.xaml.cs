@@ -126,6 +126,9 @@ namespace LDI12.App
             if (navIndex > 0 && navIndex < _shell.Navigation.Count)
                 _shell.SelectedNavigation = _shell.Navigation[navIndex];
 
+            var dataMode = ReadDataMode(e.Args);
+            if (dataMode != null) _shell.UserData?.ShowMode(dataMode);
+
             if (_screenshotPath != null)
             {
                 if (_captureDelayMs > 0)
@@ -285,6 +288,15 @@ namespace LDI12.App
                         System.Globalization.CultureInfo.InvariantCulture, out var offset))
                     return offset;
             return 0;
+        }
+
+        /// <summary>Geste à montrer sur l'écran Données (<c>--data-mode restore</c>).</summary>
+        private static string? ReadDataMode(string[] args)
+        {
+            for (var i = 0; i < args.Length - 1; i++)
+                if (string.Equals(args[i], "--data-mode", StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            return null;
         }
 
         /// <summary>Délai avant capture (<c>--capture-delay 800</c>), en millisecondes.</summary>

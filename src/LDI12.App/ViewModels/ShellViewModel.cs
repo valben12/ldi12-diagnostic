@@ -65,6 +65,9 @@ namespace LDI12.App.ViewModels
         private readonly MonitoringViewModel _monitoring;
         private readonly MeasuresViewModel _measures;
         private readonly UserDataViewModel _userData;
+
+        /// <summary>L'écran Données, pour que le banc de captures puisse choisir ce qu'il photographie.</summary>
+        public UserDataViewModel? UserData { get; private set; }
         private readonly ActionService _actions;
         private readonly SettingsService _settings;
         private readonly SettingsViewModel _settingsScreen;
@@ -138,6 +141,7 @@ namespace LDI12.App.ViewModels
             _monitoring.JournalChanged += (_, __) => _reports.RefreshJournal();
             _measures.JournalChanged += (_, __) => _reports.RefreshJournal();
             _userData.JournalChanged += (_, __) => _reports.RefreshJournal();
+            UserData = _userData;
 
             // Un barème modifié périme le diagnostic affiché : le score et les constats à l'écran
             // ont été calculés avec les seuils précédents.

@@ -76,12 +76,7 @@ namespace LDI12.Tests
         {
             var offenders = new System.Collections.Generic.List<string>();
 
-            // Sans avaler un « </StackPanel> » : le texte doit être un enfant direct de la pile
-            // horizontale, pas d'une grille imbriquée dedans.
-            var pattern = new Regex(
-                "Orientation=\"Horizontal\">(?:(?!</StackPanel>)[\\s\\S])*?" +
-                "Style=\"\\{StaticResource Text\\.(Body|Muted)\\}\"",
-                RegexOptions.Multiline);
+            var pattern = Detector();
 
             foreach (var file in Directory.GetFiles(ViewsRoot(), "*.xaml", SearchOption.AllDirectories))
             {
@@ -99,6 +94,38 @@ namespace LDI12.Tests
                 "Emplacements : " + string.Join(", ", offenders));
         }
 
+        /// <summary>
+        /// Le motif du détecteur, partagé par le contrôle et par ses deux auto-contrôles.
+        /// </summary>
+        /// <remarks>
+        /// Il nomme <c>StackPanel</c> explicitement. Sans cela, il attrapait aussi un
+        /// <c>WrapPanel</c>, qui n'a pas le défaut : celui-ci donne à ses enfants la largeur
+        /// qu'ils demandent et passe à la ligne, là où une pile horizontale offre une largeur
+        /// infinie et laisse le texte sortir du cadre. Sans avaler un « &lt;/StackPanel&gt; » :
+        /// le texte doit être un enfant direct de la pile, pas d'une grille imbriquée dedans.
+        /// </remarks>
+        private static Regex Detector() => new Regex(
+            "<StackPanel[^>]*Orientation=\"Horizontal\">(?:(?!</StackPanel>)[\\s\\S])*?" +
+            "Style=\"\\{StaticResource Text\\.(Body|Muted)\\}\"",
+            RegexOptions.Multiline);
+
+        [Fact]
+        public void Le_detecteur_de_mise_en_page_ne_crie_pas_sur_un_panneau_qui_passe_a_la_ligne()
+        {
+            // Les tuiles de l'écran Données : une largeur posée, et du texte renvoyé à la ligne
+            // dedans. Un garde-fou qui crie sur ce qui va bien finit par être contourné.
+            const string sain =
+                "<WrapPanel>\n" +
+                "    <ToggleButton Style=\"{StaticResource OptionTile}\">\n" +
+                "        <StackPanel>\n" +
+                "            <TextBlock Text=\"Dossiers personnels\" Style=\"{StaticResource Text.Body}\" TextWrapping=\"Wrap\" />\n" +
+                "        </StackPanel>\n" +
+                "    </ToggleButton>\n" +
+                "</WrapPanel>";
+
+            Assert.False(Detector().IsMatch(sain), "Un panneau qui passe à la ligne ne coupe pas son texte.");
+        }
+
         [Fact]
         public void Le_detecteur_de_mise_en_page_reconnait_le_defaut_qu_il_surveille()
         {
@@ -111,12 +138,7 @@ namespace LDI12.Tests
                 "               MaxWidth=\"1100\" />\n" +
                 "</StackPanel>";
 
-            var pattern = new Regex(
-                "Orientation=\"Horizontal\">(?:(?!</StackPanel>)[\\s\\S])*?" +
-                "Style=\"\\{StaticResource Text\\.(Body|Muted)\\}\"",
-                RegexOptions.Multiline);
-
-            Assert.True(pattern.IsMatch(faulty));
+            Assert.True(Detector().IsMatch(faulty));
         }
 
         private static string ViewsRoot()

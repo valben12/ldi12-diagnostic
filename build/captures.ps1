@@ -1,4 +1,4 @@
-# Captures d'écran de chaque écran, en thème sombre et en thème clair.
+﻿# Captures d'écran de chaque écran, en thème sombre et en thème clair.
 #
 # Sert à juger l'interface sur pièce : une modification de style se vérifie sur l'image, pas
 # dans le XAML. Chaque capture lance l'exécutable en mode capture (--screenshot), qui fait une
@@ -26,7 +26,8 @@ $screens = @(
     @{ Nav = 8;  Name = 'mesures';       Scroll = @() },
     @{ Nav = 9;  Name = 'reparations';   Scroll = @() },
     @{ Nav = 10; Name = 'nettoyage';     Scroll = @() },
-    @{ Nav = 11; Name = 'donnees';       Scroll = @(700, 1400, 2100) },
+    @{ Nav = 11; Name = 'donnees';       Scroll = @(700, 1400) },
+    @{ Nav = 11; Name = 'donnees-restauration'; Scroll = @(700); Mode = 'restore' },
     @{ Nav = 12; Name = 'outils';        Scroll = @() },
     @{ Nav = 13; Name = 'rapports';      Scroll = @() },
     @{ Nav = 14; Name = 'historique';    Scroll = @() },
@@ -34,9 +35,10 @@ $screens = @(
     @{ Nav = 16; Name = 'a-propos';      Scroll = @() }
 )
 
-function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll) {
+function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode) {
     $file = Join-Path $Out ("{0}-{1:00}-{2}{3}.png" -f $theme, $nav, $name, $(if ($scroll -gt 0) { "-$scroll" } else { '' }))
     $arguments = @('--screenshot', $file, '--theme', $theme, '--nav', $nav, '--size', $Size)
+    if ($mode) { $arguments += @('--data-mode', $mode) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
@@ -52,7 +54,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll) {
 foreach ($theme in 'dark', 'light') {
     Write-Host "Thème $theme" -ForegroundColor Cyan
     foreach ($screen in $screens) {
-        Capture $theme $screen.Nav $screen.Name 0
-        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset }
+        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode
+        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode }
     }
 }

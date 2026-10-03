@@ -89,7 +89,14 @@ namespace LDI12.Tests
                 Assert.Contains("terminée", File.ReadAllText(Path.Combine(backup, BackupState.FileName)));
                 Assert.Empty(Directory.GetFiles(Extended(backup), "*" + FileCopyRequest.PartialSuffix, SearchOption.AllDirectories));
 
-                if (!IsAdministrator()) File.Copy(Extended(locked), Extended(Path.Combine(copy, "Messagerie", "archive.pst")));
+                // Sans les droits d'administrateur, le cliché instantané n'a pas eu lieu : le
+                // fichier verrouillé est remis à la main, pour éprouver quand même la suite. Son
+                // dossier n'existe pas, puisque ce fichier était le seul qu'il contenait.
+                if (!IsAdministrator())
+                {
+                    Directory.CreateDirectory(Extended(Path.Combine(copy, "Messagerie")));
+                    File.Copy(Extended(locked), Extended(Path.Combine(copy, "Messagerie", "archive.pst")));
+                }
                 Same(original, copy);
 
                 // Le support arraché au milieu : la sauvegarde est restée « en cours », deux fichiers manquent.

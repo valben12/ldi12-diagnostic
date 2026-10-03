@@ -106,6 +106,9 @@ namespace LDI12.App.ViewModels
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
+            ShowBackupModeCommand = new RelayCommand(() => SelectMode(DataMode.Backup), () => CanChangeMode);
+            ShowRestoreModeCommand = new RelayCommand(() => SelectMode(DataMode.Restore), () => CanChangeMode);
+            ShowSurveyModeCommand = new RelayCommand(() => SelectMode(DataMode.Survey), () => CanChangeMode);
             CloseProgramsForBackupCommand = new AsyncRelayCommand(
                 () => CloseProgramsAsync(PrepareBackupAsync), () => CanPrepareBackup);
             CloseProgramsForRestoreCommand = new AsyncRelayCommand(
@@ -801,6 +804,7 @@ namespace LDI12.App.ViewModels
             using var awake = KeepAwake.Start();
 
             IsCopying = true;
+            Mode = DataMode.Backup;
             IsBackupTransferring = true;
             Status = "Copie en cours…";
             var progress = new Progress<ActionProgress>(OnTransfer);
@@ -929,13 +933,18 @@ namespace LDI12.App.ViewModels
         public bool HasDriverChoices => DriverChoices.Count > 0;
         public bool HasApplicationChoices => ApplicationChoices.Count > 0;
 
+        /// <summary>La liste des pilotes n'est montrée que si la tuile est cochée : grisée, elle n'apprenait rien.</summary>
+        public bool ShowDriverChoices => IncludeDrivers && HasDriverChoices;
+
+        public bool ShowRestoreDriverChoices => RestoreDriversChecked && HasRestoreDriverChoices;
+
         public string DriversNote { get => _driversNote; private set => Set(ref _driversNote, value); }
         public string ApplicationsNote { get => _applicationsNote; private set => Set(ref _applicationsNote, value); }
 
         public bool IncludeDrivers
         {
             get => _includeDrivers;
-            set { if (Set(ref _includeDrivers, value)) Invalidate(); }
+            set { if (Set(ref _includeDrivers, value)) { Raise(nameof(ShowDriverChoices)); Invalidate(); } }
         }
 
         public bool IncludeApplicationList
@@ -1076,6 +1085,7 @@ namespace LDI12.App.ViewModels
                   "gardez-les tous ; pour passer sur un PC neuf, « PC neuf » ne garde que les périphériques.";
 
             Raise(nameof(HasDriverChoices));
+            Raise(nameof(ShowDriverChoices));
             Invalidate();
         }
 
@@ -1147,9 +1157,80 @@ namespace LDI12.App.ViewModels
             private set { if (Set(ref _isRestoreTransferring, value)) RaiseTransferStates(); }
         }
 
-        public bool ShowScreen => !IsBackupTransferring && !IsRestoreTransferring;
-        public bool ShowBackupSection => !IsRestoreTransferring;
-        public bool ShowRestoreSection => !IsBackupTransferring;
+        /// <summary>
+        /// Ce que l'écran montre : la sauvegarde, la restauration, ou le relevé.
+        /// </summary>
+        /// <remarks>
+        /// Les trois tenaient autrefois sur une seule page, l'une sous l'autre, sur six écrans de
+        /// haut : le technicien descendait à travers la restauration pour atteindre le bouton de
+        /// copie. Ce sont deux gestes opposés, faits à des moments opposés de l'intervention ; ils
+        /// se choisissent maintenant d'un clic, et l'écran ne montre que celui qu'on a choisi.
+        /// </remarks>
+        public enum DataMode
+        {
+            Backup = 0,
+            Restore = 1,
+            Survey = 2,
+        }
+
+        private DataMode _mode = DataMode.Backup;
+
+        public DataMode Mode
+        {
+            get => _mode;
+            private set { if (Set(ref _mode, value)) RaiseTransferStates(); }
+        }
+
+        public bool IsBackupMode => Mode == DataMode.Backup;
+        public bool IsRestoreMode => Mode == DataMode.Restore;
+        public bool IsSurveyMode => Mode == DataMode.Survey;
+
+        /// <summary>Un transfert en cours fige le choix : on ne quitte pas une copie par mégarde.</summary>
+        public bool CanChangeMode => !IsBackupTransferring && !IsRestoreTransferring;
+
+        public ICommand ShowBackupModeCommand { get; }
+        public ICommand ShowRestoreModeCommand { get; }
+        public ICommand ShowSurveyModeCommand { get; }
+
+        private void SelectMode(DataMode mode)
+        {
+            if (!CanChangeMode) return;
+            Mode = mode;
+        }
+
+        /// <summary>
+        /// Impose le mode au démarrage, pour le banc de captures.
+        /// </summary>
+        /// <remarks>
+        /// Depuis que l'écran montre un seul geste à la fois, la restauration ne s'atteint plus
+        /// en faisant défiler : sans cette entrée, le banc n'en prendrait jamais de capture, et
+        /// une faute d'affichage y passerait inaperçue d'une version à l'autre.
+        /// </remarks>
+        public void ShowMode(string name)
+        {
+            switch ((name ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "restore":
+                case "restauration":
+                    Mode = DataMode.Restore;
+                    break;
+
+                case "survey":
+                case "releve":
+                case "relevé":
+                    Mode = DataMode.Survey;
+                    break;
+
+                default:
+                    Mode = DataMode.Backup;
+                    break;
+            }
+        }
+
+        public bool ShowModePicker => CanChangeMode;
+        public bool ShowScreen => IsSurveyMode && CanChangeMode;
+        public bool ShowBackupSection => IsBackupMode && !IsRestoreTransferring;
+        public bool ShowRestoreSection => IsRestoreMode && !IsBackupTransferring;
         public bool ShowBackupForm => !IsBackupTransferring;
         public bool ShowRestoreForm => !IsRestoreTransferring;
 
@@ -1167,6 +1248,11 @@ namespace LDI12.App.ViewModels
             Raise(nameof(ShowRestoreSection));
             Raise(nameof(ShowBackupForm));
             Raise(nameof(ShowRestoreForm));
+            Raise(nameof(ShowModePicker));
+            Raise(nameof(CanChangeMode));
+            Raise(nameof(IsBackupMode));
+            Raise(nameof(IsRestoreMode));
+            Raise(nameof(IsSurveyMode));
         }
 
         private CancellationTokenSource? _transferCancel;
@@ -1287,7 +1373,7 @@ namespace LDI12.App.ViewModels
         public bool RestoreDriversChecked
         {
             get => _restoreDriversChecked;
-            set { if (Set(ref _restoreDriversChecked, value)) InvalidateRestore(); }
+            set { if (Set(ref _restoreDriversChecked, value)) { Raise(nameof(ShowRestoreDriverChoices)); InvalidateRestore(); } }
         }
 
         /// <summary>Réinstaller par winget les applications que la sauvegarde liste. Demande Internet.</summary>
@@ -1387,6 +1473,7 @@ namespace LDI12.App.ViewModels
 
             Raise(nameof(HasRestoreChoice));
             Raise(nameof(HasRestoreDriverChoices));
+            Raise(nameof(ShowRestoreDriverChoices));
         }
 
         /// <summary>Réimporter les profils Wi-Fi que la sauvegarde contient. Coché par défaut : ils ont été exportés exprès.</summary>
@@ -1643,6 +1730,7 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             Status = "Restauration en cours…";
+            Mode = DataMode.Restore;
             IsRestoreTransferring = true;
             var progress = new Progress<ActionProgress>(OnTransfer);
             var report = new List<string>();
@@ -1988,6 +2076,7 @@ namespace LDI12.App.ViewModels
 
             IsCopying = true;
             Status = "Copie en cours…";
+            Mode = DataMode.Backup;
             IsBackupTransferring = true;
 
             var progress = new Progress<ActionProgress>(OnTransfer);

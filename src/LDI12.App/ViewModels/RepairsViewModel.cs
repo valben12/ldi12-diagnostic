@@ -371,6 +371,7 @@ namespace LDI12.App.ViewModels
                     action.Descriptor.Id == ActionIds.RestoreDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreApplications ||
                     action.Descriptor.Id == ActionIds.RestorePrinters ||
+                    action.Descriptor.Id == ActionIds.VerifyBackup ||
                     action.Descriptor.Id == ActionIds.CopyOpenFiles) continue;
 
                 Items.Add(new RepairActionItem(this, action));

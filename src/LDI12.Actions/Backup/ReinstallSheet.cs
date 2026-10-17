@@ -154,7 +154,8 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
 
             html.Append("<footer>Établie par LDI12 Diagnostic")
                 .Append(string.IsNullOrEmpty(model.ToolVersion) ? string.Empty : " " + E(model.ToolVersion!))
-                .Append(". Le détail fichier par fichier de la copie est dans manifeste.csv, et la liste des ")
+                .Append(". Le détail fichier par fichier de la copie est dans manifeste.csv, avec l'empreinte SHA-256 de chaque fichier ")
+                .Append("qui permet de revérifier la sauvegarde à tout moment, et la liste des ")
                 .Append("logiciels, prête pour un tableur, dans ").Append(SoftwareFileName).Append(".</footer>")
                 .Append("</main></body></html>");
 
@@ -256,7 +257,8 @@ footer{margin-top:36px;padding-top:12px;border-top:1px solid #E4E1E9;font-size:1
                 .Append("<div><p class=\"eyebrow\">Le client, bon pour accord</p></div></div>")
                 .Append("<footer>Établi par LDI12 Diagnostic")
                 .Append(string.IsNullOrEmpty(model.ToolVersion) ? string.Empty : " " + E(model.ToolVersion!))
-                .Append(". Le détail fichier par fichier est dans manifeste.csv, à côté de ce rapport.</footer>")
+                .Append(". Le détail fichier par fichier est dans manifeste.csv, à côté de ce rapport : chaque fichier y porte son ")
+                .Append("empreinte SHA-256, qui permet de vérifier à tout moment que la sauvegarde est restée intacte.</footer>")
                 .Append("</main></body></html>");
 
             return html.ToString();

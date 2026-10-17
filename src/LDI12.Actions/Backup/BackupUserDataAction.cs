@@ -506,6 +506,10 @@ namespace LDI12.Actions.Backup
                     free.IsReliable ? ValueFormat.Bytes(free.Value) : "non lue"),
             };
 
+            if (filter.JunkFiles > 0)
+                measurements.Add(new PreviewLine("Écartés d'office", filter.JunkFiles + " fichier(s) sans valeur, " +
+                    ValueFormat.Bytes(filter.JunkBytes) + " : verrous d'Office (~$…), caches de miniatures (Thumbs.db)"));
+
             if (!filter.IsEmpty)
                 measurements.Add(new PreviewLine("Écartés par les filtres", filter.ExcludedFiles == 0
                     ? "aucun fichier (" + filter.Describe() + ")"
@@ -827,7 +831,14 @@ namespace LDI12.Actions.Backup
 
             var stopwatch = Stopwatch.StartNew();
             var manifest = new StringBuilder();
-            manifest.AppendLine("dossier;fichier;octets;résultat");
+            manifest.AppendLine(BackupManifest.Header);
+
+            // Une reprise garde les empreintes du passage précédent : un fichier déjà copié n'est
+            // pas relu, et son empreinte ne serait sinon plus connue de personne.
+            var known = plan.Resumed
+                ? BackupManifest.Fingerprints(BackupManifest.Read(context.Files, plan.Destination))
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var manifestWritten = false;
 
             var counters = new Counters();
             var details = new List<string>();
@@ -884,10 +895,11 @@ namespace LDI12.Actions.Backup
                     Count(here, result);
                     counters.Add(result);
 
-                    manifest.Append(Csv(folder.Destination)).Append(';')
-                        .Append(Csv(relatives[index])).Append(';')
-                        .Append(items[index].File.SizeBytes.ToString(CultureInfo.InvariantCulture)).Append(';')
-                        .AppendLine(Describe(result.Outcome));
+                    var fingerprint = result.Fingerprint;
+                    if (fingerprint == null && result.Outcome == FileCopyOutcome.AlreadyPresent)
+                        known.TryGetValue(System.IO.Path.Combine(folder.Destination, relatives[index]), out fingerprint);
+                    BackupManifest.Append(manifest, folder.Destination, relatives[index], items[index].File.SizeBytes,
+                        Describe(result.Outcome), fingerprint);
 
                     noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
 
@@ -913,11 +925,15 @@ namespace LDI12.Actions.Backup
                 if (interrupted) break;
 
                 details.Add(folder.Label + " : " + Describe(here));
+
+                // À la fin de chaque dossier : un support arraché plus loin laissera au moins ceci,
+                // et la reprise y retrouvera les empreintes de ce qui est déjà copié.
+                manifestWritten |= WriteManifest(context, plan, manifest, manifestWritten);
             }
 
             // Support parti : plus rien ne peut s'y écrire, et chaque tentative prendrait son délai.
             if (lost)
-                return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+                return Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost, manifestWritten);
 
             if (plan.OfflineDrivers.Count > 0 &&
                 !Deposit(context, plan, System.IO.Path.Combine(DriverBackup.Folder, DriverBackup.ListFileName), DriverBackup.Csv(plan.OfflineDrivers)))
@@ -982,7 +998,7 @@ namespace LDI12.Actions.Backup
             progress?.Report(new ActionProgress("Écriture de la fiche de réinstallation…", 1));
             Sheet(context, plan, results, wifi, settings, interrupted, details);
 
-            var outcome = Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost);
+            var outcome = Finish(context, plan, manifest, counters, details, stopwatch, interrupted, lost, manifestWritten);
             SetState(context, plan, interrupted ? BackupProgressState.Interrupted : BackupProgressState.Finished);
             return outcome;
         }
@@ -1063,13 +1079,24 @@ namespace LDI12.Actions.Backup
                 details.Add("La liste des logiciels n'a pas pu être écrite dans le dossier de sauvegarde.");
         }
 
+        /// <summary>
+        /// Écrit le manifeste : la première fois sans rien écraser, ensuite en remplaçant le sien.
+        /// </summary>
+        private static bool WriteManifest(ActionContext context, BackupPlan plan, StringBuilder manifest, bool written)
+        {
+            var path = System.IO.Path.Combine(plan.Destination, BackupManifest.FileName);
+            return written || plan.Resumed
+                ? context.Files.ReplaceText(path, "\uFEFF" + manifest)
+                : context.Files.WriteText(path, manifest.ToString());
+        }
+
         private static ActionOutcome Finish(
             ActionContext context, BackupPlan plan, StringBuilder manifest, Counters counters,
-            List<string> details, Stopwatch stopwatch, bool interrupted, bool lost)
+            List<string> details, Stopwatch stopwatch, bool interrupted, bool lost, bool manifestWritten)
         {
             stopwatch.Stop();
 
-            if (!lost && !Deposit(context, plan, "manifeste.csv", manifest.ToString()))
+            if (!lost && !WriteManifest(context, plan, manifest, manifestWritten))
                 details.Add("Le manifeste n'a pas pu être écrit dans le dossier de sauvegarde.");
 
             var status = interrupted || counters.Failed > 0
@@ -1302,11 +1329,6 @@ namespace LDI12.Actions.Backup
 
             return System.IO.Path.GetFileName(path);
         }
-
-        private static string Csv(string value)
-            => value.IndexOf(';') >= 0 || value.IndexOf('"') >= 0
-                ? "\"" + value.Replace("\"", "\"\"") + "\""
-                : value;
 
         internal static string Describe(FileCopyOutcome outcome) => outcome switch
         {

@@ -59,6 +59,9 @@
         /// <summary>Réinstallation des imprimantes relevées avec une sauvegarde.</summary>
         public const string RestorePrinters = "RESTORE-PRINTERS";
 
+        /// <summary>Relecture d'une sauvegarde contre les empreintes de son manifeste. N'écrit rien.</summary>
+        public const string VerifyBackup = "VERIFY-BACKUP";
+
         /// <summary>Copie, depuis un cliché instantané, des fichiers qu'un programme tenait ouverts.</summary>
         public const string CopyOpenFiles = "BACKUP-OPEN-FILES";
 

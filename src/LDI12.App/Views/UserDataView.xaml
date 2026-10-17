@@ -582,6 +582,9 @@
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0">
                             <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir la sauvegarde" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                                     Command="{Binding DataContext.OpenBackupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Vérifier sur le support" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                    ToolTip="Relit toute la sauvegarde sur le support, à faire avant d'effacer le disque du client."
+                                    Command="{Binding DataContext.VerifyLastBackupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                             <Button Style="{StaticResource Button.Ghost}" Content="Rapport client" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                                     ToolTip="Le rapport à remettre au client : ce qui a été sauvegardé, où, et ce qui reste à faire."
                                     Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
@@ -972,7 +975,7 @@
                                 <ItemsControl.ItemsSource>
                                     <x:Array Type="sys:String">
                                         <sys:String>Rien n'est supprimé sur ce PC</sys:String>
-                                        <sys:String>Rien n'est écrasé : un fichier différent est signalé, laissé tel quel</sys:String>
+                                        <sys:String>Rien n'est écrasé : en cas d'homonyme, les deux sont gardés</sys:String>
                                         <sys:String>Chaque fichier restauré est relu et comparé</sys:String>
                                         <sys:String>La sauvegarde n'est jamais modifiée</sys:String>
                                         <sys:String>La plus récente est retrouvée d'elle-même</sys:String>
@@ -1008,6 +1011,11 @@
                             <!-- Mesurés d'office : la sauvegarde en lecture seule, ce disque une fois par session. -->
                             <TextBlock Text="{Binding RestoreSpeedNote}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0"
                                        TextWrapping="Wrap" MaxWidth="960" HorizontalAlignment="Left" />
+
+                            <!-- Relire la sauvegarde avant de s'y fier : chaque fichier comparé à son empreinte. -->
+                            <Button Style="{StaticResource Button.Ghost}" Content="Vérifier cette sauvegarde" HorizontalAlignment="Left"
+                                    Margin="0,12,0,0" Command="{Binding VerifyRestoreSourceCommand}"
+                                    ToolTip="Relit chaque fichier sur le support et le compare à l'empreinte notée le jour de la sauvegarde. N'écrit rien." />
 
                             <ContentControl Style="{StaticResource Step}" Tag="2" Content="Ce qui revient avec les données" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"

@@ -134,6 +134,15 @@ namespace LDI12.Core.Execution
 
         public string? Reason { get; init; }
 
+        /// <summary>
+        /// L'empreinte SHA-256 du contenu copié, en hexadécimal ; nulle pour tout ce qui n'a pas été copié.
+        /// </summary>
+        /// <remarks>
+        /// Calculée de toute façon pendant la copie, pour la relecture : la rendre ne coûte rien,
+        /// et c'est elle qui permet de vérifier la sauvegarde plus tard, sans la source.
+        /// </remarks>
+        public string? Fingerprint { get; init; }
+
         public static FileCopyResult Of(FileCopyOutcome outcome, long bytes = 0, string? reason = null)
             => new FileCopyResult { Outcome = outcome, Bytes = bytes, Reason = reason };
     }
@@ -353,6 +362,16 @@ namespace LDI12.Core.Execution
         /// sauvegarde, et c'est pire que pas de sauvegarde du tout.
         /// </remarks>
         FileCopyResult Copy(FileCopyRequest request, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// L'empreinte SHA-256 d'un fichier, en hexadécimal, lue sur le support lui-même.
+        /// </summary>
+        /// <remarks>
+        /// Sert à vérifier une sauvegarde après coup : avant d'effacer le disque du client, après
+        /// le transport du support, avant de restaurer. Lecture seule, sans mémoire tampon quand le
+        /// support l'accepte, pour que ce soient bien ses octets qui soient relus.
+        /// </remarks>
+        Measured<string> Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken);
 
         /// <summary>Crée un dossier et ses parents. Rend faux si l'emplacement le refuse.</summary>
         bool CreateDirectory(string path);

@@ -117,6 +117,10 @@ namespace LDI12.App.ViewModels
             CloseProgramsForRestoreCommand = new AsyncRelayCommand(
                 () => CloseProgramsAsync(PrepareRestoreAsync), () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
+            VerifyRestoreSourceCommand = new AsyncRelayCommand(
+                () => VerifyAsync(RestoreSource.Trim(), DataMode.Restore), () => !IsCopying && HasRestoreSource);
+            VerifyLastBackupCommand = new AsyncRelayCommand(
+                () => VerifyAsync(_lastBackupFolder!, DataMode.Backup), () => !IsCopying && _lastBackupFolder != null);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
             AddExtraFoldersCommand = new RelayCommand(AddExtraFolders, () => !IsCopying);
             CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
@@ -2433,6 +2437,7 @@ namespace LDI12.App.ViewModels
 
                 (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (OpenReportCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (VerifyLastBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -2515,6 +2520,107 @@ namespace LDI12.App.ViewModels
         }
 
         public ICommand OpenReportCommand { get; }
+
+        // ---------- vérification d'une sauvegarde
+
+        private IRepairAction? _verify;
+
+        /// <summary>Relit la sauvegarde choisie pour la restauration, contre son manifeste.</summary>
+        public ICommand VerifyRestoreSourceCommand { get; }
+
+        /// <summary>Relit la sauvegarde qui vient d'être faite : avant d'effacer le disque du client.</summary>
+        public ICommand VerifyLastBackupCommand { get; }
+
+        /// <summary>
+        /// Relit une sauvegarde sur son support et compare chaque fichier à son empreinte.
+        /// </summary>
+        /// <remarks>
+        /// Le même tableau de bord qu'une copie : une vérification de cent gigaoctets dure aussi
+        /// longtemps qu'une relecture de cent gigaoctets, et mérite le même avancement. Le bilan dit
+        /// en une phrase si le support peut servir, et si le disque d'origine peut être effacé.
+        /// </remarks>
+        private async Task VerifyAsync(string source, DataMode mode)
+        {
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (runner == null || IsCopying || string.IsNullOrWhiteSpace(source)) return;
+
+            _verify ??= ActionCatalog.Find(ActionIds.VerifyBackup, _logger);
+            if (_verify == null) return;
+
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [VerifyBackupAction.SourceParameter] = source,
+            };
+
+            await StopMeasuresAsync().ConfigureAwait(true);
+            IsCopying = true;
+            Mode = mode;
+            if (mode == DataMode.Backup) { IsBackupTransferring = true; BackupResult = null; }
+            else { IsRestoreTransferring = true; RestoreResult = null; }
+            StartTransferStats();
+            BeginTransfer("Lecture du manifeste de la sauvegarde…");
+            Status = "Vérification de la sauvegarde en cours : rien n'est écrit.";
+
+            TransferResult result;
+            var token = StartCancellable();
+            try
+            {
+                var preview = await runner.PreviewAsync(_verify, parameters, token).ConfigureAwait(true);
+                if (!preview.CanExecute)
+                {
+                    result = new TransferResult(TransferResultKind.Failed, "Vérification impossible",
+                        preview.Blocker ?? preview.Summary);
+                }
+                else
+                {
+                    var outcome = await runner.ExecuteAsync(_verify, preview, parameters, new Progress<ActionProgress>(OnTransfer), token)
+                        .ConfigureAwait(true);
+                    result = Verified(outcome);
+                    Status = outcome.Summary;
+
+                    var lines = mode == DataMode.Backup ? BackupLines : RestoreLines;
+                    lines.Clear();
+                    foreach (var line in outcome.Details) lines.Add(line);
+                    if (mode == DataMode.Backup) BackupSummary = "Vérification de la sauvegarde :";
+                    else RestoreSummary = "Vérification de la sauvegarde :";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                result = new TransferResult(TransferResultKind.Stopped, "Vérification arrêtée", "Rien n'a été modifié.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La vérification de la sauvegarde a échoué.", ex);
+                result = new TransferResult(TransferResultKind.Failed, "La vérification a échoué", ex.Message);
+            }
+            finally
+            {
+                EndCancellable();
+                IsCopying = false;
+                IsBackupTransferring = false;
+                IsRestoreTransferring = false;
+                Raise(nameof(HasBackupPreview));
+                Raise(nameof(HasRestorePreview));
+                RaiseBackupStates();
+                JournalChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            if (mode == DataMode.Backup) BackupResult = result;
+            else RestoreResult = result;
+            Taskbar.Finish(result.Kind == TransferResultKind.Failed);
+        }
+
+        /// <summary>Le bilan d'une vérification : ce que le technicien peut faire du support.</summary>
+        internal static TransferResult Verified(ActionOutcome outcome) => outcome.Status switch
+        {
+            ActionStatus.Succeeded => new TransferResult(TransferResultKind.Succeeded,
+                "Sauvegarde intacte : chaque fichier relu est identique", outcome.Summary),
+            ActionStatus.PartiallySucceeded => new TransferResult(TransferResultKind.Partial,
+                "Sauvegarde abîmée : des fichiers sont en défaut", outcome.Summary),
+            ActionStatus.Cancelled => new TransferResult(TransferResultKind.Stopped, "Vérification arrêtée", outcome.Summary),
+            _ => new TransferResult(TransferResultKind.Failed, "Sauvegarde inutilisable en l'état", outcome.Summary),
+        };
 
         /// <summary>Le rapport à remettre au client, s'il a été déposé avec la dernière sauvegarde.</summary>
         private string? ReportPath
@@ -2643,6 +2749,8 @@ namespace LDI12.App.ViewModels
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (CloseProgramsForBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (CloseProgramsForRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (VerifyRestoreSourceCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (VerifyLastBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (AddExtraFoldersCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseDurations();

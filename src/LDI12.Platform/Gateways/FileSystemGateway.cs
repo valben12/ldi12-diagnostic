@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -366,7 +367,7 @@ namespace LDI12.Platform.Gateways
                 }
 
                 KeepAttributes(destination, info.Attributes);
-                return FileCopyResult.Of(FileCopyOutcome.Copied, written);
+                return new FileCopyResult { Outcome = FileCopyOutcome.Copied, Bytes = written, Fingerprint = Hex(expected) };
             }
             catch (PathTooLongException)
             {
@@ -906,6 +907,36 @@ namespace LDI12.Platform.Gateways
                                        ex is NotImplementedException)
             {
                 return SHA256.Create();
+            }
+        }
+
+        /// <summary>L'empreinte en hexadécimal minuscule, telle qu'elle s'écrit au manifeste.</summary>
+        internal static string Hex(byte[] hash)
+        {
+            var text = new StringBuilder(hash.Length * 2);
+            foreach (var value in hash) text.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+            return text.ToString();
+        }
+
+        public Measured<string> Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var full = Extended(path);
+                var info = new FileInfo(full);
+                if (!info.Exists) return Measured.Missing<string>("Le fichier est absent : " + path, DataSource.FileSystem);
+
+                return Measured.Ok(Hex(Fingerprint(full, info.Length, progressed, cancellationToken)), DataSource.FileSystem);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                       ex is PathTooLongException || ex is ArgumentException ||
+                                       ex is NotSupportedException)
+            {
+                return Measured.Missing<string>("Le fichier n'a pas pu être relu : " + ex.Message, DataSource.FileSystem);
             }
         }
 

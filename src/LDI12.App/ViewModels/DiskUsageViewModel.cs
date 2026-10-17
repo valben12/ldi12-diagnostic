@@ -77,7 +77,10 @@ namespace LDI12.App.ViewModels
 
         public Thickness Indent => new Thickness(Depth * 18, 0, 0, 0);
 
-        public string Name => Node.Name;
+        /// <summary>La racine par son dernier élément : « Git » plutôt que « C:\Program Files\Git ».</summary>
+        public string Name
+            => Node.Parent != null ? Node.Name
+                : System.IO.Path.GetFileName(Node.Name.TrimEnd('\\')) is { Length: > 0 } last ? last : Node.Name;
 
         public bool IsDirectory => Node.IsDirectory && !IsMore;
 
@@ -787,7 +790,8 @@ namespace LDI12.App.ViewModels
         }
 
         private static string Seconds(TimeSpan elapsed)
-            => elapsed.TotalSeconds < 10
+            => elapsed.TotalSeconds < 1 ? "moins d'une seconde"
+                : elapsed.TotalSeconds < 10
                 ? Math.Round(elapsed.TotalSeconds, 1).ToString(Formats.French) + " s"
                 : Math.Round(elapsed.TotalSeconds).ToString(Formats.French) + " s";
     }

@@ -206,7 +206,10 @@ namespace LDI12.App.Controls
             // Fondu enchaîné : l'ancienne carte reste dessous le temps que la nouvelle apparaisse.
             _back.Source = _front.Source;
             _front.Source = bitmap;
-            _front.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(220))) { EasingFunction = Ease });
+            if (Motion.Enabled)
+                _front.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(220))) { EasingFunction = Ease });
+            else
+                _front.BeginAnimation(OpacityProperty, null);
 
             _image = image;
             _hover.Visibility = Visibility.Collapsed;
@@ -237,7 +240,17 @@ namespace LDI12.App.Controls
                 _selection.Width = target.Width;
                 _selection.Height = target.Height;
                 _selection.Visibility = Visibility.Visible;
-                _selection.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Glide));
+                if (Motion.Enabled) _selection.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Glide));
+                return;
+            }
+
+            if (!Motion.Enabled)
+            {
+                StopGlide();
+                Canvas.SetLeft(_selection, target.X);
+                Canvas.SetTop(_selection, target.Y);
+                _selection.Width = target.Width;
+                _selection.Height = target.Height;
                 return;
             }
 

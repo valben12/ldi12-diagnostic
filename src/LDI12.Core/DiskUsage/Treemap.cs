@@ -110,27 +110,29 @@ namespace LDI12.Core.DiskUsage
         /// <summary>Couleur de chaque rang de type de fichier, en 0xRRGGBB.</summary>
         public int[] Palette { get; set; } =
         {
-            0x3E63DD, 0x30A46C, 0xF76B15, 0x8E4EC6, 0x12A594, 0xFFC53D,
-            0xD6409F, 0x0090FF, 0xE5484D, 0x46A758, 0xAD7F58, 0x7D66D9,
+            // Teintes franches mais pas criardes : distinctes entre elles, lisibles sur fond sombre
+            // comme sur fond clair, et le rouge de la marque gardé pour la sélection.
+            0x4C6FD8, 0x3BA676, 0xE8853D, 0x9064C8, 0x2AA3A0, 0xE6B84A,
+            0xCF5C98, 0x3D8FD6, 0x7FA34A, 0xB98A62, 0x6C7BB5, 0xD8705F,
         };
 
         /// <summary>Les types au-delà de la palette, et les dossiers trop petits pour être détaillés.</summary>
-        public int Other { get; set; } = 0x8B8D98;
+        public int Other { get; set; } = 0x8E8F99;
 
         /// <summary>Le fond, visible dans les liserés entre dossiers.</summary>
         public int Background { get; set; } = 0x121217;
 
         /// <summary>Hauteur du coussin du premier niveau, en proportion de sa taille.</summary>
-        public double Height { get; set; } = 0.34;
+        public double Height { get; set; } = 0.30;
 
         /// <summary>Un niveau de plus, un coussin plus plat de ce facteur.</summary>
         public double Falloff { get; set; } = 0.88;
 
         /// <summary>Lumière ambiante, le reste vient de la source orientée en haut à gauche.</summary>
-        public double Ambient { get; set; } = 0.22;
+        public double Ambient { get; set; } = 0.30;
 
         /// <summary>Éclat général : au-dessus de 1, les faces exposées tirent vers le clair.</summary>
-        public double Brightness { get; set; } = 1.12;
+        public double Brightness { get; set; } = 1.05;
 
         /// <summary>Les dossiers des premiers niveaux sont séparés par un liseré, tant qu'il reste de la place.</summary>
         public int GapDepth { get; set; } = 2;

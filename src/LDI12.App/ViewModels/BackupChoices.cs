@@ -77,7 +77,7 @@ namespace LDI12.App.ViewModels
         {
             Volume = volume;
             if (select == null) throw new ArgumentNullException(nameof(select));
-            SelectCommand = new RelayCommand(() => select(this));
+            SelectCommand = new RelayCommand(() => select(this), () => volume?.IsLocked != true);
         }
 
         /// <summary>Nul pour le compte ouvert sur ce PC.</summary>
@@ -158,5 +158,33 @@ namespace LDI12.App.ViewModels
 
         /// <summary>Coche ou décoche sans prévenir : pour « tout cocher », qui prévient une seule fois.</summary>
         internal void SetSilently(bool value) => Set(ref _isChecked, value, nameof(IsChecked));
+    }
+
+    /// <summary>L'issue d'un transfert, de la meilleure à la pire : la pire l'emporte au bilan.</summary>
+    public enum TransferResultKind
+    {
+        Succeeded = 0,
+        Partial = 1,
+        Stopped = 2,
+        Failed = 3,
+    }
+
+    /// <summary>Le bilan d'une sauvegarde ou d'une restauration : une phrase, une couleur, des chiffres.</summary>
+    public sealed class TransferResult
+    {
+        public TransferResult(TransferResultKind kind, string title, string line)
+        {
+            Kind = kind;
+            Title = title;
+            Line = line;
+        }
+
+        public TransferResultKind Kind { get; }
+
+        public string Title { get; }
+
+        public string Line { get; }
+
+        public bool IsSuccess => Kind == TransferResultKind.Succeeded;
     }
 }

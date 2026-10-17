@@ -119,6 +119,54 @@ namespace LDI12.Tests
             Assert.Equal(BackupProgressState.Finished, state!.State);
         }
 
+        [Fact]
+        public async Task La_reprise_garde_les_empreintes_des_fichiers_deja_copies()
+        {
+            // Un fichier copié au premier passage n'est pas relu au second : sans l'ancien
+            // manifeste, son empreinte serait perdue, et la sauvegarde ne se vérifierait plus.
+            var files = Populated();
+            var interrupted = Folder("ATELIER-PC", "2026-09-28-1000", BackupProgressState.Running, Environment.UserName, files);
+            files.Children[Drive] = new List<string> { interrupted };
+
+            var earlier = new string('a', 64);
+            var previous = new System.Text.StringBuilder(BackupManifest.Header + "\n");
+            BackupManifest.Append(previous, "Bureau", "note.txt", 2048, "copié et vérifié", earlier);
+            files.Texts[Path.Combine(interrupted, BackupManifest.FileName)] = previous.ToString();
+            files.Present.Add(Path.Combine(interrupted, "Bureau", "note.txt"));
+
+            var action = new BackupUserDataAction();
+            var context = Context(files);
+            await action.ExecuteAsync(context, await action.PreviewAsync(context, CancellationToken.None), null, CancellationToken.None);
+
+            var manifest = BackupManifest.Parse(files.Texts[Path.Combine(interrupted, BackupManifest.FileName)]);
+            var note = Assert.Single(manifest, entry => entry.Relative == "note.txt");
+            Assert.Equal("déjà présent", note.Result);
+            Assert.Equal(earlier, note.Fingerprint);
+
+            var photo = Assert.Single(manifest, entry => entry.Relative == "photo.jpg");
+            Assert.Equal(FakeFileSystemGateway.HashOfName("photo.jpg"), photo.Fingerprint);
+        }
+
+        [Fact]
+        public async Task Le_manifeste_est_ecrit_avant_la_fin_et_survit_a_un_support_arrache()
+        {
+            var files = Populated();
+            var documents = UserDataSurveyor.PersonalFolders().First(folder => folder.Label == "Documents").Path;
+            files.WithFile(documents, Path.Combine(documents, "z-dernier.txt"), 10);
+            files.UnplugRoot = Drive;
+            files.UnplugDuring = Path.Combine(documents, "z-dernier.txt");
+
+            var action = new BackupUserDataAction();
+            var context = Context(files);
+            var preview = await action.PreviewAsync(context, CancellationToken.None);
+            await action.ExecuteAsync(context, preview, null, CancellationToken.None);
+
+            // Le Bureau était fini avant l'arrachement : sa part du manifeste est sur le support.
+            var plan = (BackupPlan)preview.Plan!;
+            var manifest = BackupManifest.Parse(files.Written[Path.Combine(plan.Destination, BackupManifest.FileName)]);
+            Assert.Contains(manifest, entry => entry.Relative == "note.txt" && entry.Fingerprint != null);
+        }
+
         // ============================================================ le support arraché
 
         [Fact]

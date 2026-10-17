@@ -56,7 +56,7 @@ namespace LDI12.Actions.Backup
     /// <item>rien n'est supprimé sur la machine. Un profil de navigateur créé par l'installation
     /// neuve est renommé et laissé à côté, jamais effacé ;</item>
     /// <item>rien n'est écrasé : dans un dossier fusionné, un fichier différent portant le même nom
-    /// est signalé et laissé tel quel ;</item>
+    /// est laissé tel quel, et celui de la sauvegarde est posé à côté sous un nom qui le dit ;</item>
     /// <item>la sauvegarde n'est pas modifiée, elle reste la référence ;</item>
     /// <item>chaque fichier restauré est relu et comparé à celui de la sauvegarde.</item>
     /// </list>
@@ -311,7 +311,7 @@ namespace LDI12.Actions.Backup
                 "Ne supprime rien sur cette machine : un profil remplacé est renommé et laissé à côté, à effacer une " +
                 "fois le résultat vérifié.",
                 "N'écrase aucun fichier : dans un dossier fusionné, un fichier différent portant le même nom est " +
-                "signalé et laissé tel quel.",
+                "laissé tel quel, et celui de la sauvegarde est posé à côté, « " + BesideMark + " » dans son nom.",
                 "Ne modifie pas la sauvegarde, qui reste la référence.",
                 "Ne réinstalle aucun logiciel : ceux qui manquent sont listés ci-dessous.",
             };
@@ -370,10 +370,16 @@ namespace LDI12.Actions.Backup
             var details = new List<string>();
             var running = await RunningAsync(context, cancellationToken).ConfigureAwait(false);
 
-            int copied = 0, skipped = 0, failed = 0;
+            int copied = 0, skipped = 0, failed = 0, beside = 0;
             long written = 0;
             var itemsFailed = 0;
             var tracker = new CopyProgress(progress, plan.Bytes, plan.Files, "Restauration de");
+
+            // Les empreintes notées le jour de la sauvegarde. La copie relit chaque fichier de la
+            // sauvegarde pour le restaurer : comparer ce qu'elle a lu à ce qui avait été écrit ne
+            // coûte rien, et dit si le support a abîmé un fichier depuis.
+            var expected = BackupManifest.Fingerprints(BackupManifest.Read(context.Files, plan.Backup));
+            var altered = new List<string>();
 
             // Plein, ou sauvegarde disparue : chaque fichier restant échouerait. Vérifié sur les fils
             // de copie, seulement après un échec.
@@ -433,17 +439,52 @@ namespace LDI12.Actions.Backup
                     items.Add((file, Path.Combine(item.Destination, relative)));
                 }
 
-                var completed = copier.Run(items, (_, result) =>
+                var conflicts = new List<(FileEntry File, string Target)>();
+                var completed = copier.Run(items, (index, result) =>
                 {
                     switch (result.Outcome)
                     {
                         case FileCopyOutcome.Copied: here++; written += result.Bytes; break;
                         case FileCopyOutcome.AlreadyPresent: hereSkipped++; break;
+                        case FileCopyOutcome.Conflict: conflicts.Add(items[index]); break;
                         default: hereFailed++; break;
                     }
 
+                    if (result.Outcome == FileCopyOutcome.Copied && result.Fingerprint != null &&
+                        expected.TryGetValue(InBackup(plan.Backup, items[index].File.Path), out var saved) &&
+                        !string.Equals(saved, result.Fingerprint, StringComparison.OrdinalIgnoreCase))
+                        altered.Add(InBackup(plan.Backup, items[index].File.Path));
+
                     noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
                 }, cancellationToken);
+
+                // Un fichier différent porte déjà ce nom : il n'est pas écrasé, et celui de la
+                // sauvegarde se pose à côté, sous un nom qui dit d'où il vient. Le client garde les
+                // deux, et rien ne reste dans la sauvegarde sans avoir été rendu.
+                if (completed && conflicts.Count > 0)
+                {
+                    var asides = new List<(FileEntry File, string Target)>(conflicts.Count);
+                    long asideBytes = 0;
+                    foreach (var (file, target) in conflicts)
+                    {
+                        asides.Add((file, Beside(target)));
+                        asideBytes += file.SizeBytes;
+                    }
+
+                    tracker.Extend(asides.Count, asideBytes);
+
+                    completed = copier.Run(asides, (_, result) =>
+                    {
+                        switch (result.Outcome)
+                        {
+                            case FileCopyOutcome.Copied: here++; beside++; written += result.Bytes; break;
+                            case FileCopyOutcome.AlreadyPresent: hereSkipped++; break;
+                            default: hereFailed++; break;
+                        }
+
+                        noSpace |= result.Outcome == FileCopyOutcome.NoSpace;
+                    }, cancellationToken);
+                }
 
                 if (!completed)
                 {
@@ -474,7 +515,8 @@ namespace LDI12.Actions.Backup
 
                 var text = item.Label + " : " + here + " fichier(s) restaurés";
                 if (hereSkipped > 0) text += ", " + hereSkipped + " déjà présent(s)";
-                if (hereFailed > 0) text += ", " + hereFailed + " non restauré(s), le plus souvent parce qu'un fichier différent porte déjà ce nom";
+                if (conflicts.Count > 0) text += ", dont " + conflicts.Count + " posé(s) à côté d'un fichier différent du même nom, sous « " + BesideMark + " »";
+                if (hereFailed > 0) text += ", " + hereFailed + " non restauré(s)";
                 details.Add(text + ".");
             }
 
@@ -493,8 +535,41 @@ namespace LDI12.Actions.Backup
             if (plan.MissingSoftware.Count > 0)
                 details.Add("Logiciels encore à réinstaller : " + string.Join(", ", plan.MissingSoftware) + ".");
 
+            if (beside > 0)
+                details.Add(beside + " fichier(s) de la sauvegarde ont trouvé un fichier différent du même nom : rien n'a été écrasé, " +
+                            "ils sont posés à côté, avec « " + BesideMark + " » dans leur nom. Voir avec le client lequel garder.");
+
+            if (altered.Count > 0)
+            {
+                details.Add(altered.Count + " fichier(s) de la sauvegarde ne sont plus identiques à ce qui avait été sauvegardé : " +
+                            "le support les a probablement abîmés depuis. Ils ont été restaurés tels qu'ils se lisent, à vérifier : " +
+                            string.Join(", ", altered.GetRange(0, Math.Min(10, altered.Count))) + (altered.Count > 10 ? "…" : "."));
+                itemsFailed++;
+            }
+            else if (expected.Count > 0 && copied > 0)
+            {
+                details.Add("Contrôle de la sauvegarde : chaque fichier restauré est identique à ce qui avait été sauvegardé.");
+            }
+
             return Finish(plan, copied, skipped, failed, written, itemsFailed, details, stopwatch, null);
         }
+
+        /// <summary>Ce que porte le nom d'un fichier posé à côté d'un homonyme différent.</summary>
+        internal const string BesideMark = "(sauvegarde LDI12)";
+
+        /// <summary>« Rapport.docx » devient « Rapport (sauvegarde LDI12).docx ».</summary>
+        internal static string Beside(string target)
+        {
+            var directory = Path.GetDirectoryName(target) ?? string.Empty;
+            var extension = Path.GetExtension(target);
+            return Path.Combine(directory, Path.GetFileNameWithoutExtension(target) + " " + BesideMark + extension);
+        }
+
+        /// <summary>Le chemin d'un fichier de la sauvegarde, relatif à sa racine : la clé du manifeste.</summary>
+        private static string InBackup(string backup, string path)
+            => path.Length > backup.Length && path.StartsWith(backup, StringComparison.OrdinalIgnoreCase)
+                ? path.Substring(backup.Length).TrimStart('\\', '/')
+                : path;
 
         private static string? Text(ActionContext context, string path)
         {

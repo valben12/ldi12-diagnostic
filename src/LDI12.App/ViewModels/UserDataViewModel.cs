@@ -106,6 +106,9 @@ namespace LDI12.App.ViewModels
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
+            OpenReportCommand = new RelayCommand(OpenReport, () => !IsCopying && ReportPath != null);
+            DismissBackupResultCommand = new RelayCommand(() => BackupResult = null);
+            DismissRestoreResultCommand = new RelayCommand(() => RestoreResult = null);
             ShowBackupModeCommand = new RelayCommand(() => SelectMode(DataMode.Backup), () => CanChangeMode);
             ShowRestoreModeCommand = new RelayCommand(() => SelectMode(DataMode.Restore), () => CanChangeMode);
             ShowSurveyModeCommand = new RelayCommand(() => SelectMode(DataMode.Survey), () => CanChangeMode);
@@ -114,6 +117,10 @@ namespace LDI12.App.ViewModels
             CloseProgramsForRestoreCommand = new AsyncRelayCommand(
                 () => CloseProgramsAsync(PrepareRestoreAsync), () => CanPrepareRestore);
             RunRestoreCommand = new AsyncRelayCommand(RestoreAsync, () => CanRestore);
+            VerifyRestoreSourceCommand = new AsyncRelayCommand(
+                () => VerifyAsync(RestoreSource.Trim(), DataMode.Restore), () => !IsCopying && HasRestoreSource);
+            VerifyLastBackupCommand = new AsyncRelayCommand(
+                () => VerifyAsync(_lastBackupFolder!, DataMode.Backup), () => !IsCopying && _lastBackupFolder != null);
             StopTransferCommand = new RelayCommand(StopTransfer, () => _transferCancel != null);
             AddExtraFoldersCommand = new RelayCommand(AddExtraFolders, () => !IsCopying);
             CancelPreparationCommand = new RelayCommand(() => _prepareCancel?.Cancel(), () => _prepareCancel != null);
@@ -321,6 +328,8 @@ namespace LDI12.App.ViewModels
             Raise(nameof(HasBackupDuration));
             Raise(nameof(RestoreDuration));
             Raise(nameof(HasRestoreDuration));
+            Raise(nameof(BackupBarDetail));
+            Raise(nameof(RestoreBarDetail));
         }
 
         /// <summary>
@@ -588,6 +597,7 @@ namespace LDI12.App.ViewModels
             var signature = new System.Text.StringBuilder();
             foreach (var volume in volumes)
                 signature.Append(volume.Root).Append('|').Append(volume.Label).Append('|').Append(volume.HasWindows)
+                    .Append('|').Append(volume.IsLocked)
                     .Append('|').Append(volume.Profiles.Count).Append('|').Append(volume.Folders.Count).Append(';');
             if (signature.ToString() == _sourcesSignature && Sources.Count > 0) return;
             _sourcesSignature = signature.ToString();
@@ -596,7 +606,7 @@ namespace LDI12.App.ViewModels
             Sources.Clear();
             Sources.Add(new SourceTile(null, SelectSource));
             foreach (var volume in volumes)
-                if (volume.HasWindows ? volume.Profiles.Count > 0 || volume.Folders.Count > 0 : volume.Folders.Count > 0)
+                if (volume.IsLocked || (volume.HasWindows ? volume.Profiles.Count > 0 || volume.Folders.Count > 0 : volume.Folders.Count > 0))
                     Sources.Add(new SourceTile(volume, SelectSource));
 
             SourceTile? match = null;
@@ -613,11 +623,12 @@ namespace LDI12.App.ViewModels
 
         private void SelectSource(SourceTile tile, bool keepChoices)
         {
-            if (IsCopying) return;
+            if (IsCopying || tile.Volume?.IsLocked == true) return;
 
             var changed = _selectedSource?.Key != tile.Key;
             _selectedSource = tile;
             foreach (var candidate in Sources) candidate.IsSelected = ReferenceEquals(candidate, tile);
+            RaiseBar();
 
             if (changed || !keepChoices)
             {
@@ -806,10 +817,14 @@ namespace LDI12.App.ViewModels
             IsCopying = true;
             Mode = DataMode.Backup;
             IsBackupTransferring = true;
+            BackupResult = null;
+            StartTransferStats();
             Status = "Copie en cours…";
             var progress = new Progress<ActionProgress>(OnTransfer);
             var report = new List<string>();
             var summaries = new List<string>();
+            var outcomes = new List<ActionOutcome>();
+            string? failure = null;
             var token = StartCancellable();
 
             try
@@ -821,6 +836,7 @@ namespace LDI12.App.ViewModels
 
                     BeginTransfer(title + " : préparation de la copie…");
                     var outcome = await runner.ExecuteAsync(_backup!, preview, parameters, progress, token).ConfigureAwait(true);
+                    outcomes.Add(outcome);
                     summaries.Add(title + " : " + outcome.Summary);
                     Report(report, title, outcome);
                 }
@@ -834,10 +850,13 @@ namespace LDI12.App.ViewModels
             {
                 _logger.Error(Category, "La copie du disque a échoué.", ex);
                 Status = "La copie a échoué : " + ex.Message;
+                failure = ex.Message;
             }
             finally
             {
                 EndCancellable();
+                BackupResult = Conclude("Sauvegarde", outcomes, SecuredLine(), failure);
+                Taskbar.Finish(BackupResult.Kind == TransferResultKind.Failed);
                 IsCopying = false;
                 IsBackupTransferring = false;
                 _volumeJobs.Clear();
@@ -1221,10 +1240,57 @@ namespace LDI12.App.ViewModels
                     Mode = DataMode.Survey;
                     break;
 
+                case "transfert":
+                    ShowDemoTransfer();
+                    break;
+
+                case "bilan":
+                    Mode = DataMode.Backup;
+                    BackupResult = new TransferResult(TransferResultKind.Partial,
+                        "Sauvegarde terminée, avec des points à revoir ci-dessous",
+                        "48 213 fichier(s), 61,4 Go, en 14 min 08 s · 74,2 Mo/s en moyenne");
+                    BackupSummary = "Compte rendu de la sauvegarde, déposée dans E:\\LDI12-Sauvegardes\\PC-CLIENT :";
+                    BackupLines.Clear();
+                    BackupLines.Add("Documents : 12 408 fichier(s) copiés et relus.");
+                    BackupLines.Add("Images : 30 117 fichier(s) copiés et relus.");
+                    BackupLines.Add("2 fichier(s) présents seulement en ligne (OneDrive) : non copiés.");
+                    Raise(nameof(HasBackupPreview));
+                    break;
+
                 default:
                     Mode = DataMode.Backup;
                     break;
             }
+        }
+
+        /// <summary>
+        /// Un transfert figé en plein milieu, pour le banc de captures.
+        /// </summary>
+        /// <remarks>
+        /// Le tableau de bord n'existe que pendant une copie : sans cette entrée, aucune capture ne
+        /// le montrerait jamais, et un chiffre coupé ou une courbe vide passeraient inaperçus.
+        /// Rien n'est copié : seuls les chiffres affichés sont posés.
+        /// </remarks>
+        private void ShowDemoTransfer()
+        {
+            Mode = DataMode.Backup;
+            IsBackupTransferring = true;
+            BeginTransfer("Copie de « Images »");
+            TransferPercent = 42.6;
+            TransferDetail = "25,9 Go sur 61,4 Go · 20 518 fichier(s) sur 48 213";
+            TransferElapsed = "Écoulé : 6 min 02 s";
+            TransferRemainingShort = "environ 8 min";
+            TransferSpeed = "71,5 Mo/s";
+            TransferBytes = "25,9 Go";
+            TransferBytesOf = "sur 61,4 Go";
+            TransferFiles = "20 518";
+            TransferFilesOf = "sur 48 213";
+
+            _rates.Clear();
+            for (var second = 0; second < CurveLength; second++)
+                _rates.Add(70 + 18 * Math.Sin(second / 9.0) - (second > 80 && second < 95 ? 45 : 0) + (second % 7) * 2.5);
+            TransferCurve = Curve(_rates);
+            Raise(nameof(HasTransferCurve));
         }
 
         public bool ShowModePicker => CanChangeMode;
@@ -1253,6 +1319,7 @@ namespace LDI12.App.ViewModels
             Raise(nameof(IsBackupMode));
             Raise(nameof(IsRestoreMode));
             Raise(nameof(IsSurveyMode));
+            RaiseBar();
         }
 
         private CancellationTokenSource? _transferCancel;
@@ -1272,6 +1339,7 @@ namespace LDI12.App.ViewModels
             _prepareCancel?.Dispose();
             _prepareCancel = new CancellationTokenSource();
             (CancelPreparationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaiseBar();
             return _prepareCancel.Token;
         }
 
@@ -1280,6 +1348,7 @@ namespace LDI12.App.ViewModels
             _prepareCancel?.Dispose();
             _prepareCancel = null;
             (CancelPreparationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaiseBar();
         }
 
         /// <summary>
@@ -1320,6 +1389,12 @@ namespace LDI12.App.ViewModels
             TransferPercent = 0;
             TransferRemaining = "Estimation du temps restant en cours…";
             TransferElapsed = string.Empty;
+            TransferRemainingShort = "en calcul…";
+            TransferSpeed = "—";
+            TransferBytes = "—";
+            TransferFiles = "—";
+            TransferBytesOf = string.Empty;
+            TransferFilesOf = string.Empty;
         }
 
         private void OnTransfer(ActionProgress report)
@@ -1331,21 +1406,225 @@ namespace LDI12.App.ViewModels
 
             // Seulement quand le rapport vient de la copie elle-même : les étapes de fin (export
             // Wi-Fi, fiche) ne portent pas d'estimation, et effacer la dernière laisserait un vide.
-            if (report.Detail != null) TransferRemaining = Remaining(report.Remaining);
+            if (report.Detail != null)
+            {
+                TransferRemaining = Remaining(report.Remaining);
+                TransferRemainingShort = RemainingShort(report.Remaining);
+            }
+
+            if (report.Figures != null) ShowFigures(report.Figures);
+            Taskbar.Show(TransferPercent / 100);
         }
 
-        /// <summary>« environ 12 min restantes » : arrondi comme on le dirait à voix haute.</summary>
-        internal static string Remaining(TimeSpan? remaining)
+        // ---------- tableau de bord du transfert
+
+        private string _transferSpeed = "—";
+        private string _transferBytes = "—";
+        private string _transferFiles = "—";
+        private string _transferBytesOf = string.Empty;
+        private string _transferFilesOf = string.Empty;
+        private System.Windows.Media.PointCollection _transferCurve = new System.Windows.Media.PointCollection();
+        private readonly List<double> _rates = new List<double>();
+        private readonly Stopwatch _rateClock = new Stopwatch();
+        private readonly Stopwatch _transferClock = new Stopwatch();
+        private TransferFigures? _lastFigures;
+        private long _bytesSecured;
+        private int _filesSecured;
+
+        private string _transferRemainingShort = "en calcul…";
+
+        /// <summary>« environ 12 min », pour la case du tableau de bord.</summary>
+        public string TransferRemainingShort { get => _transferRemainingShort; private set => Set(ref _transferRemainingShort, value); }
+
+        /// <summary>Le débit des dernières secondes : « 48 Mo/s ».</summary>
+        public string TransferSpeed { get => _transferSpeed; private set => Set(ref _transferSpeed, value); }
+
+        /// <summary>« 12,4 Go », en grand ; le total dessous, « sur 30 Go ».</summary>
+        public string TransferBytes { get => _transferBytes; private set => Set(ref _transferBytes, value); }
+
+        public string TransferBytesOf { get => _transferBytesOf; private set => Set(ref _transferBytesOf, value); }
+
+        /// <summary>« 1 234 », en grand ; le total dessous, « sur 5 678 ».</summary>
+        public string TransferFiles { get => _transferFiles; private set => Set(ref _transferFiles, value); }
+
+        public string TransferFilesOf { get => _transferFilesOf; private set => Set(ref _transferFilesOf, value); }
+
+        /// <summary>Sous le débit : ce qu'il veut dire, relecture comprise.</summary>
+        public string TransferSpeedNote => "écrit puis relu";
+
+        /// <summary>
+        /// La courbe du débit, une valeur par seconde sur les deux dernières minutes.
+        /// </summary>
+        /// <remarks>
+        /// Un chiffre dit la vitesse, la courbe dit ce qui se passe : un support qui chauffe et
+        /// ralentit, un antivirus qui s'en mêle, des milliers de petits fichiers qui passent. Les
+        /// points vont de 0 à 100 en hauteur, le plus fort débit en haut ; la forme est fermée
+        /// par le bas pour être remplie, et l'affichage l'étire à sa taille.
+        /// </remarks>
+        public System.Windows.Media.PointCollection TransferCurve
         {
-            if (remaining == null) return "Estimation du temps restant en cours…";
+            get => _transferCurve;
+            private set => Set(ref _transferCurve, value);
+        }
+
+        public bool HasTransferCurve => _rates.Count >= 2;
+
+        private const int CurveLength = 120;
+
+        private void ShowFigures(TransferFigures figures)
+        {
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
+            TransferBytes = ValueFormat.Bytes(figures.BytesDone);
+            TransferBytesOf = "sur " + ValueFormat.Bytes(figures.BytesTotal);
+            TransferFiles = figures.FilesDone.ToString("N0", culture);
+            TransferFilesOf = "sur " + figures.FilesTotal.ToString("N0", culture);
+            if (figures.BytesPerSecond.HasValue) TransferSpeed = ValueFormat.Bytes((long)figures.BytesPerSecond.Value) + "/s";
+
+            // Une copie suivie d'une autre (fichiers ouverts, plusieurs comptes) : les chiffres de
+            // la précédente sont acquis au bilan quand la suivante repart de zéro.
+            if (_lastFigures != null && figures.BytesTotal != _lastFigures.BytesTotal || figures.FilesTotal != _lastFigures.FilesTotal)
+            {
+                _bytesSecured += _lastFigures.BytesDone;
+                _filesSecured += _lastFigures.FilesDone;
+            }
+
+            _lastFigures = figures;
+
+            if (!figures.BytesPerSecond.HasValue) return;
+            if (_rateClock.IsRunning && _rateClock.Elapsed < TimeSpan.FromSeconds(1)) return;
+            _rateClock.Restart();
+
+            _rates.Add(figures.BytesPerSecond.Value);
+            if (_rates.Count > CurveLength) _rates.RemoveAt(0);
+            TransferCurve = Curve(_rates);
+            Raise(nameof(HasTransferCurve));
+        }
+
+        /// <summary>Les points de la courbe, fermée par le bas : (0,100) … (n-1,100).</summary>
+        internal static System.Windows.Media.PointCollection Curve(IReadOnlyList<double> rates)
+        {
+            var points = new System.Windows.Media.PointCollection();
+            if (rates.Count == 0) return points;
+
+            var max = 0.0;
+            foreach (var rate in rates) max = Math.Max(max, rate);
+            if (max <= 0) max = 1;
+
+            points.Add(new System.Windows.Point(0, 100));
+            for (var index = 0; index < rates.Count; index++)
+                points.Add(new System.Windows.Point(index, 100 - Math.Max(0, rates[index]) / max * 100));
+            points.Add(new System.Windows.Point(rates.Count - 1, 100));
+            points.Freeze();
+            return points;
+        }
+
+        private void StartTransferStats()
+        {
+            _rates.Clear();
+            _rateClock.Reset();
+            _transferClock.Restart();
+            _lastFigures = null;
+            _bytesSecured = 0;
+            _filesSecured = 0;
+            TransferCurve = new System.Windows.Media.PointCollection();
+            Raise(nameof(HasTransferCurve));
+            Taskbar.Show(0);
+        }
+
+        /// <summary>Ce que la copie a mis en sûreté, d'un bout à l'autre : « 12,4 Go, 5 432 fichiers en 8 min 12 s ».</summary>
+        private string SecuredLine()
+        {
+            _transferClock.Stop();
+            var bytes = _bytesSecured + (_lastFigures?.BytesDone ?? 0);
+            var files = _filesSecured + (_lastFigures?.FilesDone ?? 0);
+            var elapsed = _transferClock.Elapsed;
+
+            if (files == 0 && bytes == 0) return "Durée : " + Duration(elapsed) + ".";
+
+            var line = files.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) + " fichier(s), " +
+                       ValueFormat.Bytes(bytes) + ", en " + Duration(elapsed);
+            if (bytes > 0 && elapsed.TotalSeconds >= 5)
+                line += " · " + ValueFormat.Bytes((long)(bytes / elapsed.TotalSeconds)) + "/s en moyenne";
+            return line;
+        }
+
+        // ---------- bilan d'un transfert
+
+        private TransferResult? _backupResult;
+        private TransferResult? _restoreResult;
+
+        /// <summary>Le bilan de la dernière sauvegarde, en tête de l'écran ; nul avant la première.</summary>
+        public TransferResult? BackupResult
+        {
+            get => _backupResult;
+            private set { if (Set(ref _backupResult, value)) Raise(nameof(HasBackupResult)); }
+        }
+
+        public TransferResult? RestoreResult
+        {
+            get => _restoreResult;
+            private set { if (Set(ref _restoreResult, value)) Raise(nameof(HasRestoreResult)); }
+        }
+
+        public bool HasBackupResult => BackupResult != null;
+        public bool HasRestoreResult => RestoreResult != null;
+
+        public ICommand DismissBackupResultCommand { get; }
+        public ICommand DismissRestoreResultCommand { get; }
+
+        /// <summary>
+        /// Le bilan d'un transfert fait de plusieurs opérations : la pire l'emporte.
+        /// </summary>
+        /// <remarks>
+        /// Un compte rendu de trente lignes ne dit pas d'un coup d'œil si tout est passé. Le bilan
+        /// le dit en une phrase et une couleur ; le détail reste dessous pour qui le cherche.
+        /// </remarks>
+        internal static TransferResult Conclude(string gesture, IReadOnlyCollection<ActionOutcome> outcomes, string secured, string? failure)
+        {
+            if (failure != null)
+                return new TransferResult(TransferResultKind.Failed, gesture + " interrompue par une erreur", failure);
+
+            var worst = TransferResultKind.Succeeded;
+            foreach (var outcome in outcomes)
+            {
+                var kind = outcome.Status switch
+                {
+                    ActionStatus.Succeeded or ActionStatus.NothingToDo => TransferResultKind.Succeeded,
+                    ActionStatus.Cancelled => TransferResultKind.Stopped,
+                    ActionStatus.PartiallySucceeded => TransferResultKind.Partial,
+                    _ => TransferResultKind.Failed,
+                };
+                if (kind > worst) worst = kind;
+            }
+
+            if (outcomes.Count == 0) worst = TransferResultKind.Failed;
+
+            var title = worst switch
+            {
+                TransferResultKind.Succeeded => gesture + " terminée, tout est vérifié",
+                TransferResultKind.Partial => gesture + " terminée, avec des points à revoir ci-dessous",
+                TransferResultKind.Stopped => gesture + " arrêtée : la relancer reprend où elle en était",
+                _ => gesture + " en échec",
+            };
+
+            return new TransferResult(worst, title, secured);
+        }
+
+        /// <summary>« Temps restant estimé : environ 12 min ».</summary>
+        internal static string Remaining(TimeSpan? remaining)
+            => remaining == null ? "Estimation du temps restant en cours…" : "Temps restant estimé : " + RemainingShort(remaining);
+
+        /// <summary>« environ 12 min » : arrondi comme on le dirait à voix haute.</summary>
+        internal static string RemainingShort(TimeSpan? remaining)
+        {
+            if (remaining == null) return "en calcul…";
 
             var value = remaining.Value;
-            if (value < TimeSpan.FromMinutes(1)) return "Temps restant estimé : moins d'une minute";
-            if (value < TimeSpan.FromHours(1))
-                return "Temps restant estimé : environ " + (int)Math.Ceiling(value.TotalMinutes) + " min";
+            if (value < TimeSpan.FromMinutes(1)) return "moins d'une minute";
+            if (value < TimeSpan.FromHours(1)) return "environ " + (int)Math.Ceiling(value.TotalMinutes) + " min";
 
             var minutes = (int)Math.Ceiling(value.TotalMinutes);
-            return "Temps restant estimé : environ " + minutes / 60 + " h " + (minutes % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+            return "environ " + minutes / 60 + " h " + (minutes % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static string Duration(TimeSpan value)
@@ -1732,9 +2011,13 @@ namespace LDI12.App.ViewModels
             Status = "Restauration en cours…";
             Mode = DataMode.Restore;
             IsRestoreTransferring = true;
+            RestoreResult = null;
+            StartTransferStats();
             var progress = new Progress<ActionProgress>(OnTransfer);
             var report = new List<string>();
             var summaries = new List<string>();
+            var outcomes = new List<ActionOutcome>();
+            string? failure = null;
 
             try
             {
@@ -1743,6 +2026,7 @@ namespace LDI12.App.ViewModels
                     BeginTransfer("Réinstallation des pilotes…");
                     var drivers = await runner.ExecuteAsync(_restoreDrivers, _restoreDriversPreview!, null, progress, CancellationToken.None)
                         .ConfigureAwait(true);
+                    outcomes.Add(drivers);
                     summaries.Add("Pilotes : " + drivers.Summary);
                     Report(report, "Pilotes", drivers);
                 }
@@ -1753,6 +2037,7 @@ namespace LDI12.App.ViewModels
                     BeginTransfer("Réinstallation des imprimantes…");
                     var printers = await runner.ExecuteAsync(_restorePrinters, _restorePrintersPreview!, null, progress, CancellationToken.None)
                         .ConfigureAwait(true);
+                    outcomes.Add(printers);
                     summaries.Add("Imprimantes : " + printers.Summary);
                     Report(report, "Imprimantes", printers);
                 }
@@ -1762,6 +2047,7 @@ namespace LDI12.App.ViewModels
                     BeginTransfer("Préparation de la restauration…");
                     var data = await runner.ExecuteAsync(_restore, _restorePreview!, RestoreParameters(), progress, StartCancellable())
                         .ConfigureAwait(true);
+                    outcomes.Add(data);
                     summaries.Add(data.Summary);
                     Report(report, "Données", data);
                 }
@@ -1772,6 +2058,7 @@ namespace LDI12.App.ViewModels
                     var applications = await runner.ExecuteAsync(
                             _restoreApplications, _restoreApplicationsPreview!, null, progress, StartCancellable())
                         .ConfigureAwait(true);
+                    outcomes.Add(applications);
                     summaries.Add("Applications : " + applications.Summary);
                     Report(report, "Applications", applications);
                 }
@@ -1782,10 +2069,13 @@ namespace LDI12.App.ViewModels
             {
                 _logger.Error(Category, "La restauration a échoué.", ex);
                 Status = "La restauration a échoué : " + ex.Message;
+                failure = ex.Message;
             }
             finally
             {
                 EndCancellable();
+                RestoreResult = Conclude("Restauration", outcomes, SecuredLine(), failure);
+                Taskbar.Finish(RestoreResult.Kind == TransferResultKind.Failed);
                 _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
                 RestoreLines.Clear();
                 RestoreSummary = report.Count > 0 ? "Compte rendu de la restauration :" : string.Empty;
@@ -2078,11 +2368,14 @@ namespace LDI12.App.ViewModels
             Status = "Copie en cours…";
             Mode = DataMode.Backup;
             IsBackupTransferring = true;
+            BackupResult = null;
+            StartTransferStats();
 
             var progress = new Progress<ActionProgress>(OnTransfer);
             ActionOutcome? outcome = null;
             ActionOutcome? drivers = null;
             ActionOutcome? openFiles = null;
+            string? failure = null;
 
             try
             {
@@ -2114,10 +2407,17 @@ namespace LDI12.App.ViewModels
             {
                 _logger.Error(Category, "La copie a échoué.", ex);
                 Status = "La copie a échoué : " + ex.Message;
+                failure = ex.Message;
             }
             finally
             {
                 EndCancellable();
+
+                var outcomes = new List<ActionOutcome>();
+                foreach (var part in new[] { drivers, outcome, openFiles }) if (part != null) outcomes.Add(part);
+                BackupResult = Conclude("Sauvegarde", outcomes, SecuredLine(), failure);
+                Taskbar.Finish(BackupResult.Kind == TransferResultKind.Failed);
+
                 IsCopying = false;
                 IsBackupTransferring = false;
 
@@ -2137,6 +2437,8 @@ namespace LDI12.App.ViewModels
                 }
 
                 (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (OpenReportCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (VerifyLastBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -2218,8 +2520,226 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        public ICommand OpenReportCommand { get; }
+
+        // ---------- vérification d'une sauvegarde
+
+        private IRepairAction? _verify;
+
+        /// <summary>Relit la sauvegarde choisie pour la restauration, contre son manifeste.</summary>
+        public ICommand VerifyRestoreSourceCommand { get; }
+
+        /// <summary>Relit la sauvegarde qui vient d'être faite : avant d'effacer le disque du client.</summary>
+        public ICommand VerifyLastBackupCommand { get; }
+
+        /// <summary>
+        /// Relit une sauvegarde sur son support et compare chaque fichier à son empreinte.
+        /// </summary>
+        /// <remarks>
+        /// Le même tableau de bord qu'une copie : une vérification de cent gigaoctets dure aussi
+        /// longtemps qu'une relecture de cent gigaoctets, et mérite le même avancement. Le bilan dit
+        /// en une phrase si le support peut servir, et si le disque d'origine peut être effacé.
+        /// </remarks>
+        private async Task VerifyAsync(string source, DataMode mode)
+        {
+            var runner = _runner == null ? null : await _runner().ConfigureAwait(true);
+            if (runner == null || IsCopying || string.IsNullOrWhiteSpace(source)) return;
+
+            _verify ??= ActionCatalog.Find(ActionIds.VerifyBackup, _logger);
+            if (_verify == null) return;
+
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [VerifyBackupAction.SourceParameter] = source,
+            };
+
+            await StopMeasuresAsync().ConfigureAwait(true);
+            IsCopying = true;
+            Mode = mode;
+            if (mode == DataMode.Backup) { IsBackupTransferring = true; BackupResult = null; }
+            else { IsRestoreTransferring = true; RestoreResult = null; }
+            StartTransferStats();
+            BeginTransfer("Lecture du manifeste de la sauvegarde…");
+            Status = "Vérification de la sauvegarde en cours : rien n'est écrit.";
+
+            TransferResult result;
+            var token = StartCancellable();
+            try
+            {
+                var preview = await runner.PreviewAsync(_verify, parameters, token).ConfigureAwait(true);
+                if (!preview.CanExecute)
+                {
+                    result = new TransferResult(TransferResultKind.Failed, "Vérification impossible",
+                        preview.Blocker ?? preview.Summary);
+                }
+                else
+                {
+                    var outcome = await runner.ExecuteAsync(_verify, preview, parameters, new Progress<ActionProgress>(OnTransfer), token)
+                        .ConfigureAwait(true);
+                    result = Verified(outcome);
+                    Status = outcome.Summary;
+
+                    var lines = mode == DataMode.Backup ? BackupLines : RestoreLines;
+                    lines.Clear();
+                    foreach (var line in outcome.Details) lines.Add(line);
+                    if (mode == DataMode.Backup) BackupSummary = "Vérification de la sauvegarde :";
+                    else RestoreSummary = "Vérification de la sauvegarde :";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                result = new TransferResult(TransferResultKind.Stopped, "Vérification arrêtée", "Rien n'a été modifié.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "La vérification de la sauvegarde a échoué.", ex);
+                result = new TransferResult(TransferResultKind.Failed, "La vérification a échoué", ex.Message);
+            }
+            finally
+            {
+                EndCancellable();
+                IsCopying = false;
+                IsBackupTransferring = false;
+                IsRestoreTransferring = false;
+                Raise(nameof(HasBackupPreview));
+                Raise(nameof(HasRestorePreview));
+                RaiseBackupStates();
+                JournalChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            if (mode == DataMode.Backup) BackupResult = result;
+            else RestoreResult = result;
+            Taskbar.Finish(result.Kind == TransferResultKind.Failed);
+        }
+
+        /// <summary>Le bilan d'une vérification : ce que le technicien peut faire du support.</summary>
+        internal static TransferResult Verified(ActionOutcome outcome) => outcome.Status switch
+        {
+            ActionStatus.Succeeded => new TransferResult(TransferResultKind.Succeeded,
+                "Sauvegarde intacte : chaque fichier relu est identique", outcome.Summary),
+            ActionStatus.PartiallySucceeded => new TransferResult(TransferResultKind.Partial,
+                "Sauvegarde abîmée : des fichiers sont en défaut", outcome.Summary),
+            ActionStatus.Cancelled => new TransferResult(TransferResultKind.Stopped, "Vérification arrêtée", outcome.Summary),
+            _ => new TransferResult(TransferResultKind.Failed, "Sauvegarde inutilisable en l'état", outcome.Summary),
+        };
+
+        /// <summary>Le rapport à remettre au client, s'il a été déposé avec la dernière sauvegarde.</summary>
+        private string? ReportPath
+        {
+            get
+            {
+                if (_lastBackupFolder == null) return null;
+                var path = Path.Combine(_lastBackupFolder, BackupUserDataAction.ClientReportFileName);
+                return File.Exists(path) ? path : null;
+            }
+        }
+
+        /// <summary>
+        /// Ouvre le rapport client dans le navigateur, pour l'imprimer ou le montrer.
+        /// </summary>
+        /// <remarks>
+        /// La sauvegarde finie, c'est le document qu'on remet : l'atteindre demandait d'ouvrir le
+        /// dossier de sauvegarde et de le chercher parmi les autres.
+        /// </remarks>
+        private void OpenReport()
+        {
+            var path = ReportPath;
+            if (path == null) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Le rapport client n'a pas pu être ouvert.", ex);
+                Status = "Le rapport client n'a pas pu être ouvert : " + ex.Message;
+            }
+        }
+
+        // ---------- barre d'action, en bas de l'écran
+
+        /// <summary>
+        /// Ce qui va partir, et où : « Ce compte, sur ce PC → E:\ ».
+        /// </summary>
+        /// <remarks>
+        /// Le formulaire fait plusieurs écrans de haut, et ses boutons étaient au bout. La barre
+        /// reste en bas de la fenêtre, où qu'on soit dans le formulaire : elle rappelle le choix
+        /// fait, dit ce qui manque encore, et porte les deux boutons qui comptent.
+        /// </remarks>
+        public string BackupBarTitle
+        {
+            get
+            {
+                var source = _selectedSource?.Title ?? "Ce compte, sur ce PC";
+                var destination = BackupDestination.Trim();
+                return source + "  →  " + (destination.Length == 0 ? "support à choisir" : destination);
+            }
+        }
+
+        public string BackupBarDetail
+        {
+            get
+            {
+                if (_prepareCancel != null) return "Préparation en cours : relevé des fichiers, de la place et des programmes ouverts…";
+                if (string.IsNullOrWhiteSpace(BackupDestination))
+                    return "Choisissez où copier, à l'étape 2 : un disque apparaît dès qu'il est branché.";
+                if (CanCopy) return (HasBackupDuration ? BackupDuration + " " : string.Empty) + "Tout est prêt : lancez la copie.";
+                if (_backupPreview != null && !_backupPreview.CanExecute)
+                    return "La préparation a trouvé un empêchement : le détail est à l'étape 4.";
+                return "Préparez la copie : durée, place et programmes ouverts sont relevés sans rien écrire.";
+            }
+        }
+
+        public string RestoreBarTitle
+        {
+            get
+            {
+                var source = RestoreSource.Trim();
+                return source.Length == 0 ? "Sauvegarde à choisir" : "Sauvegarde : " + source;
+            }
+        }
+
+        public string RestoreBarDetail
+        {
+            get
+            {
+                if (_prepareCancel != null) return "Préparation en cours : relecture de la sauvegarde, sans rien écrire sur ce PC…";
+                if (string.IsNullOrWhiteSpace(RestoreSource))
+                    return "Branchez le disque de la sauvegarde : il apparaît à l'étape 1 de lui-même.";
+                if (CanRestore) return (HasRestoreDuration ? RestoreDuration + " " : string.Empty) + "Tout est prêt : lancez la restauration.";
+                if (_restorePreview != null && !_restorePreview.CanExecute)
+                    return "La préparation a trouvé un empêchement : le détail est à l'étape 3.";
+                return "Préparez la restauration : la sauvegarde est relue, rien n'est encore écrit sur ce PC.";
+            }
+        }
+
+        /// <summary>Une préparation est en cours : la barre montre de quoi l'arrêter.</summary>
+        public bool IsPreparing => _prepareCancel != null;
+
+        public bool ShowBackupBar => IsBackupMode && !IsBackupTransferring;
+        public bool ShowRestoreBar => IsRestoreMode && !IsRestoreTransferring;
+
+        /// <summary>Les étapes franchies : leur pastille se coche.</summary>
+        public bool HasBackupDestination => !string.IsNullOrWhiteSpace(BackupDestination);
+        public bool HasRestoreSource => !string.IsNullOrWhiteSpace(RestoreSource);
+
+        private void RaiseBar()
+        {
+            Raise(nameof(BackupBarTitle));
+            Raise(nameof(BackupBarDetail));
+            Raise(nameof(RestoreBarTitle));
+            Raise(nameof(RestoreBarDetail));
+            Raise(nameof(ShowBackupBar));
+            Raise(nameof(ShowRestoreBar));
+            Raise(nameof(HasBackupDestination));
+            Raise(nameof(HasRestoreSource));
+            Raise(nameof(IsPreparing));
+        }
+
         private void RaiseBackupStates()
         {
+            RaiseBar();
             Raise(nameof(CanPrepareBackup));
             Raise(nameof(CanCopy));
             Raise(nameof(CanPrepareRestore));
@@ -2230,6 +2750,8 @@ namespace LDI12.App.ViewModels
             (RunRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (CloseProgramsForBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (CloseProgramsForRestoreCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (VerifyRestoreSourceCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            (VerifyLastBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (ListApplicationsCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (AddExtraFoldersCommand as RelayCommand)?.RaiseCanExecuteChanged();
             RaiseDurations();

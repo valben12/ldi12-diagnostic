@@ -114,6 +114,12 @@ namespace LDI12.Tests
                 Same(original, copy);
                 Assert.Single(Directory.GetDirectories(support));
 
+                // Relue sur le support, contre les empreintes du manifeste : celles du premier
+                // passage, reprises, et celles du second.
+                var verified = await Verify(backup);
+                Assert.True(verified.Status == ActionStatus.Succeeded, verified.Summary + " " + string.Join(" ", verified.Details));
+                Assert.StartsWith("Sauvegarde intacte", verified.Summary);
+
                 // Le nouveau PC : la source n'existe plus, tout revient de la sauvegarde.
                 RemoveTree(source);
                 var targets = new RestoreTargets
@@ -148,12 +154,34 @@ namespace LDI12.Tests
                 var twice = await restore.ExecuteAsync(restoreContext,
                     await restore.PreviewAsync(restoreContext, CancellationToken.None), null, CancellationToken.None);
                 Assert.Equal(ActionStatus.Succeeded, twice.Status);
+
+                // Un octet change sur le support, taille et date intactes : ce qu'une clé fatiguée
+                // fait en dormant dans un tiroir. Seule l'empreinte le voit.
+                var damaged = Path.Combine(copy, "Petits", "fichier-007.txt");
+                var when = File.GetLastWriteTimeUtc(Extended(damaged));
+                var content = File.ReadAllBytes(Extended(damaged));
+                content[3] ^= 0x20;
+                File.WriteAllBytes(Extended(damaged), content);
+                File.SetLastWriteTimeUtc(Extended(damaged), when);
+
+                var after = await Verify(backup);
+                Assert.Equal(ActionStatus.PartiallySucceeded, after.Status);
+                Assert.Contains(after.Details, line => line.Contains("plus identiques") && line.Contains("fichier-007.txt"));
             }
             finally
             {
                 try { RemoveTree(root); }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
             }
+        }
+
+        private static async Task<ActionOutcome> Verify(string backup)
+        {
+            var context = Context(new Dictionary<string, string> { [VerifyBackupAction.SourceParameter] = backup });
+            var action = new VerifyBackupAction();
+            var preview = await action.PreviewAsync(context, CancellationToken.None);
+            Assert.True(preview.CanExecute, preview.Blocker ?? preview.Summary);
+            return await action.ExecuteAsync(context, preview, null, CancellationToken.None);
         }
 
         /// <summary>Le jeu de fichiers, et l'empreinte et la date de chacun, par chemin relatif.</summary>

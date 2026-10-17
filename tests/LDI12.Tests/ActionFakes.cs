@@ -260,6 +260,7 @@ namespace LDI12.Tests
             if (LockedFiles.Contains(source.Path)) return FileCopyResult.Of(FileCopyOutcome.Locked);
             if (!_existing.Contains(source.Path)) return FileCopyResult.Of(FileCopyOutcome.NotFound);
             if (Occupied.Contains(request.Destination)) return FileCopyResult.Of(FileCopyOutcome.Conflict);
+            if (Present.Contains(request.Destination)) return FileCopyResult.Of(FileCopyOutcome.AlreadyPresent);
 
             if (NoSpaceFrom != null &&
                 string.Equals(NoSpaceFrom, source.Path, StringComparison.OrdinalIgnoreCase))
@@ -273,7 +274,44 @@ namespace LDI12.Tests
             request.Progressed?.Invoke(source.SizeBytes);
 
             Copied.Add((request.Destination, source.Path));
-            return FileCopyResult.Of(FileCopyOutcome.Copied, source.SizeBytes);
+            var hash = HashOf(source.Path);
+            Hashes[request.Destination] = hash;
+            return new FileCopyResult { Outcome = FileCopyOutcome.Copied, Bytes = source.SizeBytes, Fingerprint = hash };
+        }
+
+        /// <summary>
+        /// L'empreinte de chaque fichier connu, par chemin. Une copie y inscrit sa destination ;
+        /// un test y abîme un fichier en changeant la sienne.
+        /// </summary>
+        public Dictionary<string, string> Hashes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Destinations déjà là, identiques : ce qu'un passage précédent a copié.</summary>
+        public HashSet<string> Present { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Fichiers dont la relecture échoue : support illisible à cet endroit.</summary>
+        public HashSet<string> Unreadable { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>L'empreinte d'un fichier : celle posée par le test, sinon une tirée de son nom.</summary>
+        public string HashOf(string path)
+            => Hashes.TryGetValue(path, out var known) ? known : HashOfName(System.IO.Path.GetFileName(path));
+
+        /// <summary>Une empreinte au format réel, tirée d'un nom : deux fichiers de même nom ont le même contenu.</summary>
+        public static string HashOfName(string name)
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var bytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(name.ToLowerInvariant()));
+            return string.Concat(bytes.Select(value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        public Measured<string> Fingerprint(string path, Action<long>? progressed, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Gone(path)) return Measured.Missing<string>("Le support ne répond plus.", DataSource.FileSystem);
+            if (Unreadable.Contains(path)) return Measured.Missing<string>("Erreur de lecture.", DataSource.FileSystem);
+            if (!Hashes.ContainsKey(path) && !Files.Contains(path) && !_existing.Contains(path))
+                return Measured.Missing<string>("Le fichier est absent : " + path, DataSource.FileSystem);
+
+            return Measured.Ok(HashOf(path), DataSource.FileSystem);
         }
 
         public bool CreateDirectory(string path)

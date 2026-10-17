@@ -3,6 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LDI12.App">
 
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
@@ -18,6 +24,25 @@
                        Text="Rien n'est supprimé sans avoir été relevé et affiché. L'analyse liste les fichiers concernés ; la suppression ne porte que sur cette liste, et vérifie pour chacun qu'il n'a pas changé entre-temps." />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,18"
                        MaxWidth="1100" HorizontalAlignment="Left" />
+
+            <!-- ===== Compte rendu =====
+                 En tête, et non sous la liste : c'est la première chose qu'on cherche après une suppression. -->
+            <Border Style="{StaticResource OutcomePanel}" Margin="0,0,0,14"
+                    Visibility="{Binding HasOutcome, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="RÉSULTAT" Style="{StaticResource Text.Eyebrow}" />
+                    <TextBlock Text="{Binding OutcomeSummary}" Style="{StaticResource Text.Body}"
+                               Margin="0,6,0,0" MaxWidth="1000" HorizontalAlignment="Left" />
+                    <ItemsControl ItemsSource="{Binding OutcomeDetails}" Margin="0,9,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                           Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
             <!-- ===== Les sources ===== -->
             <ItemsControl ItemsSource="{Binding Sources}">
@@ -100,67 +125,58 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-
-            <!-- ===== Commandes ===== -->
-            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                <Button Style="{StaticResource Button.Ghost}" Content="Analyser la sélection"
-                        Command="{Binding AnalyzeCommand}" />
-                <Button Style="{StaticResource Button.Primary}" Content="Supprimer…" Margin="10,0,0,0"
-                        Command="{Binding RequestDeleteCommand}" />
-                <Button Style="{StaticResource Button.Ghost}" Content="Interrompre" Margin="10,0,0,0"
-                        Command="{Binding CancelCommand}"
-                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
-            </StackPanel>
-
-            <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
-                       MaxWidth="1100" HorizontalAlignment="Left"
-                       Visibility="{Binding HasSummary, Converter={StaticResource BoolToVisibility}}" />
-
-            <!-- ===== Confirmation ===== -->
-            <Border Style="{StaticResource ConfirmPanel}"
-                    Visibility="{Binding IsConfirming, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel>
-                    <TextBlock Text="Confirmer la suppression" Style="{StaticResource Text.Emphasis}" />
-                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,7,0,0"
-                               MaxWidth="1000" HorizontalAlignment="Left" />
-
-                    <ItemsControl ItemsSource="{Binding WillNotDo}" Margin="0,10,0,0"
-                                  Visibility="{Binding HasWillNotDo, Converter={StaticResource BoolToVisibility}}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
-                                           Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <Button Style="{StaticResource Button.Primary}" Content="Oui, supprimer ces éléments"
-                                Command="{Binding ConfirmDeleteCommand}" />
-                        <Button Style="{StaticResource Button.Ghost}" Content="Annuler" Margin="10,0,0,0"
-                                Command="{Binding AbandonCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- ===== Compte rendu ===== -->
-            <Border Style="{StaticResource OutcomePanel}"
-                    Visibility="{Binding HasOutcome, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel>
-                    <TextBlock Text="RÉSULTAT" Style="{StaticResource Text.Eyebrow}" />
-                    <TextBlock Text="{Binding OutcomeSummary}" Style="{StaticResource Text.Body}"
-                               Margin="0,6,0,0" MaxWidth="1000" HorizontalAlignment="Left" />
-                    <ItemsControl ItemsSource="{Binding OutcomeDetails}" Margin="0,9,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
-                                           Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
         </StackPanel>
     </ScrollViewer>
+
+        <!-- ===== Barre d'action =====
+             Les sources font plusieurs écrans de haut, et les boutons étaient au bout : ils restent
+             ici, au pied de la fenêtre, avec ce que l'analyse a trouvé. La confirmation s'ouvre
+             juste au-dessus des boutons, là où le regard est déjà, et non sous la liste. -->
+        <Border Grid.Row="1" Background="{DynamicResource Brush.SurfaceSoft}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                BorderThickness="0,1,0,0" Padding="28,12">
+            <StackPanel MaxWidth="1440">
+                <!-- ===== Confirmation ===== -->
+                <Border Style="{StaticResource ConfirmPanel}" Margin="0,0,0,12"
+                        Visibility="{Binding IsConfirming, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Confirmer la suppression" Style="{StaticResource Text.Emphasis}" />
+
+                        <ItemsControl ItemsSource="{Binding WillNotDo}" Margin="0,10,0,0"
+                                      Visibility="{Binding HasWillNotDo, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Style="{StaticResource Text.Muted}"
+                                               Margin="0,0,0,3" MaxWidth="1000" HorizontalAlignment="Left" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Style="{StaticResource Button.Primary}" Content="Oui, supprimer ces éléments"
+                                    Command="{Binding ConfirmDeleteCommand}" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Annuler" Margin="10,0,0,0"
+                                    Command="{Binding AbandonCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding BarText}" Style="{StaticResource Text.Body}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Brush.TextPrimary}" TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                        <Button Style="{StaticResource Button.Ghost}" Content="Interrompre" Margin="0,0,10,0"
+                                Command="{Binding CancelCommand}"
+                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Analyser la sélection"
+                                Command="{Binding AnalyzeCommand}" />
+                        <Button Style="{StaticResource Button.Primary}" Content="Supprimer…" Margin="10,0,0,0"
+                                Command="{Binding RequestDeleteCommand}" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
 </UserControl>

@@ -30,6 +30,23 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Les_dechets_de_windows_et_d_office_sont_ecartes_d_office()
+        {
+            var filter = BackupFilter.Parse(null, null);
+
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\~$Rapport.docx", SizeBytes = 162 }));
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\Thumbs.db", SizeBytes = 4096 }));
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\.DS_Store", SizeBytes = 6148 }));
+            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\a\desktop.ini", SizeBytes = 80 }));
+            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\a\Rapport.docx", SizeBytes = 20_000 }));
+
+            // Comptés à part : ce n'est pas un choix du technicien, et l'écran ne doit pas le lui prêter.
+            Assert.Equal(3, filter.JunkFiles);
+            Assert.Equal(0, filter.ExcludedFiles);
+            Assert.True(filter.IsEmpty);
+        }
+
+        [Fact]
         public void Sans_saisie_rien_n_est_ecarte()
             => Assert.True(BackupFilter.Parse(null, "  ").IsEmpty);
 

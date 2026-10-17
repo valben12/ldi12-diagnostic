@@ -84,6 +84,9 @@ namespace LDI12.Actions.Elevation
 
         public double? ElapsedSeconds { get; set; }
 
+        /// <summary>Les chiffres d'une copie en cours.</summary>
+        public TransferFigures? Figures { get; set; }
+
         public string? Message { get; set; }
 
         public PreviewPayload? Preview { get; set; }

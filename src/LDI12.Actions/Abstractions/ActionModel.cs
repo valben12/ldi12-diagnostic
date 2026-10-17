@@ -266,5 +266,30 @@ namespace LDI12.Actions
         public TimeSpan? Remaining { get; init; }
 
         public TimeSpan? Elapsed { get; init; }
+
+        /// <summary>Les chiffres d'une copie, pour les montrer en grand plutôt qu'en une ligne de texte.</summary>
+        public TransferFigures? Figures { get; init; }
+    }
+
+    /// <summary>
+    /// Où en est une copie, en chiffres.
+    /// </summary>
+    /// <remarks>
+    /// Le débit est celui des données mises en sûreté, relecture comprise : 100 Mo/s veut dire
+    /// que cent mégaoctets de la source sont écrits et relus chaque seconde. C'est celui qui
+    /// répond à la question du technicien, « combien de temps encore », et non celui du support.
+    /// </remarks>
+    public sealed class TransferFigures
+    {
+        public long BytesDone { get; set; }
+
+        public long BytesTotal { get; set; }
+
+        public int FilesDone { get; set; }
+
+        public int FilesTotal { get; set; }
+
+        /// <summary>Débit des dernières secondes ; nul tant qu'il ne se mesure pas encore.</summary>
+        public double? BytesPerSecond { get; set; }
     }
 }

@@ -87,12 +87,55 @@ namespace LDI12.Tests
             Assert.Contains(files.Copied, copy => copy.Destination == Path.Combine(Targets.Desktop, "note.txt"));
             Assert.DoesNotContain(files.Copied, copy => copy.Destination.EndsWith("desktop.ini", StringComparison.OrdinalIgnoreCase));
 
-            // Un fichier différent déjà là n'est pas remplacé : il est compté et signalé.
-            Assert.DoesNotContain(files.Copied, copy => copy.Destination.EndsWith("contrat.pdf", StringComparison.Ordinal));
-            Assert.Equal(ActionStatus.PartiallySucceeded, outcome.Status);
+            // Un fichier différent déjà là n'est pas remplacé : celui de la sauvegarde se pose à
+            // côté, sous un nom qui dit d'où il vient. Le client garde les deux.
+            Assert.DoesNotContain(files.Copied, copy => copy.Destination == Path.Combine(Targets.Documents, "contrat.pdf"));
+            Assert.Contains(files.Copied, copy => copy.Destination == Path.Combine(Targets.Documents, "contrat (sauvegarde LDI12).pdf"));
+            Assert.Equal(ActionStatus.Succeeded, outcome.Status);
+            Assert.Contains(outcome.Details, line => line.Contains("posés à côté"));
 
             // Et rien n'est supprimé, nulle part.
             Assert.Empty(files.Deleted);
+        }
+
+        [Fact]
+        public void Un_fichier_pose_a_cote_garde_son_extension()
+        {
+            Assert.Equal(@"C:\D\Rapport (sauvegarde LDI12).docx", RestoreUserDataAction.Beside(@"C:\D\Rapport.docx"));
+            Assert.Equal(@"C:\D\LISEZMOI (sauvegarde LDI12)", RestoreUserDataAction.Beside(@"C:\D\LISEZMOI"));
+        }
+
+        // ============================================================ contrôle de la sauvegarde
+
+        [Fact]
+        public async Task Un_fichier_abime_sur_le_support_depuis_la_sauvegarde_est_signale()
+        {
+            var files = Populated();
+            var manifest = new System.Text.StringBuilder(BackupManifest.Header + "\n");
+            BackupManifest.Append(manifest, "Bureau", "note.txt", 10, "copié et vérifié", FakeFileSystemGateway.HashOfName("note.txt"));
+            BackupManifest.Append(manifest, "Documents", "contrat.pdf", 10, "copié et vérifié", new string('0', 64));
+            files.Texts[Path.Combine(Backup, BackupManifest.FileName)] = manifest.ToString();
+
+            var outcome = await Run(files);
+
+            Assert.Equal(ActionStatus.PartiallySucceeded, outcome.Status);
+            var warning = Assert.Single(outcome.Details, line => line.Contains("ne sont plus identiques"));
+            Assert.Contains(Path.Combine("Documents", "contrat.pdf"), warning);
+            Assert.DoesNotContain("note.txt", warning);
+        }
+
+        [Fact]
+        public async Task Une_sauvegarde_intacte_le_dit()
+        {
+            var files = Populated();
+            var manifest = new System.Text.StringBuilder(BackupManifest.Header + "\n");
+            BackupManifest.Append(manifest, "Bureau", "note.txt", 10, "copié et vérifié", FakeFileSystemGateway.HashOfName("note.txt"));
+            files.Texts[Path.Combine(Backup, BackupManifest.FileName)] = manifest.ToString();
+
+            var outcome = await Run(files);
+
+            Assert.Equal(ActionStatus.Succeeded, outcome.Status);
+            Assert.Contains(outcome.Details, line => line.Contains("identique à ce qui avait été sauvegardé"));
         }
 
         // ============================================================ navigateurs

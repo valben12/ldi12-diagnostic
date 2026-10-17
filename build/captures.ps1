@@ -28,6 +28,8 @@ $screens = @(
     @{ Nav = 10; Name = 'nettoyage';     Scroll = @() },
     @{ Nav = 11; Name = 'donnees';       Scroll = @(700, 1400) },
     @{ Nav = 11; Name = 'donnees-restauration'; Scroll = @(700); Mode = 'restore' },
+    @{ Nav = 11; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
+    @{ Nav = 11; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
     @{ Nav = 12; Name = 'outils';        Scroll = @() },
     @{ Nav = 13; Name = 'rapports';      Scroll = @() },
     @{ Nav = 14; Name = 'historique';    Scroll = @() },

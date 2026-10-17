@@ -59,9 +59,40 @@ namespace LDI12.Actions.Backup
             return new BackupFilter(set, max);
         }
 
+        /// <summary>Les déchets écartés d'office : ni le technicien ni le client n'en voudraient.</summary>
+        public int JunkFiles { get; private set; }
+
+        public long JunkBytes { get; private set; }
+
+        /// <summary>
+        /// Les fichiers que Windows et Office laissent derrière eux, sans valeur pour le client.
+        /// </summary>
+        /// <remarks>
+        /// « ~$Rapport.docx » est le verrou qu'Office pose à côté d'un document ouvert : restauré
+        /// sur le nouveau PC, il fait croire le document ouvert par quelqu'un d'autre. Thumbs.db et
+        /// ehthumbs.db sont des caches de miniatures, .DS_Store celui d'un Mac passé par la clé.
+        /// desktop.ini, lui, reste : il porte le nom et l'icône des dossiers.
+        /// </remarks>
+        public static bool IsJunk(string path)
+        {
+            var name = Path.GetFileName(path);
+            return name.StartsWith("~$", StringComparison.Ordinal) ||
+                   name.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase) ||
+                   name.Equals("ehthumbs.db", StringComparison.OrdinalIgnoreCase) ||
+                   name.Equals("ehthumbs_vista.db", StringComparison.OrdinalIgnoreCase) ||
+                   name.Equals(".DS_Store", StringComparison.Ordinal);
+        }
+
         /// <summary>Vrai si ce fichier est écarté ; il est alors compté.</summary>
         public bool Excludes(FileEntry file)
         {
+            if (IsJunk(file.Path))
+            {
+                JunkFiles++;
+                JunkBytes += file.SizeBytes;
+                return true;
+            }
+
             var excluded = (MaxBytes != null && file.SizeBytes > MaxBytes.Value) ||
                            (_extensions.Count > 0 && _extensions.Contains(Path.GetExtension(file.Path)));
             if (!excluded) return false;

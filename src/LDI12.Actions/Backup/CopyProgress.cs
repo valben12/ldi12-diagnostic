@@ -37,9 +37,9 @@ namespace LDI12.Actions.Backup
 
         private readonly IProgress<ActionProgress>? _sink;
         private readonly Func<TimeSpan> _clock;
-        private readonly long _totalUnits;
-        private readonly long _totalBytes;
-        private readonly int _totalFiles;
+        private long _totalUnits;
+        private long _totalBytes;
+        private int _totalFiles;
         private readonly string _verb;
 
         private long _done;
@@ -48,6 +48,11 @@ namespace LDI12.Actions.Backup
         private string _folder = string.Empty;
         private TimeSpan _lastReport = TimeSpan.MinValue;
         private TimeSpan _lastSample = TimeSpan.MinValue;
+
+        // Le débit des dernières secondes : relevés (instant, unités faites), du plus ancien au plus récent.
+        private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(5);
+        private readonly Queue<(TimeSpan At, long Done)> _recent = new Queue<(TimeSpan, long)>();
+        private (TimeSpan At, long Done) _lastQueued;
 
         // Sommes des moindres carrés de t ≈ a·fichiers + c·unités, sans constante.
         private double _sff, _suu, _sfu, _stf, _stu;
@@ -106,6 +111,22 @@ namespace LDI12.Actions.Backup
             Report(force: _files == _totalFiles);
         }
 
+        /// <summary>
+        /// Du travail qui s'ajoute en route : des fichiers à copier une seconde fois, sous un autre nom.
+        /// </summary>
+        /// <remarks>
+        /// Sans cela, une restauration qui pose des homonymes à côté annoncerait « 105 fichiers sur
+        /// 100 ». La barre recule un peu, et c'est la vérité : il reste du travail.
+        /// </remarks>
+        public void Extend(int files, long bytes)
+        {
+            if (files <= 0) return;
+            bytes = Math.Max(0, bytes);
+            _totalFiles += files;
+            _totalBytes += bytes;
+            _totalUnits += bytes * 2 + files;
+        }
+
         /// <summary>Des fichiers écartés sans être tentés : leur part est comptée comme vue.</summary>
         public void Skip(IEnumerable<FileEntry> files)
         {
@@ -116,6 +137,34 @@ namespace LDI12.Actions.Backup
             }
 
             Report(force: true);
+        }
+
+        /// <summary>
+        /// Le débit des cinq dernières secondes, en octets de la source mis en sûreté par seconde.
+        /// </summary>
+        /// <remarks>
+        /// Les cinq dernières secondes, et non la moyenne depuis le début : c'est ce qui dit au
+        /// technicien que le support ralentit, chauffe, ou que l'antivirus s'en mêle. Une unité
+        /// sur deux est une relecture : le débit compte les octets une fois. Nul avant une seconde
+        /// de relevés.
+        /// </remarks>
+        public double? Rate()
+        {
+            if (_recent.Count < 2) return null;
+
+            var first = _recent.Peek();
+            var last = _lastQueued;
+            var seconds = (last.At - first.At).TotalSeconds;
+            if (seconds < 1) return null;
+
+            return Math.Max(0, (last.Done - first.Done) / 2.0 / seconds);
+        }
+
+        private void Remember(TimeSpan now)
+        {
+            _lastQueued = (now, _done);
+            _recent.Enqueue(_lastQueued);
+            while (_recent.Count > 2 && now - _recent.Peek().At > RateWindow) _recent.Dequeue();
         }
 
         /// <summary>Temps restant estimé, ou nul s'il ne peut pas encore s'estimer.</summary>
@@ -148,6 +197,7 @@ namespace LDI12.Actions.Backup
             if (_sink == null) return;
             if (!force && now - _lastReport < Throttle) return;
             _lastReport = now;
+            Remember(now);
 
             var written = Math.Min(_totalBytes, _done / 2);
             _sink.Report(new ActionProgress(_verb + " « " + _folder + " »", Fraction)
@@ -156,6 +206,14 @@ namespace LDI12.Actions.Backup
                          _files + " fichier(s) sur " + _totalFiles,
                 Remaining = Remaining(),
                 Elapsed = now,
+                Figures = new TransferFigures
+                {
+                    BytesDone = written,
+                    BytesTotal = _totalBytes,
+                    FilesDone = _files,
+                    FilesTotal = _totalFiles,
+                    BytesPerSecond = Rate(),
+                },
             });
         }
 

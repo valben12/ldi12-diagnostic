@@ -153,7 +153,7 @@
                                                    Foreground="{DynamicResource Brush.TextPrimary}" Margin="10,0,0,0"
                                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                     </DockPanel>
-                                    <ProgressBar Style="{StaticResource ShareBar}" Value="{Binding UsedShare, Mode=OneWay}" Margin="0,14,0,8" Height="6" />
+                                    <ProgressBar Style="{StaticResource ShareBar}" local:Motion.Fill="{Binding UsedShare, Mode=OneWay}" Margin="0,14,0,8" Height="6" />
                                     <TextBlock Text="{Binding SpaceText}" Style="{StaticResource Text.Muted}" />
                                 </StackPanel>
                             </Button>
@@ -195,7 +195,7 @@
                         <TextBlock Text="pesés" Style="{StaticResource Text.Muted}" />
                     </StackPanel>
                 </UniformGrid>
-                <ProgressBar Style="{StaticResource ShareBar}" Value="{Binding ScanShare, Mode=OneWay}" Margin="0,24,0,0" Height="6"
+                <ProgressBar Style="{StaticResource ShareBar}" local:Motion.Fill="{Binding ScanShare, Mode=OneWay}" Margin="0,24,0,0" Height="6"
                              Visibility="{Binding ScanShareKnown, Converter={StaticResource BoolToVisibility}}" />
                 <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Margin="0,24,0,0"
                              Visibility="{Binding ScanShareKnown, Converter={StaticResource HiddenWhenTrue}}" />
@@ -349,7 +349,7 @@
                                                     <Run Text="{Binding Kind, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding FilesText, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
-                                            <ProgressBar Grid.Column="2" Style="{StaticResource ShareBar}" Value="{Binding Share, Mode=OneWay}"
+                                            <ProgressBar Grid.Column="2" Style="{StaticResource ShareBar}" local:Motion.Fill="{Binding Share, Mode=OneWay}"
                                                          ToolTip="{Binding ShareText}" Margin="0,0,10,0" />
                                             <TextBlock Grid.Column="3" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
                                                        Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"

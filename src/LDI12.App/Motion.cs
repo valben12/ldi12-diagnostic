@@ -289,5 +289,79 @@ namespace LDI12.App
 
             return false;
         }
+
+        // ---------------------------------------------------------------- barres qui se remplissent
+
+        /// <summary>
+        /// La valeur d'une barre, atteinte en glissant plutôt qu'affichée d'un coup : la barre se
+        /// remplit à l'arrivée sur l'écran et suit chaque changement.
+        /// </summary>
+        /// <remarks>
+        /// À poser à la place de <c>Value</c>. Une barre de quelques pixels de haut : l'animation
+        /// reste légère, mais suit <see cref="Enabled"/> comme les autres, puisqu'un écran en
+        /// compte souvent des dizaines.
+        /// </remarks>
+        public static readonly DependencyProperty FillProperty = DependencyProperty.RegisterAttached(
+            "Fill", typeof(double), typeof(Motion), new PropertyMetadata(0.0, OnFillChanged));
+
+        public static double GetFill(DependencyObject element) => (double)element.GetValue(FillProperty);
+
+        public static void SetFill(DependencyObject element, double value) => element.SetValue(FillProperty, value);
+
+        private static void OnFillChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(element is System.Windows.Controls.Primitives.RangeBase bar)) return;
+            var target = (double)e.NewValue;
+
+            if (!Enabled)
+            {
+                bar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, null);
+                bar.Value = target;
+                return;
+            }
+
+            bar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty,
+                new DoubleAnimation(target, Sweep) { EasingFunction = EaseOut }, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        // ---------------------------------------------------------------- compteurs
+
+        /// <summary>
+        /// Un nombre qui défile jusqu'à sa valeur au lieu d'apparaître d'un coup : posé à la
+        /// place de <c>Text</c> sur un TextBlock.
+        /// </summary>
+        public static readonly DependencyProperty CountProperty = DependencyProperty.RegisterAttached(
+            "Count", typeof(int), typeof(Motion), new PropertyMetadata(0, OnCountChanged));
+
+        /// <summary>La valeur intermédiaire, animée ; le texte en est l'arrondi.</summary>
+        private static readonly DependencyProperty CountingProperty = DependencyProperty.RegisterAttached(
+            "Counting", typeof(double), typeof(Motion), new PropertyMetadata(0.0, OnCountingChanged));
+
+        public static int GetCount(DependencyObject element) => (int)element.GetValue(CountProperty);
+
+        public static void SetCount(DependencyObject element, int value) => element.SetValue(CountProperty, value);
+
+        private static void OnCountChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(element is TextBlock text)) return;
+            var target = (int)e.NewValue;
+
+            if (!Enabled)
+            {
+                text.BeginAnimation(CountingProperty, null);
+                text.SetValue(CountingProperty, (double)target);
+                text.Text = target.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return;
+            }
+
+            text.BeginAnimation(CountingProperty,
+                new DoubleAnimation(target, Sweep) { EasingFunction = EaseOut }, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        private static void OnCountingChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (element is TextBlock text)
+                text.Text = ((int)Math.Round((double)e.NewValue)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
 }

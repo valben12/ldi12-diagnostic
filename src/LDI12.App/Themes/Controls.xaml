@@ -665,11 +665,40 @@
                     <!-- PART_Track est indispensable : c'est sur sa largeur que WPF calcule celle de
                          l'indicateur. Sans lui, la barre restait vide à 32 %, relevé sur la barre de
                          copie ; la barre d'analyse, trois pixels de haut, cachait le même défaut. -->
-                    <Grid>
+                    <Grid ClipToBounds="True">
                         <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2" />
                         <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
                                 Background="{TemplateBinding Foreground}" CornerRadius="2" />
+                        <!-- Sans fin connue : un trait qui court d'un bord à l'autre, plutôt qu'une
+                             barre pleine qui ferait croire la tâche finie. -->
+                        <Border x:Name="Runner" Background="{TemplateBinding Foreground}" CornerRadius="2"
+                                HorizontalAlignment="Left" Width="90" Visibility="Collapsed">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="RunnerShift" X="-90" />
+                            </Border.RenderTransform>
+                        </Border>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsIndeterminate" Value="True">
+                            <Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Runner" Property="Visibility" Value="Visible" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="Run">
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="RunnerShift" Storyboard.TargetProperty="X"
+                                                         From="-90" To="620" Duration="0:0:1.6">
+                                            <DoubleAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="Run" />
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

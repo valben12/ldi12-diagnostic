@@ -27,7 +27,7 @@ $screens = @(
     @{ Nav = 9;  Name = 'mesures';       Scroll = @() },
     @{ Nav = 10;  Name = 'reparations';   Scroll = @() },
     @{ Nav = 11; Name = 'nettoyage';     Scroll = @() },
-    @{ Nav = 12; Name = 'espace-disque'; Scroll = @(); Disk = 'C:\Program Files' },
+    @{ Nav = 12; Name = 'espace-disque'; Scroll = @(); Disk = 'C:\Program Files\Git' },
     @{ Nav = 13; Name = 'donnees';       Scroll = @(700, 1400) },
     @{ Nav = 13; Name = 'donnees-restauration'; Scroll = @(700); Mode = 'restore' },
     @{ Nav = 13; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },

@@ -131,14 +131,14 @@ namespace LDI12.Tests
                     {
                         RuleId = "STO-001", Severity = Severity.Problem, Title = "SMART",
                         TechnicalDetail = "Attribut 05 : 120 secteurs réalloués",
-                        PlainExplanation = "Le disque montre des signes d'usure.",
+                        PlainExplanation = "Le disque montre des signes de fatigue.",
                     },
                 },
             };
 
             var html = InterventionReport.Render(new InterventionCase { Client = "X" }, before, null, null);
 
-            Assert.Contains("Le disque montre des signes d'usure.", html);
+            Assert.Contains("Le disque montre des signes de fatigue.", html);
             Assert.DoesNotContain("STO-001", html);
             Assert.DoesNotContain("secteurs réalloués", html);
         }

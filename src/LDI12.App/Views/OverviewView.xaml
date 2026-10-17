@@ -303,6 +303,10 @@
                                                FontWeight="SemiBold" />
                                     <TextBlock Text="{Binding Rationale}" Style="{StaticResource Text.Muted}"
                                                Margin="0,5,0,0" MaxWidth="900" HorizontalAlignment="Left" />
+                                    <!-- La recommandation mène à l'opération : on ne cherche plus la bonne carte. -->
+                                    <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
+                                            Command="{Binding Link.OpenCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                            Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Top">
                                     <TextBlock Text="{Binding PriorityLabel}" Style="{StaticResource Text.Muted}"

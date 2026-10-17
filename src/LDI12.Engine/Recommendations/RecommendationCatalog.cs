@@ -102,7 +102,7 @@ namespace LDI12.Engine.Recommendations
         {
             Add(Rec.BackupNow, "Sauvegarder les données sans attendre",
                 "Le disque montre des signes de défaillance : une sauvegarde faite maintenant coûte quelques minutes, une récupération après panne coûte beaucoup plus.",
-                RecommendationPriority.Immediate, EffortLevel.Extended, ImpactLevel.High);
+                RecommendationPriority.Immediate, EffortLevel.Extended, ImpactLevel.High, action: "BACKUP-USER-DATA");
 
             Add(Rec.ReplaceDisk, "Remplacer le disque",
                 "Le disque annonce lui-même sa défaillance. Le remplacer avant la panne évite une perte de données et une immobilisation.",

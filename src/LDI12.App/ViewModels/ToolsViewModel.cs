@@ -22,6 +22,13 @@ namespace LDI12.App.ViewModels
             LaunchCommand = new RelayCommand(Launch, () => state.Available);
         }
 
+        public string Id => _state.Tool.Id;
+
+        private bool _isHighlighted;
+
+        /// <summary>Désignée depuis une recommandation : encadrée, et amenée à l'écran.</summary>
+        public bool IsHighlighted { get => _isHighlighted; internal set => Set(ref _isHighlighted, value); }
+
         public string Title => _state.Tool.Title;
         public string Purpose => _state.Tool.Purpose;
         public string CategoryLabel => Labels.Describe(_state.Tool.Category);
@@ -69,6 +76,28 @@ namespace LDI12.App.ViewModels
         }
 
         public ObservableCollection<ToolItem> Items { get; } = new ObservableCollection<ToolItem>();
+
+        /// <summary>Désigne une console : encadrée quelques secondes, et amenée à l'écran par la vue.</summary>
+        public void Highlight(string id)
+        {
+            ToolItem? target = null;
+            foreach (var item in Items)
+            {
+                item.IsHighlighted = false;
+                if (target == null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase)) target = item;
+            }
+
+            if (target == null) return;
+            target.IsHighlighted = true;
+
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            timer.Tick += (_, __) =>
+            {
+                timer.Stop();
+                target.IsHighlighted = false;
+            };
+            timer.Start();
+        }
 
         public string Status { get => _status; private set => Set(ref _status, value); }
 

@@ -20,10 +20,52 @@ namespace LDI12.App
 
             FitToWorkArea();
 
+            PreviewKeyDown += OnShortcut;
             SourceInitialized += OnSourceInitialized;
             ContentRendered += OnContentRendered;
             Closed += OnClosed;
             ThemeManager.Changed += OnThemeChanged;
+        }
+
+        // ------------------------------------------------------------------ raccourcis
+
+        /// <summary>
+        /// F5 : analyse rapide. Ctrl+F5 : diagnostic complet. Ctrl+1 à Ctrl+9 : les écrans, dans
+        /// l'ordre de la barre latérale.
+        /// </summary>
+        /// <remarks>
+        /// Le technicien a souvent une main sur le clavier du client, l'autre sur son téléphone.
+        /// F5 est le geste universel de « recharger » ; les chiffres suivent l'ordre de la barre,
+        /// et chaque entrée rappelle le sien en infobulle.
+        /// </remarks>
+        private void OnShortcut(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (DataContext is not ViewModels.ShellViewModel shell) return;
+
+            var modifiers = System.Windows.Input.Keyboard.Modifiers;
+            var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+
+            if (key == System.Windows.Input.Key.F5)
+            {
+                var command = modifiers == System.Windows.Input.ModifierKeys.Control
+                    ? shell.RunFullScanCommand
+                    : modifiers == System.Windows.Input.ModifierKeys.None ? shell.RunQuickScanCommand : null;
+                if (command != null && command.CanExecute(null)) command.Execute(null);
+                e.Handled = command != null;
+                return;
+            }
+
+            if (modifiers != System.Windows.Input.ModifierKeys.Control) return;
+
+            var index = key >= System.Windows.Input.Key.D1 && key <= System.Windows.Input.Key.D9
+                ? key - System.Windows.Input.Key.D1
+                : key >= System.Windows.Input.Key.NumPad1 && key <= System.Windows.Input.Key.NumPad9
+                    ? key - System.Windows.Input.Key.NumPad1
+                    : -1;
+            if (index < 0) return;
+
+            shell.Navigate(index);
+            e.Handled = true;
         }
 
         // ------------------------------------------------------------------ dimensions

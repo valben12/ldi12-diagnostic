@@ -121,6 +121,27 @@ namespace LDI12.App.ViewModels
         public bool NeedsConfirmation => Descriptor.Risk >= ActionRisk.Moderate;
 
         public bool HasPreview => _preview != null;
+
+        private bool _isHighlighted;
+        private string? _recommendation;
+
+        /// <summary>Désignée depuis la vue d'ensemble ou un constat : encadrée, et amenée à l'écran.</summary>
+        public bool IsHighlighted { get => _isHighlighted; internal set => Set(ref _isHighlighted, value); }
+
+        /// <summary>
+        /// La recommandation du diagnostic qui la propose : « Corriger la configuration DNS ».
+        /// </summary>
+        /// <remarks>
+        /// Quinze opérations au même niveau ne disent pas laquelle sert ici. Celles que le diagnostic
+        /// de cette machine recommande passent en tête, et disent pourquoi.
+        /// </remarks>
+        public string? Recommendation
+        {
+            get => _recommendation;
+            internal set { if (Set(ref _recommendation, value)) Raise(nameof(IsRecommended)); }
+        }
+
+        public bool IsRecommended => _recommendation != null;
         public string PreviewSummary => _preview?.Summary ?? string.Empty;
         public IReadOnlyList<string> WillDo => _preview?.WillDo ?? Array.Empty<string>();
         public IReadOnlyList<string> WillNotDo => _preview?.WillNotDo ?? Array.Empty<string>();
@@ -385,6 +406,78 @@ namespace LDI12.App.ViewModels
                   "invite Windows, une seule fois pour toute la session.";
         }
 
+        /// <summary>
+        /// Désigne une opération : encadrée quelques secondes, et amenée à l'écran par la vue.
+        /// </summary>
+        public void Highlight(string actionId)
+        {
+            RepairActionItem? target = null;
+            foreach (var item in Items)
+            {
+                item.IsHighlighted = false;
+                if (target == null && string.Equals(item.Descriptor.Id, actionId, StringComparison.OrdinalIgnoreCase)) target = item;
+            }
+
+            if (target == null) return;
+            target.IsHighlighted = true;
+
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            timer.Tick += (_, __) =>
+            {
+                timer.Stop();
+                target.IsHighlighted = false;
+            };
+            timer.Start();
+        }
+
+        /// <summary>Les opérations que ce diagnostic recommande passent en tête, avec leur raison.</summary>
+        private void ApplyRecommendations()
+        {
+            var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var recommendation in _snapshot?.Recommendations ?? Array.Empty<Recommendation>())
+                if (recommendation.LinkedAction != null && !reasons.ContainsKey(recommendation.LinkedAction))
+                    reasons[recommendation.LinkedAction] = recommendation.Title;
+
+            foreach (var item in Items)
+                item.Recommendation = reasons.TryGetValue(item.Descriptor.Id, out var title) ? title : null;
+
+            // Tri stable : les recommandées d'abord, chacune gardant sa place relative.
+            var ordered = new List<RepairActionItem>(Items);
+            var rank = new Dictionary<RepairActionItem, int>();
+            for (var index = 0; index < ordered.Count; index++) rank[ordered[index]] = index;
+            ordered.Sort((a, b) => a.IsRecommended != b.IsRecommended
+                ? (a.IsRecommended ? -1 : 1)
+                : rank[a].CompareTo(rank[b]));
+
+            for (var index = 0; index < ordered.Count; index++)
+            {
+                var current = Items.IndexOf(ordered[index]);
+                if (current != index) Items.Move(current, index);
+            }
+
+            RecommendedCount = reasons.Count == 0 ? 0 : CountRecommended();
+        }
+
+        private int CountRecommended()
+        {
+            var count = 0;
+            foreach (var item in Items) if (item.IsRecommended) count++;
+            return count;
+        }
+
+        private int _recommendedCount;
+
+        /// <summary>Combien d'opérations ce diagnostic recommande : le dire en tête de l'écran.</summary>
+        public int RecommendedCount
+        {
+            get => _recommendedCount;
+            private set { if (Set(ref _recommendedCount, value)) Raise(nameof(RecommendedText)); }
+        }
+
+        public string RecommendedText => RecommendedCount == 0
+            ? "OPÉRATIONS DISPONIBLES"
+            : "OPÉRATIONS DISPONIBLES · " + RecommendedCount + " RECOMMANDÉE" + (RecommendedCount > 1 ? "S" : "") + " PAR LE DIAGNOSTIC, EN TÊTE";
+
         public async void Update(SystemSnapshot snapshot)
         {
             _snapshot = snapshot;
@@ -409,6 +502,7 @@ namespace LDI12.App.ViewModels
         {
             SyncServiceItems();
             ApplyParameters();
+            ApplyRecommendations();
 
             foreach (var item in Items) await item.RefreshReadinessAsync().ConfigureAwait(true);
         }

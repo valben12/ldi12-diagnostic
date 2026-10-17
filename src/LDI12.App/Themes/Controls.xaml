@@ -240,6 +240,11 @@
                          s'ouvre désormais à sa plus petite taille. Au pas précédent, les quatre
                          dernières (dont les réglages et cette page) passaient sous le bord.
                          Une entrée qu'il faut deviner en faisant défiler n'existe qu'à moitié. -->
+                    <StackPanel>
+                    <!-- Le filet qui ouvre un groupe : diagnostic, mesures, intervention, comptes
+                         rendus, logiciel. Neuf points de haut en tout, la barre tient entière. -->
+                    <Border x:Name="GroupRule" Height="1" Margin="22,4,22,4" Visibility="Collapsed"
+                            Background="{DynamicResource Brush.BorderSubtle}" />
                     <Grid Height="30" Margin="10,1" Background="Transparent">
                         <Border x:Name="Hover" Opacity="0" CornerRadius="9"
                                 Background="{DynamicResource Brush.SurfaceHover}" />
@@ -255,7 +260,11 @@
                         </Border>
                         <ContentPresenter Margin="16,0,12,0" VerticalAlignment="Center" />
                     </Grid>
+                    </StackPanel>
                     <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding StartsGroup}" Value="True">
+                            <Setter TargetName="GroupRule" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Trigger.EnterActions>
                                 <BeginStoryboard>

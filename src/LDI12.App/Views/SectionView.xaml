@@ -71,6 +71,11 @@
                                     <TextBlock Text="{Binding TechnicalDetail}" Style="{StaticResource Text.Body}"
                                                Margin="19,8,0,0" MaxWidth="1100" HorizontalAlignment="Left" />
 
+                                    <!-- Ce que le logiciel sait faire contre ce constat, à un clic. -->
+                                    <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
+                                            Command="{Binding Link.OpenCommand}" HorizontalAlignment="Left" Margin="19,10,0,0"
+                                            Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+
                                     <!-- Niveau 3 : explication client et mesures à l'appui -->
                                     <Expander Style="{StaticResource Detail}" Margin="19,10,0,0"
                                               Header="Explication client et mesures">

@@ -36,7 +36,21 @@ namespace LDI12.App.ViewModels
             }
             Evidence = lines;
             HasEvidence = lines.Count > 0;
+
+            // La première recommandation de ce constat qui mène à une opération du logiciel.
+            foreach (var id in finding.Recommendations)
+                if (LDI12.Engine.Recommendations.RecommendationCatalog.TryGet(id, out var recommendation) &&
+                    recommendation.LinkedAction != null)
+                {
+                    Link = ActionLink.For(recommendation.LinkedAction);
+                    break;
+                }
         }
+
+        /// <summary>L'opération qui corrige ce constat, quand le logiciel la porte.</summary>
+        public ActionLink? Link { get; }
+
+        public bool HasLink => Link != null;
 
         public Severity Severity { get; }
         public string RuleId { get; }
@@ -107,7 +121,13 @@ namespace LDI12.App.ViewModels
             PriorityLabel = Labels.Describe(recommendation.Priority);
             EffortLabel = Labels.Describe(recommendation.Effort);
             RequiresHardware = recommendation.RequiresHardwarePurchase;
+            Link = ActionLink.For(recommendation.LinkedAction);
         }
+
+        /// <summary>Le bouton qui mène à l'opération recommandée, quand le logiciel la porte.</summary>
+        public ActionLink? Link { get; }
+
+        public bool HasLink => Link != null;
 
         public string Rank { get; }
         public string Title { get; }

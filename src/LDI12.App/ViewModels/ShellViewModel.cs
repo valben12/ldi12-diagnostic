@@ -34,6 +34,22 @@ namespace LDI12.App.ViewModels
         public object Content { get; }
 
         /// <summary>
+        /// Première entrée d'un groupe : un filet la sépare de la précédente.
+        /// </summary>
+        /// <remarks>
+        /// Dix-sept entrées à plat se lisent comme une liste à parcourir. Groupées (le diagnostic,
+        /// les mesures, ce qu'on fait sur la machine, ce qu'on rend au client, le logiciel), elles
+        /// se lisent comme le déroulé d'une intervention. Un filet plutôt qu'un titre : la barre
+        /// doit tenir entière dans la plus petite fenêtre.
+        /// </remarks>
+        public bool StartsGroup { get; init; }
+
+        /// <summary>Le raccourci clavier qui ouvre l'écran, « Ctrl+3 » ; nul au-delà du neuvième.</summary>
+        public string? Shortcut { get; set; }
+
+        public string Tip => Shortcut == null ? Title : Title + "  (" + Shortcut + ")";
+
+        /// <summary>
         /// Pastille de sévérité : le technicien voit où sont les problèmes sans ouvrir les onglets.
         /// </summary>
         public Severity? Worst
@@ -157,23 +173,76 @@ namespace LDI12.App.ViewModels
                 NavSection("Réseau", "Icon.Globe", DiagnosticCategory.Network),
                 NavSection("Sécurité", "Icon.Shield", DiagnosticCategory.Security),
                 NavSection("Performances", "Icon.Activity", DiagnosticCategory.Performance),
-                new NavigationItem("Surveillance", "Icon.Pulse", _monitoring),
+                new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
                 new NavigationItem("Mesures", "Icon.Gauge", _measures),
-                new NavigationItem("Réparations", "Icon.Wrench", _repairs),
+                new NavigationItem("Réparations", "Icon.Wrench", _repairs) { StartsGroup = true },
                 new NavigationItem("Nettoyage", "Icon.Trash", _cleanup),
                 new NavigationItem("Données", "Icon.Archive", _userData),
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
-                new NavigationItem("Rapports", "Icon.FileText", _reports),
+                new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
                 new NavigationItem("Historique", "Icon.History", _history),
-                new NavigationItem("Réglages", "Icon.Sliders", _settingsScreen),
+                new NavigationItem("Réglages", "Icon.Sliders", _settingsScreen) { StartsGroup = true },
 
                 // En dernier, et après les réglages : c'est l'écran qu'on ouvre par curiosité ou
                 // pour retrouver une adresse, jamais au milieu d'un diagnostic.
                 new NavigationItem("À propos", "Icon.Info", _about),
             };
 
+            for (var index = 0; index < Navigation.Count && index < 9; index++)
+                Navigation[index].Shortcut = "Ctrl+" + (index + 1).ToString(CultureInfo.InvariantCulture);
+
             SelectedNavigation = Navigation[0];
             _isDarkTheme = ThemeManager.Current == AppTheme.Dark;
+            ActionNavigator.Open = OpenAction;
+        }
+
+        /// <summary>
+        /// Ouvre l'écran où se fait une opération, et l'y désigne.
+        /// </summary>
+        /// <remarks>
+        /// Une console de Windows mène aux Outils, le nettoyage et la sauvegarde à leur écran ;
+        /// tout le reste aux Réparations, où la carte est encadrée et amenée à l'écran.
+        /// </remarks>
+        public void OpenAction(string actionId)
+        {
+            if (string.IsNullOrWhiteSpace(actionId)) return;
+
+            if (actionId.StartsWith(LDI12.Actions.ActionIds.ToolPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                Show(_tools);
+                _tools.Highlight(actionId);
+            }
+            else if (string.Equals(actionId, LDI12.Actions.ActionIds.Cleanup, StringComparison.OrdinalIgnoreCase))
+            {
+                Show(_cleanup);
+            }
+            else if (string.Equals(actionId, LDI12.Actions.ActionIds.BackupUserData, StringComparison.OrdinalIgnoreCase))
+            {
+                // Pendant un transfert, l'écran reste sur lui : on ne quitte pas une copie par mégarde.
+                if (_userData.CanChangeMode) _userData.ShowMode("backup");
+                Show(_userData);
+            }
+            else
+            {
+                Show(_repairs);
+                _repairs.Highlight(actionId);
+            }
+        }
+
+        /// <summary>Ctrl+1 à Ctrl+9 : l'écran de ce rang dans la barre latérale.</summary>
+        public void Navigate(int index)
+        {
+            if (index >= 0 && index < Navigation.Count) SelectedNavigation = Navigation[index];
+        }
+
+        private void Show(object content)
+        {
+            foreach (var item in Navigation)
+                if (ReferenceEquals(item.Content, content))
+                {
+                    SelectedNavigation = item;
+                    return;
+                }
         }
 
         public ObservableCollection<NavigationItem> Navigation { get; }

@@ -30,8 +30,18 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource ToolCard}" Padding="18,15" Margin="0,0,0,10"
-                                local:Motion.Entrance="True">
+                        <Border Padding="18,15" Margin="0,0,0,10" local:Motion.Entrance="True"
+                                local:Reveal.When="{Binding IsHighlighted}">
+                            <Border.Style>
+                                <Style TargetType="Border" BasedOn="{StaticResource ToolCard}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <!-- Le bouton en pied : d'une carte à sa voisine de rangée, les deux
                                  « Ouvrir » sont alignés. -->
                             <DockPanel LastChildFill="True">

@@ -25,7 +25,8 @@ namespace LDI12.Actions
             ILdiLogger logger,
             SystemSnapshot? snapshot = null,
             IReadOnlyDictionary<string, string>? parameters = null,
-            ISecretProtector? secrets = null)
+            ISecretProtector? secrets = null,
+            ISystemControl? control = null)
         {
             Platform = platform ?? throw new ArgumentNullException(nameof(platform));
             Processes = processes ?? throw new ArgumentNullException(nameof(processes));
@@ -37,6 +38,7 @@ namespace LDI12.Actions
             Snapshot = snapshot;
             Parameters = parameters ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             Secrets = secrets ?? NoSecretProtector.Instance;
+            Control = control ?? NoSystemControl.Instance;
         }
 
         public IPlatformInfo Platform { get; }
@@ -49,6 +51,9 @@ namespace LDI12.Actions
 
         /// <summary>Le chiffrement de Windows pour le compte sous lequel l'action tourne.</summary>
         public ISecretProtector Secrets { get; }
+
+        /// <summary>Gestes natifs sur le système : périphériques, services, alimentation, Windows Update.</summary>
+        public ISystemControl Control { get; }
 
         /// <summary>
         /// Le dernier diagnostic, quand il existe.
@@ -67,10 +72,10 @@ namespace LDI12.Actions
             => Parameters.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
         public ActionContext With(IReadOnlyDictionary<string, string> parameters)
-            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, Snapshot, parameters, Secrets);
+            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, Snapshot, parameters, Secrets, Control);
 
         public ActionContext With(SystemSnapshot? snapshot)
-            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, snapshot, Parameters, Secrets);
+            => new ActionContext(Platform, Processes, Launcher, Files, Registry, Restore, Logger, snapshot, Parameters, Secrets, Control);
     }
 
     /// <summary>

@@ -24,7 +24,7 @@ namespace LDI12.Assistant
     public static class MachineData
     {
         /// <summary>Au-delà, la section est tronquée et Claude est invité à filtrer.</summary>
-        public const int MaxCharacters = 60_000;
+        public const int MaxCharacters = 20_000;
 
         public static readonly IReadOnlyDictionary<string, string> Sections = new Dictionary<string, string>
         {
@@ -52,11 +52,11 @@ namespace LDI12.Assistant
                 "machine" => new { snapshot.Machine, snapshot.Platform },
                 "hardware" => snapshot.Hardware,
                 "storage" => snapshot.Storage,
-                "devices" => Filter(snapshot.Windows.Devices, query),
-                "drivers" => Filter(snapshot.Windows.Drivers, query),
+                "devices" => Lines(Filter(snapshot.Windows.Devices, query), d => DeviceLine((DeviceInfo)d)),
+                "drivers" => Lines(Filter(snapshot.Windows.Drivers, query), d => DriverLine((DriverInfo)d)),
                 "events" => snapshot.Windows.Events,
-                "services" => Filter(snapshot.Windows.Services, query),
-                "startup" => new { snapshot.Windows.Startup, snapshot.Windows.Tasks },
+                "services" => Lines(Filter(snapshot.Windows.Services, query), s => ServiceLine((ServiceInfo)s)),
+                "startup" => Lines(Filter(snapshot.Windows.Startup, query), s => StartupLine((StartupItem)s)),
                 "windows" => new
                 {
                     snapshot.Windows.Install,
@@ -75,11 +75,46 @@ namespace LDI12.Assistant
             if (content == null)
                 return "Section inconnue. Sections disponibles : " + string.Join(", ", Sections.Keys) + ".";
 
-            var json = JsonConvert.SerializeObject(content, SnapshotSerializer.CreateSettings(indented: false));
+            var json = content as string ?? JsonConvert.SerializeObject(content, SnapshotSerializer.CreateSettings(indented: false));
             if (json.Length <= MaxCharacters) return json;
             return json.Substring(0, MaxCharacters)
                    + " … [tronqué : " + json.Length + " caractères au total. Relancez avec un filtre « query » pour cibler.]";
         }
+
+        /// <summary>Une liste en lignes de texte : trois à cinq fois moins de jetons que le même contenu en JSON.</summary>
+        private static string Lines(object items, Func<object, string> line)
+        {
+            var text = new System.Text.StringBuilder();
+            var count = 0;
+            foreach (var item in (IEnumerable)items)
+            {
+                if (item == null) continue;
+                text.AppendLine(line(item));
+                count++;
+            }
+            return count == 0 ? "aucun élément" : count + " élément(s)\n" + text;
+        }
+
+        internal static string DeviceLine(DeviceInfo device)
+            => device.Name + " | classe " + (device.DeviceClass ?? "?") + " | " + (device.Manufacturer ?? "?")
+               + " | code " + device.ProblemCode + (device.ProblemLabel != null ? " (" + device.ProblemLabel + ")" : string.Empty)
+               + (device.IsDisabled ? " | désactivé" : string.Empty) + " | id " + (device.HardwareId ?? "?");
+
+        internal static string DriverLine(DriverInfo driver)
+            => driver.DeviceName + " | " + (driver.DeviceClass ?? "?") + " | " + (driver.Manufacturer ?? "?")
+               + " | v" + (driver.Version ?? "?")
+               + (driver.Date.HasValue ? " | " + driver.Date.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : string.Empty)
+               + (driver.InfName != null ? " | " + driver.InfName : string.Empty)
+               + (driver.IsMicrosoftGeneric ? " | GÉNÉRIQUE MICROSOFT" : string.Empty)
+               + (driver.IsSigned == false ? " | NON SIGNÉ" : string.Empty);
+
+        internal static string ServiceLine(ServiceInfo service)
+            => service.Name + " (" + service.DisplayName + ") | " + service.State + " | " + service.StartMode
+               + (service.Deviation != null ? " | ANOMALIE : " + service.Deviation : string.Empty);
+
+        internal static string StartupLine(StartupItem item)
+            => item.Name + " | " + item.Location + (item.Publisher != null ? " | " + item.Publisher : string.Empty)
+               + (item.TargetMissing ? " | CIBLE ABSENTE" : string.Empty) + " | " + MachineBrief.Short(item.Command, 90);
 
         /// <summary>Les éléments d'une liste dont la sérialisation contient le texte cherché, sans tenir compte de la casse.</summary>
         private static object Filter(IEnumerable items, string? query)

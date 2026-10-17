@@ -51,7 +51,8 @@ namespace LDI12.App.Services
 
                 var context = new ActionContext(
                     services.Platform, services.Processes, services.Launcher, services.Files,
-                    services.Registry, services.Restore, _logger, _snapshot, secrets: new DpapiSecretProtector());
+                    services.Registry, services.Restore, _logger, _snapshot, secrets: new DpapiSecretProtector(),
+                    control: services.Control);
 
                 return _runner = new ActionRunner(context, Journal, _logger, _channel);
             }

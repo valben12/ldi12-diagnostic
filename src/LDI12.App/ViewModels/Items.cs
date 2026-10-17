@@ -25,6 +25,8 @@ namespace LDI12.App.ViewModels
             TechnicalDetail = finding.TechnicalDetail;
             PlainExplanation = finding.PlainExplanation;
             Subject = finding.Subject;
+            SolveCommand = new LDI12.App.Mvvm.RelayCommand(
+                () => ActionNavigator.Solve?.Invoke(finding.Title, finding.TechnicalDetail));
 
             var lines = new List<string>();
             foreach (var evidence in finding.Evidence)
@@ -51,6 +53,11 @@ namespace LDI12.App.ViewModels
         public ActionLink? Link { get; }
 
         public bool HasLink => Link != null;
+
+        /// <summary>« Analyser avec l'assistant » : la cause et le plan, à partir de ce seul constat.</summary>
+        public System.Windows.Input.ICommand SolveCommand { get; }
+
+        public bool CanSolve => Severity >= Severity.Warning;
 
         public Severity Severity { get; }
         public string RuleId { get; }

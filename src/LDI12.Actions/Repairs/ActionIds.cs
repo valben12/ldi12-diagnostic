@@ -65,6 +65,39 @@
         /// <summary>Copie, depuis un cliché instantané, des fichiers qu'un programme tenait ouverts.</summary>
         public const string CopyOpenFiles = "BACKUP-OPEN-FILES";
 
+        /// <summary>« Rechercher les modifications sur le matériel ».</summary>
+        public const string RescanDevices = "DEVICE-RESCAN";
+
+        /// <summary>Redémarrer le pilote d'un périphérique (paramètre « device »).</summary>
+        public const string RestartDevice = "DEVICE-RESTART";
+
+        /// <summary>Réactiver un périphérique désactivé (paramètre « device »).</summary>
+        public const string EnableDevice = "DEVICE-ENABLE";
+
+        /// <summary>Désinstaller puis redétecter un périphérique (paramètre « device »).</summary>
+        public const string ReinstallDevice = "DEVICE-REINSTALL";
+
+        /// <summary>Installer les pilotes que Windows Update propose (paramètre facultatif « filter »).</summary>
+        public const string DriverUpdates = "DRIVERS-WINDOWS-UPDATE";
+
+        /// <summary>Vider la file d'impression bloquée.</summary>
+        public const string PrintQueueReset = "PRINT-QUEUE-RESET";
+
+        /// <summary>Remettre à zéro le cache de téléchargement de Windows Update.</summary>
+        public const string WindowsUpdateReset = "WINDOWS-UPDATE-RESET";
+
+        /// <summary>Désactiver un programme au démarrage (paramètre « entry »), comme le Gestionnaire des tâches.</summary>
+        public const string StartupDisable = "STARTUP-DISABLE";
+
+        /// <summary>Désactiver le démarrage rapide de Windows.</summary>
+        public const string FastStartupOff = "FAST-STARTUP-OFF";
+
+        /// <summary>Choisir le mode d'alimentation (paramètre « plan » : equilibre ou performances).</summary>
+        public const string PowerPlan = "POWER-PLAN";
+
+        /// <summary>Remettre l'horloge à l'heure.</summary>
+        public const string TimeResync = "TIME-RESYNC";
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

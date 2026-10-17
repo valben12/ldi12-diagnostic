@@ -47,6 +47,17 @@ namespace LDI12.Actions
                 () => new RestartDiscoveryAction(),
                 () => new RemoveRouteAction(),
                 () => new RestartServiceAction(),
+                () => new RescanDevicesAction(),
+                () => new RestartDeviceAction(),
+                () => new EnableDeviceAction(),
+                () => new ReinstallDeviceAction(),
+                () => new DriverUpdatesAction(),
+                () => new PrintQueueResetAction(),
+                () => new WindowsUpdateResetAction(),
+                () => new StartupDisableAction(),
+                () => new FastStartupOffAction(),
+                () => new PowerPlanAction(),
+                () => new TimeResyncAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

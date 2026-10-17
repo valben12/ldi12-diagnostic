@@ -411,8 +411,10 @@ namespace LDI12.App.ViewModels
             Items.Clear();
             foreach (var action in ActionCatalog.CreateAll(_logger))
             {
-                // Le redémarrage de service ne se propose que rattaché à un service précis.
-                if (action.Descriptor.Id == ActionIds.RestartService) continue;
+                // Le redémarrage de service ne se propose que rattaché à un service précis, et les
+                // gestes sur un périphérique ou une entrée de démarrage n'existent que désignés par
+                // un plan de l'assistant : seuls, ils n'auraient rien sur quoi porter.
+                if (PlanOnly.ContainsKey(action.Descriptor.Id)) continue;
                 if (action.Descriptor.Id == ActionIds.Cleanup) continue;
 
                 // Les pilotes et les applications d'une sauvegarde se traitent avec elle, sur
@@ -440,19 +442,40 @@ namespace LDI12.App.ViewModels
                   "invite Windows, une seule fois pour toute la session.";
         }
 
-        /// <summary>Les opérations qu'un plan de Claude peut proposer, telles que Claude les lit.</summary>
+        /// <summary>Les opérations qui ne vont qu'avec leur paramètre, et ce qu'il désigne, tel que l'assistant le lit.</summary>
+        private static readonly Dictionary<string, string> PlanOnly = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ActionIds.RestartService] = "service : nom court du service Windows (par exemple Spooler)",
+            [ActionIds.RestartDevice] = "device : identifiant d'instance du périphérique, tel que dans la section devices",
+            [ActionIds.EnableDevice] = "device : identifiant d'instance du périphérique désactivé",
+            [ActionIds.ReinstallDevice] = "device : identifiant d'instance du périphérique en erreur",
+            [ActionIds.StartupDisable] = "entry : nom de l'entrée de démarrage, tel que dans la section startup",
+        };
+
+        /// <summary>Les paramètres facultatifs des opérations proposées seules.</summary>
+        private static readonly Dictionary<string, string> OptionalParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ActionIds.DriverUpdates] = "filter (facultatif) : ne garder que les pilotes dont le nom contient ce texte",
+            [ActionIds.PowerPlan] = "plan : equilibre ou performances",
+        };
+
+        /// <summary>Les opérations qu'un plan de l'assistant peut proposer, telles que l'assistant les lit.</summary>
         public IReadOnlyList<LDI12.Assistant.AvailableAction> PlanCatalog()
         {
             var catalog = new List<LDI12.Assistant.AvailableAction>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in Items)
             {
-                if (!item.IsAvailable || !seen.Add(item.Descriptor.Id) || item.Descriptor.Id == ActionIds.RestartService) continue;
-                catalog.Add(Describe(item.Descriptor, null));
+                if (!item.IsAvailable || !seen.Add(item.Descriptor.Id) || PlanOnly.ContainsKey(item.Descriptor.Id)) continue;
+                OptionalParameters.TryGetValue(item.Descriptor.Id, out var parameter);
+                catalog.Add(Describe(item.Descriptor, parameter));
             }
 
-            var restart = ActionCatalog.Find(ActionIds.RestartService, _logger);
-            if (restart != null) catalog.Add(Describe(restart.Descriptor, "service : nom court du service Windows (par exemple Spooler)"));
+            foreach (var entry in PlanOnly)
+            {
+                var action = ActionCatalog.Find(entry.Key, _logger);
+                if (action != null) catalog.Add(Describe(action.Descriptor, entry.Value));
+            }
             return catalog;
         }
 
@@ -460,11 +483,12 @@ namespace LDI12.App.ViewModels
         public async Task<(bool Succeeded, string Summary)?> RunFromPlanAsync(string actionId, IReadOnlyDictionary<string, string> parameters)
         {
             RepairActionItem? item = null;
-            if (string.Equals(actionId, ActionIds.RestartService, StringComparison.OrdinalIgnoreCase))
+            if (PlanOnly.ContainsKey(actionId))
             {
-                var action = ActionCatalog.Find(ActionIds.RestartService, _logger);
-                if (action == null || !parameters.TryGetValue("service", out var service) || string.IsNullOrWhiteSpace(service)) return null;
-                item = new RepairActionItem(this, action, "Redémarrer le service « " + service + " »");
+                // Un geste désigné : créé pour l'occasion, avec ce qu'il vise.
+                var action = ActionCatalog.Find(actionId, _logger);
+                if (action == null || parameters.Count == 0) return null;
+                item = new RepairActionItem(this, action);
             }
             else
             {
@@ -642,6 +666,17 @@ namespace LDI12.App.ViewModels
                 if (volume.IsSystemVolume.Or(false) && volume.DriveLetter.HasValue)
                     return volume.DriveLetter.Value;
             return null;
+        }
+
+        /// <summary>
+        /// Un point de restauration avant un plan qui modifie le système, s'il n'y en a pas déjà
+        /// un de cette session. Rend le compte rendu en une phrase.
+        /// </summary>
+        public async Task<string> EnsureRestorePointAsync()
+        {
+            if (_restoreDone) return "Point de restauration déjà créé pendant cette intervention.";
+            await CreateRestorePointAsync().ConfigureAwait(true);
+            return RestoreStatus;
         }
 
         private async Task CreateRestorePointAsync()

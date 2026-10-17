@@ -213,6 +213,11 @@ namespace LDI12.App.ViewModels
             SelectedNavigation = Navigation[0];
             _isDarkTheme = ThemeManager.Current == AppTheme.Dark;
             ActionNavigator.Open = OpenAction;
+            ActionNavigator.Solve = (title, detail) =>
+            {
+                Show(_assistant);
+                _ = _assistant.SolveAsync(title, detail);
+            };
             Search = new SearchViewModel(SearchEntries);
         }
 

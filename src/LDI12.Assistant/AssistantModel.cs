@@ -92,6 +92,12 @@ namespace LDI12.Assistant
 
         /// <summary>Recherches web faites en cours d'analyse.</summary>
         public int WebSearches { get; init; }
+
+        /// <summary>Ce que l'analyse a coûté, en dollars, au tarif public.</summary>
+        public double CostDollars { get; init; }
+
+        /// <summary>Repris d'une analyse identique déjà faite : rien n'a été consommé.</summary>
+        public bool FromCache { get; init; }
     }
 
     /// <summary>Une analyse qui n'a pas abouti, avec une phrase pour le technicien.</summary>

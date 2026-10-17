@@ -34,7 +34,18 @@ namespace LDI12.Assistant
     {
         public const string Model = "claude-opus-5-5";
 
-        private const int MaxTurns = 16;
+        /// <summary>
+        /// Huit tours au plus : la fiche envoyée d'emblée suffit le plus souvent, et chaque tour
+        /// renvoie toute la conversation. Au-delà, l'analyse coûte sans éclairer davantage.
+        /// </summary>
+        private const int MaxTurns = 8;
+
+        // Tarif public de Claude Opus 5.5, en dollars par million de jetons, et par recherche web.
+        private const double InputPrice = 4.0;
+        private const double CacheWritePrice = 5.0;
+        private const double CacheReadPrice = 0.20;
+        private const double OutputPrice = 20.0;
+        private const double SearchPrice = 0.01;
 
         private readonly AnthropicClient _client;
 
@@ -66,14 +77,18 @@ namespace LDI12.Assistant
             actions ??= Array.Empty<AvailableAction>();
 
             var known = new HashSet<string>(actions.Select(a => a.Id), StringComparer.OrdinalIgnoreCase);
-            var messages = new List<BetaMessageParam> { new() { Role = Role.User, Content = Task(request) } };
-            long input = 0, output = 0;
+            var messages = new List<BetaMessageParam>
+            {
+                new() { Role = Role.User, Content = Task(request) + "\n" + MachineBrief.Compose(snapshot, request.Mode) },
+            };
+            long input = 0, output = 0, cacheWrite = 0, cacheRead = 0;
             var searches = 0;
+            var drivers = request.Mode == AssistantMode.Drivers;
 
             var tools = new List<BetaToolUnion> { ReadTool(), PlanTool() };
             // La recherche web sert surtout aux pilotes : versions publiées par le constructeur,
             // problèmes connus d'une version. Bornée : une analyse ne doit pas devenir une enquête.
-            tools.Insert(0, new BetaWebSearchTool20260209 { MaxUses = request.Mode == AssistantMode.Drivers ? 6 : 3 });
+            tools.Insert(0, new BetaWebSearchTool20260209 { MaxUses = drivers ? 3 : 2 });
 
             progress?.Report("Lecture du diagnostic…");
 
@@ -87,10 +102,16 @@ namespace LDI12.Assistant
                     response = await _client.Beta.Messages.Create(new MessageCreateParams
                     {
                         Model = Model,
-                        MaxTokens = 16000,
+                        MaxTokens = 8000,
                         Betas = new List<ApiEnum<string, AnthropicBeta>> { AnthropicBeta.ServerSideFallback2026_07_01 },
                         Fallbacks = new Default(),
-                        OutputConfig = new BetaOutputConfig { Effort = Effort.Medium },
+                        // Les pilotes se jugent sur des faits (versions, dates, codes) : un effort
+                        // modeste suffit et réduit la réflexion facturée. Un problème décrit en
+                        // quelques mots demande davantage de raisonnement.
+                        OutputConfig = new BetaOutputConfig { Effort = drivers ? Effort.Low : Effort.Medium },
+                        // Cache placé à chaque tour sur le dernier bloc : les tours suivants relisent
+                        // la conversation au vingtième du prix au lieu de la repayer entière.
+                        CacheControl = new BetaCacheControlEphemeral(),
                         System = new List<BetaTextBlockParam>
                         {
                             new() { Text = SystemPrompt(actions), CacheControl = new BetaCacheControlEphemeral() },
@@ -106,6 +127,8 @@ namespace LDI12.Assistant
 
                 input += response.Usage.InputTokens;
                 output += response.Usage.OutputTokens;
+                cacheWrite += response.Usage.CacheCreationInputTokens ?? 0;
+                cacheRead += response.Usage.CacheReadInputTokens ?? 0;
 
                 if (response.StopReason == BetaStopReason.Refusal)
                     throw new AssistantException("Cette analyse a été refusée. Reformulez le problème, ou passez par les réparations.");
@@ -176,9 +199,11 @@ namespace LDI12.Assistant
                         Confidence = plan.Confidence,
                         Findings = plan.Findings,
                         Steps = plan.Steps,
-                        InputTokens = input,
+                        InputTokens = input + cacheWrite + cacheRead,
                         OutputTokens = output,
                         WebSearches = searches,
+                        CostDollars = (input * InputPrice + cacheWrite * CacheWritePrice + cacheRead * CacheReadPrice + output * OutputPrice) / 1_000_000
+                                      + searches * SearchPrice,
                     };
                 }
 
@@ -210,7 +235,9 @@ namespace LDI12.Assistant
                 text.AppendLine("Repère : périphériques sans pilote ou en erreur, pilotes génériques Microsoft là où le constructeur en fournit un,");
                 text.AppendLine("pilotes très anciens ou connus pour poser problème (carte graphique, chipset, stockage, réseau, Wi-Fi, audio),");
                 text.AppendLine("pilotes non signés, et ce que les journaux (écrans bleus, erreurs) attribuent à un pilote.");
-                text.AppendLine("Vérifie sur le web les versions récentes publiées par le constructeur pour les pilotes importants.");
+                text.AppendLine("Ne cherche sur le web que pour un pilote qui pose vraiment question (au plus trois recherches).");
+                text.AppendLine("Pour installer des pilotes, préfère DRIVERS-WINDOWS-UPDATE (avec filter) ; pour un périphérique en erreur,");
+                text.AppendLine("DEVICE-REINSTALL puis DEVICE-RESCAN ; pour un périphérique désactivé, DEVICE-ENABLE.");
             }
             else
             {
@@ -222,7 +249,8 @@ namespace LDI12.Assistant
             if (!string.IsNullOrWhiteSpace(request.Notes))
                 text.AppendLine("Ce que dit le client : « " + request.Notes!.Trim() + " »");
 
-            text.AppendLine("Lis les sections utiles du diagnostic, puis appelle submit_plan.");
+            text.AppendLine("La fiche de la machine suit. Si elle suffit, appelle directement submit_plan ;");
+            text.AppendLine("sinon lis seulement la section qui manque, filtrée si possible.");
             return text.ToString();
         }
 
@@ -233,13 +261,16 @@ namespace LDI12.Assistant
             text.AppendLine("Tu travailles en arrière-plan : personne ne lit tes messages, aucun humain ne peut te répondre.");
             text.AppendLine("Ne pose aucune question. Ce que tu ne peux pas établir, dis-le dans le plan, avec ta confiance.");
             text.AppendLine();
-            text.AppendLine("Tes sources : l'outil read_machine_data (le relevé complet que LDI12 vient de faire de la machine),");
-            text.AppendLine("et la recherche web pour les versions de pilotes et les problèmes connus. N'invente aucune donnée de la machine.");
+            text.AppendLine("Tes sources : la fiche de la machine jointe à la demande, l'outil read_machine_data pour le détail d'une");
+            text.AppendLine("section (relevé que LDI12 vient de faire), et la recherche web avec parcimonie. N'invente aucune donnée.");
+            text.AppendLine("Sois économe : chaque lecture est renvoyée à tous les tours suivants. Ne relis pas ce que la fiche dit déjà.");
             text.AppendLine();
             text.AppendLine("Ton rendu : un seul appel à submit_plan. Le technicien voit le plan, et le lance d'un clic.");
             text.AppendLine("- En français, phrases courtes et concrètes, pour un technicien. Pas de jargon inutile.");
             text.AppendLine("- Étapes dans l'ordre où les faire, les moins risquées d'abord. Pas plus de huit.");
-            text.AppendLine("- Une étape automatique désigne une opération de LDI12 par son identifiant exact, pris dans la liste ci-dessous.");
+            text.AppendLine("- Une étape automatique désigne une opération de LDI12 par son identifiant exact, pris dans la liste ci-dessous,");
+            text.AppendLine("  avec ses paramètres (par exemple device = l'identifiant « id » du périphérique dans la fiche).");
+            text.AppendLine("- Préfère toujours une opération de LDI12 à un geste manuel quand elle fait la même chose.");
             text.AppendLine("- Ce qu'aucune opération ne fait (télécharger un pilote chez le constructeur, changer une pièce, un réglage du BIOS)");
             text.AppendLine("  devient une étape manuelle : action_id vide, et dans « manual » le geste précis. Pour un téléchargement,");
             text.AppendLine("  donne le site officiel du constructeur trouvé par ta recherche, jamais une adresse supposée.");

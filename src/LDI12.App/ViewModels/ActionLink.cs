@@ -18,6 +18,9 @@ namespace LDI12.App.ViewModels
     {
         /// <summary>Ouvre l'opération désignée par son identifiant. Nul tant que la coquille n'est pas prête.</summary>
         public static Action<string>? Open { get; set; }
+
+        /// <summary>Confie un constat à l'assistant : titre et détail. Nul tant que la coquille n'est pas prête.</summary>
+        public static Action<string, string>? Solve { get; set; }
     }
 
     /// <summary>Un bouton qui mène à une opération : son libellé dit où il conduit.</summary>

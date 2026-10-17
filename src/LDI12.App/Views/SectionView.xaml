@@ -67,9 +67,20 @@
                                                Margin="19,8,0,0" MaxWidth="1100" HorizontalAlignment="Left" />
 
                                     <!-- Ce que le logiciel sait faire contre ce constat, à un clic. -->
-                                    <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
-                                            Command="{Binding Link.OpenCommand}" HorizontalAlignment="Left" Margin="19,10,0,0"
-                                            Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+                                    <WrapPanel Margin="19,10,0,0">
+                                        <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
+                                                Command="{Binding Link.OpenCommand}" Margin="0,0,8,0"
+                                                Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+                                        <!-- La cause et le plan, en un clic, quand le constat ne suffit pas à lui seul. -->
+                                        <Button Style="{StaticResource Button.Ghost}" Command="{Binding SolveCommand}"
+                                                Visibility="{Binding CanSolve, Converter={StaticResource BoolToVisibility}}">
+                                            <DockPanel>
+                                                <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="13" Height="13" Margin="0,0,6,0"
+                                                      Data="{StaticResource Icon.Sparkles}" Stroke="{DynamicResource Brush.BrandRed}" />
+                                                <TextBlock Text="Analyser avec l'assistant" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </Button>
+                                    </WrapPanel>
 
                                     <!-- Niveau 3 : explication client et mesures à l'appui -->
                                     <Expander Style="{StaticResource Detail}" Margin="19,10,0,0"

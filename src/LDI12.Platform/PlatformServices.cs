@@ -67,6 +67,7 @@ namespace LDI12.Platform
             Restore = restore;
             StorageBenchmarks = storageBenchmarks;
             Logger = logger;
+            Control = new SystemControl(platform, logger);
         }
 
         public IPlatformInfo Platform { get; }
@@ -97,6 +98,9 @@ namespace LDI12.Platform
         public IProcessLauncher Launcher { get; }
 
         public ISystemRestoreGateway Restore { get; }
+
+        /// <summary>Gestes natifs des réparations : périphériques, services, alimentation, Windows Update.</summary>
+        public ISystemControl Control { get; }
 
         /// <summary>
         /// Mesure du débit réel d'un volume, sans passer par le cache de Windows.

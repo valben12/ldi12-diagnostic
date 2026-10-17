@@ -137,6 +137,19 @@ namespace LDI12.App.ViewModels
         private bool _isApplied;
         private readonly Stopwatch _clock = new Stopwatch();
 
+        /// <summary>
+        /// Les plans déjà obtenus pour ce diagnostic : la même demande sur le même relevé ne se
+        /// repaie pas. Vidé de fait à chaque nouveau diagnostic, qui change l'identifiant.
+        /// </summary>
+        private readonly Dictionary<string, (AssistantPlan Plan, IReadOnlyList<AvailableAction> Actions)> _plans
+            = new Dictionary<string, (AssistantPlan, IReadOnlyList<AvailableAction>)>();
+
+        /// <summary>Les opérations du catalogue qui modifient vraiment le système : un point de restauration les précède.</summary>
+        private readonly HashSet<string> _risky = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Les constats avant application du plan, pour dire ensuite ce qui est réglé.</summary>
+        private HashSet<string>? _before;
+
         public AssistantViewModel(
             ILdiLogger logger, ApiKeyVault vault, Func<SystemSnapshot?> snapshot, Func<Task> runDiagnosis, RepairsViewModel repairs)
         {
@@ -160,7 +173,7 @@ namespace LDI12.App.ViewModels
             CancelCommand = new RelayCommand(() => _running?.Cancel());
             RetryCommand = new AsyncRelayCommand(() => _lastRequest == null ? Task.CompletedTask : RunAsync(_lastRequest, _runTitle));
             ApplyCommand = new AsyncRelayCommand(ApplyAsync, () => !_isApplying && !_isApplied && CheckedCount > 0);
-            VerifyCommand = new AsyncRelayCommand(() => _runDiagnosis());
+            VerifyCommand = new AsyncRelayCommand(VerifyAsync);
 
             Refresh();
         }
@@ -341,6 +354,13 @@ namespace LDI12.App.ViewModels
             StartGuidedCommand.RaiseCanExecuteChanged();
         }
 
+        /// <summary>Un constat confié à l'assistant depuis son écran : l'analyse part aussitôt.</summary>
+        public Task SolveAsync(string title, string detail)
+        {
+            if (IsBusy) return Task.CompletedTask;
+            return RunAsync(new AssistantRequest { Mode = AssistantMode.Guided, Problem = title, Notes = detail }, title);
+        }
+
         private Task StartGuidedAsync()
         {
             var details = new List<string>();
@@ -391,11 +411,24 @@ namespace LDI12.App.ViewModels
                 }
                 if (snapshot == null) throw new AssistantException("Le diagnostic n'a pas abouti : il n'y a rien à analyser.");
 
+                var cacheKey = snapshot.Metadata.SnapshotId + "|" + request.Mode + "|" + request.Problem + "|"
+                               + string.Join(",", request.Details) + "|" + request.Notes;
+                if (_plans.TryGetValue(cacheKey, out var known))
+                {
+                    Show(new AssistantPlan
+                    {
+                        Summary = known.Plan.Summary, Confidence = known.Plan.Confidence,
+                        Findings = known.Plan.Findings, Steps = known.Plan.Steps, FromCache = true,
+                    }, known.Actions);
+                    return;
+                }
+
                 var actions = _repairs.PlanCatalog();
                 var plan = await new ClaudeAnalyst(key)
                     .AnalyseAsync(snapshot, request, actions, progress, cancellation.Token)
                     .ConfigureAwait(true);
 
+                _plans[cacheKey] = (plan, actions);
                 Show(plan, actions);
                 _logger.Info(Category, title + " : " + plan.Steps.Count + " étape(s), " + (plan.InputTokens + plan.OutputTokens) + " jetons.");
             }
@@ -446,9 +479,16 @@ namespace LDI12.App.ViewModels
                 Steps.Add(item);
             }
 
+            _risky.Clear();
+            foreach (var action in actions)
+                if (action.Risk == "modéré" || action.Risk == "élevé") _risky.Add(action.Id);
+
             var seconds = Math.Max(1, (int)Math.Round(_clock.Elapsed.TotalSeconds));
-            CostText = "Analyse en " + seconds + " s  ·  " + ValueFormat.Number(plan.InputTokens + plan.OutputTokens) + " jetons"
-                       + (plan.WebSearches > 0 ? "  ·  " + plan.WebSearches + " recherche(s) web" : string.Empty);
+            CostText = plan.FromCache
+                ? "Même analyse qu'à l'instant, sur le même diagnostic : reprise telle quelle, sans rien consommer."
+                : "Analyse en " + seconds + " s  ·  " + ValueFormat.Number(plan.InputTokens + plan.OutputTokens) + " jetons  ·  "
+                  + plan.CostDollars.ToString("0.00", Formats.French) + " $"
+                  + (plan.WebSearches > 0 ? "  ·  " + plan.WebSearches + " recherche(s) web" : string.Empty);
 
             Raise(nameof(HasFindings));
             Raise(nameof(CheckedCount));
@@ -464,8 +504,18 @@ namespace LDI12.App.ViewModels
             ApplyCommand.RaiseCanExecuteChanged();
 
             int done = 0, failed = 0;
+            _before = Keys(_snapshot());
             try
             {
+                // Une seule opération qui engage le système, et le filet de sécurité passe avant tout.
+                foreach (var step in Steps)
+                {
+                    if (!step.IsChecked || step.Step.ActionId == null || !_risky.Contains(step.Step.ActionId)) continue;
+                    ApplyText = "Point de restauration avant d'agir…";
+                    ApplyText = await _repairs.EnsureRestorePointAsync().ConfigureAwait(true);
+                    break;
+                }
+
                 foreach (var step in Steps)
                 {
                     if (!step.IsChecked || step.Step.ActionId == null) continue;
@@ -502,6 +552,36 @@ namespace LDI12.App.ViewModels
             _logger.Info(Category, "Plan appliqué : " + done + " réussie(s), " + failed + " en échec.");
         }
 
+        /// <summary>Relance un diagnostic complet et dit ce que le plan a réglé.</summary>
+        private async Task VerifyAsync()
+        {
+            ApplyText = "Diagnostic de vérification…";
+            await _runDiagnosis().ConfigureAwait(true);
+            var after = Keys(_snapshot());
+            if (_before == null || after == null)
+            {
+                ApplyText = "Diagnostic refait.";
+                return;
+            }
+
+            var solved = 0;
+            foreach (var key in _before) if (!after.Contains(key)) solved++;
+            var remaining = after.Count;
+            ApplyText = solved == 0 && remaining == 0
+                ? "Vérifié : aucun problème relevé."
+                : "Vérifié : " + solved + " constat(s) réglé(s), " + remaining + " encore présent(s).";
+        }
+
+        /// <summary>Les constats qui comptent, par règle et par sujet : de quoi comparer avant et après.</summary>
+        private static HashSet<string>? Keys(SystemSnapshot? snapshot)
+        {
+            if (snapshot == null) return null;
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var finding in snapshot.Findings)
+                if (finding.Severity >= Severity.Warning) keys.Add(finding.RuleId + "|" + finding.Subject);
+            return keys;
+        }
+
         /// <summary>
         /// Un plan d'exemple, pour les captures d'écran seulement : l'écran de résultat se
         /// contrôle sans compte ni réseau. Jamais appelé en usage normal.
@@ -533,13 +613,24 @@ namespace LDI12.App.ViewModels
                 },
                 Steps = new[]
                 {
-                    new PlanStep { Title = "Réinitialiser la pile réseau", Why = "Efface les réglages laissés par l'ancien pilote.", ActionId = "REPAIR-NETWORK-STACK" },
-                    new PlanStep { Title = "Renouveler l'adresse IP", Why = "Reprend une adresse propre sur la box.", ActionId = "REPAIR-NETWORK-RENEW" },
-                    new PlanStep { Title = "Installer le pilote Wi-Fi du constructeur", Why = "Le générique décroche en veille.", Manual = "Site d'assistance du fabricant du PC, page du modèle, rubrique Wi-Fi." },
+                    new PlanStep
+                    {
+                        Title = "Réinstaller la carte Wi-Fi", Why = "Elle est en erreur (code 43) : un pilote remis à neuf la relance.",
+                        ActionId = "DEVICE-REINSTALL",
+                        Parameters = new Dictionary<string, string> { ["device"] = @"PCI\VEN_10EC&DEV_C821\4&2F0E3F0&0&00E1" },
+                    },
+                    new PlanStep
+                    {
+                        Title = "Installer le pilote Realtek de Windows Update", Why = "Remplace le pilote générique de 2019.",
+                        ActionId = "DRIVERS-WINDOWS-UPDATE", Parameters = new Dictionary<string, string> { ["filter"] = "Realtek" },
+                    },
+                    new PlanStep { Title = "Désactiver le démarrage rapide", Why = "Le pilote repartira à neuf à chaque allumage.", ActionId = "FAST-STARTUP-OFF" },
+                    new PlanStep { Title = "Pilote graphique Intel", Why = "La version 31.0 corrige les écrans noirs.", Manual = "Site d'assistance Intel, outil Driver & Support Assistant." },
                 },
-                InputTokens = 38_400,
-                OutputTokens = 2_150,
-                WebSearches = 2,
+                InputTokens = 9_800,
+                OutputTokens = 1_450,
+                WebSearches = 1,
+                CostDollars = 0.07,
             }, _repairs.PlanCatalog());
         }
 

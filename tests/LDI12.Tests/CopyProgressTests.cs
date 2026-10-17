@@ -46,6 +46,45 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Le_debit_compte_les_octets_mis_en_surete_une_seule_fois_relecture_comprise()
+        {
+            // 80 Mo d'unités par seconde : 40 Mo écrits, puis les mêmes 40 Mo relus.
+            var clock = new Clock();
+            var reports = new List<ActionProgress>();
+            var progress = new CopyProgress(new Sink(reports), 4096 * Mo, 3, "Copie de", clock.Now);
+            progress.Folder("Vidéos");
+
+            for (var i = 0; i < 40; i++)
+            {
+                clock.Advance(TimeSpan.FromMilliseconds(500));
+                progress.Bytes(40 * Mo);
+            }
+
+            var figures = reports.Last().Figures;
+            Assert.NotNull(figures);
+            Assert.InRange(figures!.BytesPerSecond ?? 0, 39.0 * Mo, 41.0 * Mo);
+            Assert.Equal(4096 * Mo, figures.BytesTotal);
+            Assert.Equal(800 * Mo, figures.BytesDone);
+            Assert.Equal(0, figures.FilesDone);
+            Assert.Equal(3, figures.FilesTotal);
+        }
+
+        [Fact]
+        public void Le_debit_suit_le_ralentissement_du_support_et_non_la_moyenne()
+        {
+            // Une minute rapide, puis le support ralentit : c'est ce qu'il faut voir à l'écran.
+            var clock = new Clock();
+            var reports = new List<ActionProgress>();
+            var progress = new CopyProgress(new Sink(reports), 100000 * Mo, 1, "Copie de", clock.Now);
+            progress.Folder("Vidéos");
+
+            for (var i = 0; i < 120; i++) { clock.Advance(TimeSpan.FromMilliseconds(500)); progress.Bytes(100 * Mo); }
+            for (var i = 0; i < 40; i++) { clock.Advance(TimeSpan.FromMilliseconds(500)); progress.Bytes(10 * Mo); }
+
+            Assert.InRange(reports.Last().Figures!.BytesPerSecond ?? 0, 9.0 * Mo, 11.0 * Mo);
+        }
+
+        [Fact]
         public void Le_temps_restant_n_est_pas_annonce_avant_d_avoir_mesure()
         {
             var clock = new Clock();

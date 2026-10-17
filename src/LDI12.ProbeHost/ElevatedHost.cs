@@ -312,6 +312,7 @@ namespace LDI12.ProbeHost
                     Detail = report.Detail,
                     RemainingSeconds = report.Remaining?.TotalSeconds,
                     ElapsedSeconds = report.Elapsed?.TotalSeconds,
+                    Figures = report.Figures,
                 }));
 
                 var outcome = await pending.Action

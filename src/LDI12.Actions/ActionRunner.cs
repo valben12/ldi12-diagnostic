@@ -340,6 +340,7 @@ namespace LDI12.Actions
                                 Elapsed = notification.ElapsedSeconds.HasValue
                                     ? TimeSpan.FromSeconds(notification.ElapsedSeconds.Value)
                                     : (TimeSpan?)null,
+                                Figures = notification.Figures,
                             });
 
                         return true;

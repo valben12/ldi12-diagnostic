@@ -77,6 +77,7 @@ namespace LDI12.App.ViewModels
         private readonly InterventionViewModel _intervention;
         private readonly RepairsViewModel _repairs;
         private readonly CleanupViewModel _cleanup;
+        private readonly DiskUsageViewModel _diskUsage;
         private readonly ToolsViewModel _tools;
         private readonly HistoryViewModel _history;
         private readonly MonitoringViewModel _monitoring;
@@ -131,6 +132,7 @@ namespace LDI12.App.ViewModels
             _reports = new ReportsViewModel(logger, _actions.Journal, new KlarviPublisher(logger));
             _repairs = new RepairsViewModel(_actions, logger);
             _cleanup = new CleanupViewModel(_actions, logger, () => _repairs.GetRunnerAsync());
+            _diskUsage = new DiskUsageViewModel(logger);
             _tools = new ToolsViewModel(logger, () => _repairs.GetRunnerAsync());
             _about = new AboutViewModel(logger);
 
@@ -189,6 +191,7 @@ namespace LDI12.App.ViewModels
                 new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Réparations", "Icon.Wrench", _repairs) { StartsGroup = true },
                 new NavigationItem("Nettoyage", "Icon.Trash", _cleanup),
+                new NavigationItem("Espace disque", "Icon.Treemap", _diskUsage),
                 new NavigationItem("Données", "Icon.Archive", _userData),
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
                 new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
@@ -234,6 +237,9 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        /// <summary>L'analyse du disque, que les captures d'écran lancent d'elles-mêmes.</summary>
+        public DiskUsageViewModel DiskUsage => _diskUsage;
+
         /// <summary>La recherche universelle, Ctrl+K.</summary>
         public SearchViewModel Search { get; }
 
@@ -265,6 +271,9 @@ namespace LDI12.App.ViewModels
                  "verification integrite empreinte sha256 controle");
             Data("Relever ce qu'il y a à sauvegarder", "Place et durée, sans rien copier", "survey",
                  "releve volume taille");
+
+            entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
+                () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 
             foreach (var item in _repairs.Items)
             {

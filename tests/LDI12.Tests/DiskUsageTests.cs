@@ -160,12 +160,55 @@ namespace LDI12.Tests
             }
         }
 
-        private static DiskUsageTree Scan(FakeDisk disk) => new DiskUsageScanner(disk, workers: 4).Scan("R");
+        [Fact]
+        public void Le_systeme_ne_part_jamais_a_la_corbeille_depuis_la_carte()
+        {
+            var tree = Scan(new FakeDisk("C:")
+                .File(@"C:\Windows\System32\ntoskrnl.exe", 10)
+                .File(@"C:\Windows\Temp\vieux.tmp", 10)
+                .File(@"C:\hiberfil.sys", 10)
+                .File(@"C:\Users\Marie\Videos\film.mkv", 10), "C:");
+
+            DiskNode Find(params string[] names)
+            {
+                var node = tree.Root;
+                foreach (var name in names) node = node.Children.Single(c => c.Name == name);
+                return node;
+            }
+
+            Assert.NotNull(DiskUsageAdvisor.Refusal(tree.Root));
+            Assert.NotNull(DiskUsageAdvisor.Refusal(Find("Windows", "System32", "ntoskrnl.exe")));
+            Assert.NotNull(DiskUsageAdvisor.Refusal(Find("Windows")));
+            Assert.Contains("powercfg", DiskUsageAdvisor.Refusal(Find("hiberfil.sys")));
+            Assert.NotNull(DiskUsageAdvisor.Refusal(Find("Users", "Marie")));
+
+            Assert.Null(DiskUsageAdvisor.Refusal(Find("Windows", "Temp", "vieux.tmp")));
+            Assert.Null(DiskUsageAdvisor.Refusal(Find("Users", "Marie", "Videos", "film.mkv")));
+        }
+
+        [Fact]
+        public void Les_pistes_signalent_les_gros_emplacements_connus()
+        {
+            const long Go = 1024L * 1024 * 1024;
+            var tree = Scan(new FakeDisk("C:")
+                .File(@"C:\Windows.old\Windows\a.dll", 12 * Go)
+                .File(@"C:\Users\Marie\Downloads\setup.exe", 2 * Go)
+                .File(@"C:\Users\Marie\AppData\Local\Temp\x.tmp", 10), "C:");
+
+            var hints = DiskUsageAdvisor.Hints(tree);
+
+            Assert.Equal(new[] { "Ancienne installation de Windows", "Téléchargements de Marie" }, hints.Select(h => h.Title));
+        }
+
+        private static DiskUsageTree Scan(FakeDisk disk, string root = "R") => new DiskUsageScanner(disk, workers: 4).Scan(root);
 
         /// <summary>Un disque en mémoire : chemins relatifs à « R », séparés par des barres obliques inverses.</summary>
         private sealed class FakeDisk : IDirectoryLister
         {
             private readonly Dictionary<string, List<DiskEntry>> _directories = new Dictionary<string, List<DiskEntry>>(StringComparer.OrdinalIgnoreCase);
+            private readonly string _root;
+
+            public FakeDisk(string root = "R") => _root = root;
 
             public HashSet<string> Denied { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -195,11 +238,16 @@ namespace LDI12.Tests
                 if (_directories.TryGetValue(path, out var entries)) return entries;
                 entries = new List<DiskEntry>();
                 _directories[path] = entries;
-                if (path != "R") EnsureDirectory(Parent(path)).Add(new DiskEntry { Name = Name(path), IsDirectory = true });
+                if (path != _root) EnsureDirectory(Parent(path)).Add(new DiskEntry { Name = Name(path), IsDirectory = true });
                 return entries;
             }
 
-            private static string Normalize(string path) => path.Replace('/', '\\');
+            // Path.Combine("C:", "Windows") donne « C:Windows » sous Windows, « C:/Windows » ailleurs.
+            private static string Normalize(string path)
+            {
+                path = path.Replace('/', '\\').Replace(@"\\", @"\");
+                return path.Length > 2 && path[1] == ':' && path[2] != '\\' ? path.Insert(2, @"\") : path;
+            }
 
             private static string Parent(string path) => path.Substring(0, path.LastIndexOf('\\'));
 

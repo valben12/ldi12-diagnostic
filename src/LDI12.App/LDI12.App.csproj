@@ -26,6 +26,8 @@
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />
+    <!-- La corbeille de Windows, pour l'analyse du disque : fait partie du framework. -->
+    <Reference Include="Microsoft.VisualBasic" />
   </ItemGroup>
 
   <ItemGroup>

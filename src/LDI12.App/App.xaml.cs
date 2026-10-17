@@ -130,6 +130,7 @@ namespace LDI12.App
             if (dataMode != null) _shell.UserData?.ShowMode(dataMode);
 
             _searchQuery = ReadArgument(e.Args, "--search");
+            _diskScanPath = ReadArgument(e.Args, "--disk-scan");
 
             if (_screenshotPath != null)
             {
@@ -294,6 +295,9 @@ namespace LDI12.App
 
         private string? _searchQuery;
 
+        /// <summary>Dossier que l'analyse du disque explore avant la capture (<c>--disk-scan "C:\Program Files"</c>).</summary>
+        private string? _diskScanPath;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -377,10 +381,16 @@ namespace LDI12.App
         /// Capture de la fenêtre après la première analyse. Sert à contrôler le rendu réel de
         /// l'interface sans avoir à la regarder tourner, utile en revue comme en régression.
         /// </summary>
-        private void OnScanCompletedForScreenshot(object? sender, EventArgs e)
+        private async void OnScanCompletedForScreenshot(object? sender, EventArgs e)
         {
             if (_screenshotPath == null || MainWindow == null) return;
             _shell!.ScanCompleted -= OnScanCompletedForScreenshot;
+
+            if (_diskScanPath != null)
+            {
+                await _shell.DiskUsage.ScanAsync(_diskScanPath).ConfigureAwait(true);
+                if (MainWindow == null) return;
+            }
 
             // La recherche s'ouvre une fois l'analyse finie : réparations et outils sont alors connus.
             if (_searchQuery != null)

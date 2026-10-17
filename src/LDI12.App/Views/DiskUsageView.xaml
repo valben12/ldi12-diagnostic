@@ -1,0 +1,498 @@
+<UserControl x:Class="LDI12.App.Views.DiskUsageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App"
+             xmlns:controls="clr-namespace:LDI12.App.Controls">
+
+    <UserControl.Resources>
+        <!-- Barre de part : fine, arrondie, de la couleur de la marque. -->
+        <Style x:Key="ShareBar" TargetType="ProgressBar" BasedOn="{StaticResource Progress}">
+            <Setter Property="Height" Value="5" />
+            <Setter Property="Maximum" Value="1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Une ligne de liste : surbrillance douce au survol, cadre rouge pour la sélection. -->
+        <Style x:Key="DiskItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Row" Background="Transparent" CornerRadius="7" Padding="{TemplateBinding Padding}"
+                                BorderThickness="1" BorderBrush="Transparent" Margin="0,0,0,1">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DiskList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DiskItem}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        </Style>
+
+        <!-- Une tuile de choix : volume ou dossier. -->
+        <Style x:Key="PickTile" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="local:Motion.Lift" Value="True" />
+            <Setter Property="local:Motion.Entrance" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Frame" Width="250" Margin="0,0,12,12" Padding="18,16"
+                                Background="{DynamicResource Brush.CardFill}"
+                                BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Card}" SnapsToDevicePixels="True">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Un gros fichier ou une piste : un clic le montre sur la carte. -->
+        <DataTemplate x:Key="PickTemplate">
+            <Button Command="{Binding ShowCommand}" CommandParameter="{Binding Node}" Cursor="Hand" Focusable="False">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="10" Height="10" CornerRadius="3" Background="{Binding Swatch}"
+                            Margin="2,0,12,0" VerticalAlignment="Center"
+                            Visibility="{Binding HasSwatch, Converter={StaticResource BoolToVisibility}}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxHeight="40"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
+                               Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <!-- Bouton d'action compact, icône et libellé. -->
+        <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="10,5" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="28,30,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" LastChildFill="True">
+            <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center"
+                       Visibility="{Binding IsReady, Converter={StaticResource BoolToVisibility}}">
+                <Button Style="{StaticResource ToolButton}" Content="Relire" Command="{Binding RescanCommand}"
+                        ToolTip="Relancer l'analyse au même endroit" />
+                <Button Style="{StaticResource ToolButton}" Content="Autre disque" Command="{Binding NewAnalysisCommand}" Margin="0" />
+            </WrapPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Treemap}" Content="Analyse du disque"
+                            local:Motion.Entrance="True" />
+        </DockPanel>
+
+        <!-- 1. Le choix : un disque, ou un dossier. -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0"
+                      Visibility="{Binding IsChoosing, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource Text.Body}" Margin="0,0,0,18" TextWrapping="Wrap"
+                           Text="Où est passée la place ? Choisissez un disque : chaque fichier apparaît sur une carte, à sa taille." />
+                <ItemsControl ItemsSource="{Binding Drives}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource PickTile}" Command="{Binding SelectCommand}">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="18" Height="18"
+                                              Data="{StaticResource Icon.HardDrive}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}" Margin="10,0,0,0"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <ProgressBar Style="{StaticResource ShareBar}" Value="{Binding UsedShare, Mode=OneWay}" Margin="0,14,0,8" Height="6" />
+                                    <TextBlock Text="{Binding SpaceText}" Style="{StaticResource Text.Muted}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource PickTile}" Command="{Binding ChooseFolderCommand}" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <DockPanel>
+                            <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="18" Height="18"
+                                  Data="{StaticResource Icon.Folder}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                            <TextBlock Text="Un dossier…" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.TextPrimary}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock Text="Un profil, un disque réseau, une clé." Style="{StaticResource Text.Muted}" Margin="0,14,0,0" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusWarning}"
+                           Margin="0,6,0,0" TextWrapping="Wrap"
+                           Visibility="{Binding Status, Converter={StaticResource TextToVisibility}}" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 2. L'exploration : de grands chiffres qui défilent, et la barre si le volume est connu. -->
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="36,32" MaxWidth="620" VerticalAlignment="Center"
+                HorizontalAlignment="Center" local:Motion.Entrance="True"
+                Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+                <TextBlock Text="Lecture du disque" Style="{StaticResource Text.Eyebrow}" />
+                <TextBlock Text="{Binding ScanTarget}" Style="{StaticResource Text.Title}" Margin="0,4,0,22"
+                           TextTrimming="CharacterEllipsis" />
+                <UniformGrid Columns="2">
+                    <StackPanel>
+                        <TextBlock Text="{Binding ScanFiles}" Style="{StaticResource Text.Display}" />
+                        <TextBlock Text="fichiers" Style="{StaticResource Text.Muted}" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="{Binding ScanBytes}" Style="{StaticResource Text.Display}" />
+                        <TextBlock Text="pesés" Style="{StaticResource Text.Muted}" />
+                    </StackPanel>
+                </UniformGrid>
+                <ProgressBar Style="{StaticResource ShareBar}" Value="{Binding ScanShare, Mode=OneWay}" Margin="0,24,0,0" Height="6"
+                             Visibility="{Binding ScanShareKnown, Converter={StaticResource BoolToVisibility}}" />
+                <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Margin="0,24,0,0"
+                             Visibility="{Binding ScanShareKnown, Converter={StaticResource HiddenWhenTrue}}" />
+                <TextBlock Text="{Binding ScanCurrent}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0"
+                           TextTrimming="CharacterEllipsis" />
+                <Button Style="{StaticResource Button.Ghost}" Content="Arrêter" Command="{Binding CancelCommand}"
+                        HorizontalAlignment="Left" Margin="0,20,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- 3. Le résultat : listes à gauche, carte à droite, sélection en pied. -->
+        <Grid Grid.Row="1" Margin="0,14,0,0" Visibility="{Binding IsReady, Converter={StaticResource BoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Les chiffres et le volume : analysé, hors d'atteinte, libre. -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
+                <Grid Height="8" Margin="0,8,0,6" Visibility="{Binding HasVolume, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="{Binding VolumeScannedShare, Converter={StaticResource ShareToStar}}" />
+                        <ColumnDefinition Width="{Binding VolumeOtherShare, Converter={StaticResource ShareToStar}}" />
+                        <ColumnDefinition Width="{Binding VolumeFreeShare, Converter={StaticResource ShareToStar}}" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{DynamicResource Brush.BrandRed}" CornerRadius="4,0,0,4" />
+                    <Border Grid.Column="1" Background="{DynamicResource Brush.StatusUnavailable}" />
+                    <Border Grid.Column="2" Background="{DynamicResource Brush.TrackBackground}" CornerRadius="0,4,4,0" />
+                </Grid>
+                <TextBlock Text="{Binding VolumeText}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding HasVolume, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusInfo}"
+                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding Status, Converter={StaticResource TextToVisibility}}" />
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="5*" MinWidth="320" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="6*" MinWidth="300" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Les listes. -->
+                <Border Grid.Column="0" Style="{StaticResource Card}" Padding="10,10,6,8">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource SegmentRail}" Margin="2,0,0,10">
+                            <WrapPanel>
+                                <RadioButton Style="{StaticResource Segment}" Content="Dossiers" IsChecked="{Binding IsFoldersView}" />
+                                <RadioButton Style="{StaticResource Segment}" Content="Types" IsChecked="{Binding IsTypesView}" />
+                                <RadioButton Style="{StaticResource Segment}" Content="Plus gros" IsChecked="{Binding IsLargestView}" />
+                                <RadioButton Style="{StaticResource Segment}" Content="{Binding HintsLabel}" IsChecked="{Binding IsHintsView}" />
+                            </WrapPanel>
+                        </Border>
+
+                        <Grid>
+                            <!-- Dossiers : l'arborescence à plat, triée par poids. -->
+                            <ListBox x:Name="FolderList" Style="{StaticResource DiskList}" ItemsSource="{Binding Rows}"
+                                     SelectedItem="{Binding SelectedRow}" SelectionChanged="OnFolderSelectionChanged"
+                                     Visibility="{Binding IsFoldersView, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="{Binding Indent}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="20" />
+                                                <ColumnDefinition Width="22" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="62" />
+                                                <ColumnDefinition Width="72" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Command="{Binding DataContext.ToggleCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    CommandParameter="{Binding}" Cursor="Hand" Focusable="False"
+                                                    Visibility="{Binding CanExpand, Converter={StaticResource BoolToVisibility}}">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="Transparent" Width="18" Height="22">
+                                                            <Path x:Name="Chevron" Style="{StaticResource Icon}" Width="12" Height="12"
+                                                                  Data="{StaticResource Icon.ChevronRight}" Stroke="{DynamicResource Brush.TextTertiary}"
+                                                                  RenderTransformOrigin="0.5,0.5">
+                                                                <Path.RenderTransform>
+                                                                    <RotateTransform Angle="0" />
+                                                                </Path.RenderTransform>
+                                                            </Path>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                <Setter TargetName="Chevron" Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <RotateTransform Angle="90" />
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </DataTrigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                            </Button>
+
+                                            <Path Grid.Column="1" Style="{StaticResource Icon}" Width="14" Height="14" Data="{StaticResource Icon.Folder}"
+                                                  Stroke="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Left"
+                                                  Visibility="{Binding IsDirectory, Converter={StaticResource BoolToVisibility}}" />
+                                            <Border Grid.Column="1" Width="10" Height="10" CornerRadius="3" Background="{Binding Swatch}"
+                                                    HorizontalAlignment="Left" Margin="2,0,0,0"
+                                                    Visibility="{Binding IsDirectory, Converter={StaticResource HiddenWhenTrue}}" />
+
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Style="{StaticResource Text.Body}"
+                                                       Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" Margin="0,0,10,0"
+                                                       Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
+                                            <TextBlock Grid.Column="0" Grid.ColumnSpan="5" Text="{Binding MoreText}" Style="{StaticResource Text.Muted}"
+                                                       VerticalAlignment="Center" Margin="42,0,0,0" TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding IsMore, Converter={StaticResource BoolToVisibility}}" />
+
+                                            <ProgressBar Grid.Column="3" Style="{StaticResource ShareBar}" Value="{Binding Share, Mode=OneWay}"
+                                                         ToolTip="{Binding ShareText}" Margin="0,0,10,0"
+                                                         Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
+                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
+                                                       Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" Margin="0,0,6,0"
+                                                       Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Types : la légende de la carte, avec le poids de chacun. -->
+                            <ListBox Style="{StaticResource DiskList}" ItemsSource="{Binding Extensions}"
+                                     Visibility="{Binding IsTypesView, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource DiskItem}">
+                                        <Setter Property="Height" Value="40" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="24" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="62" />
+                                                <ColumnDefinition Width="72" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Width="12" Height="12" CornerRadius="3" Background="{Binding Swatch}"
+                                                    HorizontalAlignment="Left" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <TextBlock Text="{Binding Extension}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis">
+                                                    <Run Text="{Binding Kind, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding FilesText, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <ProgressBar Grid.Column="2" Style="{StaticResource ShareBar}" Value="{Binding Share, Mode=OneWay}"
+                                                         ToolTip="{Binding ShareText}" Margin="0,0,10,0" />
+                                            <TextBlock Grid.Column="3" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
+                                                       Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Plus gros fichiers, et pistes : un titre, une ligne, un clic pour les voir sur la carte. -->
+                            <ListBox Style="{StaticResource DiskList}" ItemsSource="{Binding Largest}"
+                                     Visibility="{Binding IsLargestView, Converter={StaticResource BoolToVisibility}}"
+                                     ItemTemplate="{StaticResource PickTemplate}">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource DiskItem}">
+                                        <Setter Property="Height" Value="44" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+
+                            <Grid Visibility="{Binding IsHintsView, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox Style="{StaticResource DiskList}" ItemsSource="{Binding Hints}"
+                                         ItemTemplate="{StaticResource PickTemplate}">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource DiskItem}">
+                                            <Setter Property="Height" Value="Auto" />
+                                            <Setter Property="MinHeight" Value="44" />
+                                            <Setter Property="Padding" Value="8,6" />
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                </ListBox>
+                                <TextBlock Text="Rien de notable : aucun emplacement connu ne dépasse 500 Mo." Style="{StaticResource Text.Muted}"
+                                           Margin="8,4,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding HasHints, Converter={StaticResource HiddenWhenTrue}}" />
+                            </Grid>
+                        </Grid>
+                    </DockPanel>
+                </Border>
+
+                <!-- La carte, sous son fil d'Ariane. -->
+                <DockPanel Grid.Column="2">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="True">
+                        <Button DockPanel.Dock="Left" Style="{StaticResource ToolButton}" Command="{Binding ZoomOutCommand}"
+                                ToolTip="Remonter d'un dossier" Padding="7,5"
+                                IsEnabled="{Binding CanZoomOut}">
+                            <Path Style="{StaticResource Icon}" Width="14" Height="14" Data="{StaticResource Icon.ArrowLeft}"
+                                  Stroke="{DynamicResource Brush.TextPrimary}" />
+                        </Button>
+                        <ItemsControl ItemsSource="{Binding Crumbs}" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <Path DockPanel.Dock="Right" Style="{StaticResource Icon}" Width="10" Height="10" Margin="4,0"
+                                              Data="{StaticResource Icon.ChevronRight}" Stroke="{DynamicResource Brush.TextTertiary}"
+                                              Visibility="{Binding IsLast, Converter={StaticResource HiddenWhenTrue}}" />
+                                        <Button Command="{Binding GoCommand}" CommandParameter="{Binding Node}" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <TextBlock x:Name="Label" Text="{Binding Name}" Style="{StaticResource Text.Body}"
+                                                               Foreground="{DynamicResource Brush.TextSecondary}" />
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.BrandRed}" />
+                                                        </Trigger>
+                                                        <DataTrigger Binding="{Binding IsLast}" Value="True">
+                                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                                                            <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                                                        </DataTrigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding HoverText}" Style="{StaticResource Text.Muted}"
+                               Margin="2,8,0,0" TextTrimming="CharacterEllipsis" />
+
+                    <Border CornerRadius="{DynamicResource Radius.Card}" ClipToBounds="True"
+                            BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="1"
+                            Background="{DynamicResource Brush.Ground}">
+                        <controls:TreemapView Root="{Binding MapRoot}" Tree="{Binding Tree}" Revision="{Binding Revision}"
+                                              Selected="{Binding Selected}" Hovered="{Binding Hovered}"
+                                              ZoomCommand="{Binding ZoomCommand}" Margin="1" />
+                    </Border>
+                </DockPanel>
+            </Grid>
+
+            <!-- La sélection et ce qu'on peut en faire. -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="18,12" Margin="0,12,0,0">
+                <Grid>
+                    <TextBlock Text="Cliquez un fichier sur la carte ou dans la liste." Style="{StaticResource Text.Muted}"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding HasSelection, Converter={StaticResource HiddenWhenTrue}}" />
+                    <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                            <Button Style="{StaticResource ToolButton}" Command="{Binding OpenLocationCommand}" ToolTip="Ouvrir dans l'Explorateur">
+                                <DockPanel>
+                                    <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="13" Height="13" Margin="0,0,6,0"
+                                          Data="{StaticResource Icon.ExternalLink}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                                    <TextBlock Text="Ouvrir" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Command="{Binding CopyPathCommand}" ToolTip="Copier le chemin" Padding="8,5">
+                                <Path Style="{StaticResource Icon}" Width="13" Height="13"
+                                      Data="{StaticResource Icon.Copy}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Command="{Binding ZoomSelectedCommand}" ToolTip="Afficher ce dossier seul sur la carte" Padding="8,5">
+                                <Path Style="{StaticResource Icon}" Width="13" Height="13"
+                                      Data="{StaticResource Icon.ZoomIn}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Command="{Binding RecycleCommand}" Margin="0"
+                                    ToolTip="Mettre à la corbeille, après confirmation">
+                                <DockPanel>
+                                    <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="13" Height="13" Margin="0,0,6,0"
+                                          Data="{StaticResource Icon.Trash}" Stroke="{DynamicResource Brush.StatusCritical}" />
+                                    <TextBlock Text="Corbeille" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Button>
+                        </WrapPanel>
+                        <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding SelectedSize}" Style="{StaticResource Text.Body}"
+                                           FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextPrimary}" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding SelectedName}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <TextBlock Text="{Binding SelectedDetail}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                            <TextBlock Text="{Binding Refusal}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusWarning}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                                       Visibility="{Binding HasRefusal, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

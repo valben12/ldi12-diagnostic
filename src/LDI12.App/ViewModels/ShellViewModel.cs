@@ -74,6 +74,7 @@ namespace LDI12.App.ViewModels
         private readonly OverviewViewModel _overview = new OverviewViewModel();
         private readonly List<SectionViewModel> _sections = new List<SectionViewModel>();
         private readonly ReportsViewModel _reports;
+        private readonly InterventionViewModel _intervention;
         private readonly RepairsViewModel _repairs;
         private readonly CleanupViewModel _cleanup;
         private readonly ToolsViewModel _tools;
@@ -157,6 +158,16 @@ namespace LDI12.App.ViewModels
             _monitoring.JournalChanged += (_, __) => _reports.RefreshJournal();
             _measures.JournalChanged += (_, __) => _reports.RefreshJournal();
             _userData.JournalChanged += (_, __) => _reports.RefreshJournal();
+
+            // Le dossier d'intervention suit ce qui se passe ailleurs : il relève de lui-même la
+            // fin d'une sauvegarde, d'une restauration, d'une vérification.
+            _intervention = new InterventionViewModel(
+                LDI12.Reports.Interventions.InterventionStore.Default(), _actions.Journal, logger,
+                () => RunAsync(RunMode.Full), () => Snapshot);
+            _userData.BackupFinished += (_, e) => _intervention.OnBackupFinished(e);
+            _userData.RestoreFinished += (_, e) => _intervention.OnRestoreFinished(e);
+            _userData.VerificationFinished += (_, e) => _intervention.OnVerificationFinished(e);
+            _userData.RestoreSourceChosen += (_, path) => _intervention.OnBackupSourceSelected(path);
             UserData = _userData;
 
             // Un barème modifié périme le diagnostic affiché : le score et les constats à l'écran
@@ -167,7 +178,8 @@ namespace LDI12.App.ViewModels
             Navigation = new ObservableCollection<NavigationItem>
             {
                 new NavigationItem("Vue d'ensemble", "Icon.Home", _overview),
-                NavSection("Matériel", "Icon.Cpu", DiagnosticCategory.Hardware),
+                new NavigationItem("Intervention", "Icon.Clipboard", _intervention),
+                NavSection("Matériel", "Icon.Cpu", DiagnosticCategory.Hardware, startsGroup: true),
                 NavSection("Stockage", "Icon.HardDrive", DiagnosticCategory.Storage),
                 NavSection("Windows", "Icon.Window", DiagnosticCategory.Windows),
                 NavSection("Réseau", "Icon.Globe", DiagnosticCategory.Network),
@@ -284,6 +296,15 @@ namespace LDI12.App.ViewModels
             {
                 Show(_tools);
                 _tools.Highlight(actionId);
+            }
+            else if (actionId == InterventionViewModel.RestoreTarget)
+            {
+                if (_userData.CanChangeMode) _userData.ShowMode("restore");
+                Show(_userData);
+            }
+            else if (actionId == "REPAIRS")
+            {
+                Show(_repairs);
             }
             else if (string.Equals(actionId, LDI12.Actions.ActionIds.Cleanup, StringComparison.OrdinalIgnoreCase))
             {
@@ -525,6 +546,7 @@ namespace LDI12.App.ViewModels
             _history.Apply(snapshot);
             _measures.Update(snapshot);
             _userData.Update(snapshot);
+            _intervention.OnScanCompleted(snapshot);
 
             foreach (var item in Navigation)
             {
@@ -563,11 +585,11 @@ namespace LDI12.App.ViewModels
             return plan;
         }
 
-        private NavigationItem NavSection(string title, string iconKey, DiagnosticCategory category)
+        private NavigationItem NavSection(string title, string iconKey, DiagnosticCategory category, bool startsGroup = false)
         {
             var section = new SectionViewModel(title, iconKey, category);
             _sections.Add(section);
-            return new NavigationItem(title, iconKey, section);
+            return new NavigationItem(title, iconKey, section) { StartsGroup = startsGroup };
         }
 
         private void RaiseCommandStates()

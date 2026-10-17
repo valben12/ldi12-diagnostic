@@ -47,6 +47,9 @@
             <DataTemplate DataType="{x:Type vm:AboutViewModel}">
                 <views:AboutView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:InterventionViewModel}">
+                <views:InterventionView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
                 <views:ReportsView />
             </DataTemplate>

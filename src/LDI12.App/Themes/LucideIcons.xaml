@@ -17,6 +17,7 @@
     <Geometry x:Key="Icon.Sparkles">M12,3 L13.9,8.1 L19,10 L13.9,11.9 L12,17 L10.1,11.9 L5,10 L10.1,8.1 Z M19,15 L19.7,16.9 L21.6,17.6 L19.7,18.3 L19,20.2 L18.3,18.3 L16.4,17.6 L18.3,16.9 Z</Geometry>
     <Geometry x:Key="Icon.Wrench">M14.7,6.3 A1,1 0 0 0 14.7,7.7 L16.3,9.3 A1,1 0 0 0 17.7,9.3 L21.47,5.53 A6,6 0 0 1 13.53,13.47 L6.62,20.38 A2.12,2.12 0 0 1 3.62,17.38 L10.53,10.47 A6,6 0 0 1 18.47,2.53 Z</Geometry>
     <Geometry x:Key="Icon.FileText">M14,2 H6 A2,2 0 0 0 4,4 V20 A2,2 0 0 0 6,22 H18 A2,2 0 0 0 20,20 V8 Z M14,2 V8 H20 M16,13 H8 M16,17 H8 M10,9 H8</Geometry>
+    <Geometry x:Key="Icon.Clipboard">M9,2 H15 A1,1 0 0 1 16,3 V5 A1,1 0 0 1 15,6 H9 A1,1 0 0 1 8,5 V3 A1,1 0 0 1 9,2 Z M16,4 H18 A2,2 0 0 1 20,6 V20 A2,2 0 0 1 18,22 H6 A2,2 0 0 1 4,20 V6 A2,2 0 0 1 6,4 H8 M12,11 H16 M12,16 H16 M8,11 H8.01 M8,16 H8.01</Geometry>
     <!-- Ajoutées en phase 5 : nettoyage et boîte à outils. -->
     <Geometry x:Key="Icon.Trash">M3,6 H21 M8,6 V4 A2,2 0 0 1 10,2 H14 A2,2 0 0 1 16,4 V6 M19,6 V20 A2,2 0 0 1 17,22 H7 A2,2 0 0 1 5,20 V6 M10,11 V17 M14,11 V17</Geometry>
     <Geometry x:Key="Icon.Toolbox">M4,7 H20 A2,2 0 0 1 22,9 V19 A2,2 0 0 1 20,21 H4 A2,2 0 0 1 2,19 V9 A2,2 0 0 1 4,7 Z M8,7 V5 A2,2 0 0 1 10,3 H14 A2,2 0 0 1 16,5 V7 M2,13 H22 M10,13 V15 H14 V13</Geometry>

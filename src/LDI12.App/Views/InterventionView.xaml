@@ -1,0 +1,298 @@
+<UserControl x:Class="LDI12.App.Views.InterventionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LDI12.App">
+
+    <UserControl.Resources>
+        <!-- Le chemin de l'intervention : une pastille par étape, cochée une fois franchie, rouge
+             quand c'est la sienne. On sait d'un coup d'œil où l'on en est, et ce qui reste. -->
+        <DataTemplate x:Key="StageTemplate">
+            <StackPanel>
+                <Border x:Name="Dot" Width="30" Height="30" CornerRadius="15" HorizontalAlignment="Center"
+                        Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.BorderStrong}" BorderThickness="1.5">
+                    <Grid>
+                        <TextBlock x:Name="Number" Text="{Binding Number}" FontWeight="SemiBold"
+                                   FontSize="{DynamicResource Font.Size.Small}" Foreground="{DynamicResource Brush.TextTertiary}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Path x:Name="Tick" Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="11" Height="9" Stretch="Uniform"
+                              Stroke="{DynamicResource Brush.StatusGood}" StrokeThickness="2.2" Visibility="Collapsed"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="Label" Text="{Binding Label}" Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
+                           HorizontalAlignment="Center" TextWrapping="NoWrap" />
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="Dot" Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                    <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource Brush.StatusGood}" />
+                    <Setter TargetName="Number" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter TargetName="Dot" Property="Background" Value="{DynamicResource Brush.BrandRedButton}" />
+                    <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                    <Setter TargetName="Number" Property="Foreground" Value="White" />
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                    <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ChipTemplate">
+            <ToggleButton Style="{StaticResource Chip}" Content="{Binding Text}" IsChecked="{Binding IsSelected}" />
+        </DataTemplate>
+
+        <ItemsPanelTemplate x:Key="Wrap">
+            <WrapPanel />
+        </ItemsPanelTemplate>
+
+        <!-- Les deux voies de la décision, en grandes tuiles. -->
+        <Style x:Key="PathTile" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="local:Motion.Lift" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Frame" Margin="0,0,12,0" Padding="20,18" CornerRadius="{DynamicResource Radius.Card}"
+                                Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="2">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StepCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="24,22" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="local:Motion.Entrance" Value="True" />
+        </Style>
+
+        <Style x:Key="StepTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Title}">
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1100" Margin="28,30,28,36">
+
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Clipboard}"
+                            Content="{Binding CaseTitle}" local:Motion.Entrance="True" />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,0" TextWrapping="Wrap" />
+
+            <!-- ===== Le fil ===== -->
+            <Grid Margin="0,22,0,22">
+                <Rectangle Height="2" VerticalAlignment="Top" Margin="40,14,40,0" Fill="{DynamicResource Brush.BorderStrong}" />
+                <ItemsControl ItemsSource="{Binding Stages}" ItemTemplate="{StaticResource StageTemplate}" Focusable="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </Grid>
+
+            <!-- ===== Reprendre un dossier ouvert ===== -->
+            <StackPanel Visibility="{Binding HasOpenCases, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                <TextBlock Text="DOSSIERS EN COURS" Style="{StaticResource Text.Eyebrow}" Margin="2,0,0,10" />
+                <ItemsControl ItemsSource="{Binding OpenCases}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource PathTile}" Width="300" Margin="0,0,0,12"
+                                    Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Emphasis}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Machine}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                                    <TextBlock Text="Reprendre" Style="{StaticResource Text.Muted}" Margin="0,10,0,0"
+                                               Foreground="{DynamicResource Brush.BrandRed}" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- ===== 1. Accueil ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsWelcome, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Qui, et pourquoi ?" Style="{StaticResource StepTitle}" />
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource Field}" Tag="Nom du client"
+                                 Text="{Binding Client, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Grid.Column="2" Style="{StaticResource Field}" Tag="N° de dossier"
+                                 Text="{Binding Reference, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Grid.Column="4" Style="{StaticResource Field}" Tag="Technicien"
+                                 Text="{Binding Technician, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                    <TextBlock Text="Le motif" Style="{StaticResource Text.Muted}" Margin="2,16,0,8" />
+                    <ItemsControl ItemsSource="{Binding Reasons}" ItemsPanel="{StaticResource Wrap}"
+                                  ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
+                    <TextBox Style="{StaticResource Field}" Margin="0,6,0,0" Tag="Ce que dit le client, dans ses mots"
+                             Text="{Binding Request, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" VerticalContentAlignment="Top" />
+                    <Button Style="{StaticResource Button.Primary}" Content="Ouvrir le dossier" HorizontalAlignment="Left"
+                            Margin="0,16,0,0" Command="{Binding StartCommand}"
+                            Visibility="{Binding HasNoCase, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 2. Diagnostic ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsDiagnosis, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Le diagnostic de départ" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="Il sert de point « avant » au rapport. Il est enregistré de lui-même dès qu'il se termine."
+                               Style="{StaticResource Text.Muted}" />
+                    <WrapPanel Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Lancer le diagnostic complet"
+                                Command="{Binding RunDiagnosisCommand}" Margin="0,0,10,0" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Garder le diagnostic affiché"
+                                Command="{Binding UseCurrentDiagnosisCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 3. Décision ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsDecision, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Réparer, ou réinstaller ?" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="{Binding DiagnosisSummary}" Style="{StaticResource Text.Body}" />
+                    <TextBlock Text="{Binding Suggestion}" Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                    <TextBlock Text="Pourquoi (facultatif)" Style="{StaticResource Text.Muted}" Margin="2,16,0,8" />
+                    <ItemsControl ItemsSource="{Binding DecisionPhrases}" ItemsPanel="{StaticResource Wrap}"
+                                  ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
+                    <UniformGrid Columns="2" Margin="0,10,-12,0">
+                        <Button Style="{StaticResource PathTile}" Command="{Binding RepairCommand}">
+                            <StackPanel>
+                                <Path Style="{StaticResource Icon}" Data="{StaticResource Icon.Wrench}" Width="22" Height="22"
+                                      Stroke="{DynamicResource Brush.BrandRed}" HorizontalAlignment="Left" />
+                                <TextBlock Text="Réparer" Style="{StaticResource Text.Emphasis}" Margin="0,10,0,0" />
+                                <TextBlock Text="Corriger le système en place." Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PathTile}" Command="{Binding ReinstallCommand}">
+                            <StackPanel>
+                                <Path Style="{StaticResource Icon}" Data="{StaticResource Icon.Refresh}" Width="22" Height="22"
+                                      Stroke="{DynamicResource Brush.BrandRed}" HorizontalAlignment="Left" />
+                                <TextBlock Text="Réinstaller" Style="{StaticResource Text.Emphasis}" Margin="0,10,0,0" />
+                                <TextBlock Text="Sauvegarder, réinstaller Windows, restaurer." Style="{StaticResource Text.Muted}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 4. Sauvegarde ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsBackup, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Sauvegarder les données" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="Le dossier part avec la sauvegarde ; l'étape suivante s'ouvre d'elle-même quand la copie est faite."
+                               Style="{StaticResource Text.Muted}" />
+                    <Button Style="{StaticResource Button.Primary}" Content="Aller à la sauvegarde" HorizontalAlignment="Left"
+                            Margin="0,16,0,0" Command="{Binding GoBackupCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 5. Réinstallation ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsReinstall, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Réinstaller Windows" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="Réinstallez, puis relancez LDI12 depuis cette clé : le dossier vous attendra ici."
+                               Style="{StaticResource Text.Muted}" />
+                    <Button Style="{StaticResource Button.Primary}" Content="Windows est réinstallé" HorizontalAlignment="Left"
+                            Margin="0,16,0,0" Command="{Binding ReinstalledCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 6. Restauration ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsRestore, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Restaurer les données" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="Branchez le disque de la sauvegarde. L'étape suivante s'ouvre d'elle-même à la fin."
+                               Style="{StaticResource Text.Muted}" />
+                    <Button Style="{StaticResource Button.Primary}" Content="Aller à la restauration" HorizontalAlignment="Left"
+                            Margin="0,16,0,0" Command="{Binding GoRestoreCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 7. Vérification ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsVerification, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Le contrôle final" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="Un dernier diagnostic : il sert de point « après », et le rapport se compose de lui-même."
+                               Style="{StaticResource Text.Muted}" />
+                    <WrapPanel Margin="0,16,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Lancer le diagnostic de contrôle"
+                                Command="{Binding RunDiagnosisCommand}" Margin="0,0,10,0" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir les réparations"
+                                Command="{Binding GoRepairsCommand}" Margin="0,0,10,0"
+                                Visibility="{Binding IsRepair, Converter={StaticResource BoolToVisibility}}" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== 8. Rapport ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding IsDone, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="Le rapport" Style="{StaticResource StepTitle}" />
+                    <TextBlock Text="La conclusion est proposée d'après le dossier : relisez-la, retouchez-la, cochez ce qui a été vu avec le client."
+                               Style="{StaticResource Text.Muted}" />
+                    <TextBox Style="{StaticResource Field}" Margin="0,14,0,0" Tag="Conclusion"
+                             Text="{Binding Conclusion, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="84" VerticalContentAlignment="Top" />
+                    <ItemsControl ItemsSource="{Binding ClosingPhrases}" ItemsPanel="{StaticResource Wrap}" Margin="0,12,0,0"
+                                  ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button Style="{StaticResource Button.Primary}" Content="Composer et ouvrir le rapport"
+                                Command="{Binding FinishCommand}" Margin="0,0,10,0" />
+                        <Button Style="{StaticResource Button.Ghost}" Content="Nouveau dossier" Command="{Binding NewCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Remarques, à toute étape ===== -->
+            <Border Style="{StaticResource StepCard}" Visibility="{Binding HasCase, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="REMARQUES" Style="{StaticResource Text.Eyebrow}" />
+                    <ItemsControl ItemsSource="{Binding Journal}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Text.Body}" Margin="0,0,0,6" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Style="{StaticResource Field}" Tag="Une remarque pour le rapport…"
+                                 Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1" Style="{StaticResource Button.Ghost}" Content="Ajouter" Margin="10,0,0,0"
+                                Command="{Binding AddNoteCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

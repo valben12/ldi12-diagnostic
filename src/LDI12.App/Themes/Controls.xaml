@@ -86,6 +86,48 @@
         </Setter>
     </Style>
 
+    <!-- Pastille à cocher : un motif, une phrase toute faite. Cochée, elle prend le rouge pâle
+         de la marque ; la coche dessinée dit l'état sans compter sur la couleur. -->
+    <Style x:Key="Chip" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="0,0,8,8" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Pill" CornerRadius="16" Padding="12,6" BorderThickness="1"
+                            Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.BorderStrong}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path x:Name="Tick" Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="10" Height="8" Stretch="Uniform"
+                                  Stroke="{DynamicResource Brush.BrandRed}" StrokeThickness="2" Margin="0,0,7,0"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  VerticalAlignment="Center" Visibility="Collapsed" />
+                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                            <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.CardFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardEdge}" />
@@ -268,7 +310,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
-                    <!-- 30 points et non 40 : la barre porte dix-sept entrées, et la fenêtre
+                    <!-- 28 points et non 40 : la barre porte dix-huit entrées, et la fenêtre
                          s'ouvre désormais à sa plus petite taille. Au pas précédent, les quatre
                          dernières (dont les réglages et cette page) passaient sous le bord.
                          Une entrée qu'il faut deviner en faisant défiler n'existe qu'à moitié. -->
@@ -277,7 +319,7 @@
                          rendus, logiciel. Neuf points de haut en tout, la barre tient entière. -->
                     <Border x:Name="GroupRule" Height="1" Margin="22,4,22,4" Visibility="Collapsed"
                             Background="{DynamicResource Brush.BorderSubtle}" />
-                    <Grid Height="30" Margin="10,1" Background="Transparent">
+                    <Grid Height="28" Margin="10,1" Background="Transparent">
                         <Border x:Name="Hover" Opacity="0" CornerRadius="9"
                                 Background="{DynamicResource Brush.SurfaceHover}" />
                         <Border x:Name="Fill" Opacity="0" CornerRadius="9"

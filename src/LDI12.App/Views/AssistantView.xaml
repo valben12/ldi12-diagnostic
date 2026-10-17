@@ -111,10 +111,13 @@
                         <TextBlock Text="Connecter Claude" Style="{StaticResource Text.Title}" />
                         <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,16" TextWrapping="Wrap"
                                    Text="Collez votre clé d'API Anthropic. Saisie une fois, elle reste chiffrée à côté du logiciel, et ne sert que sur ce support." />
-                        <PasswordBox x:Name="KeyBox" PasswordChanged="OnKeyChanged" Padding="10,8" MinHeight="38"
-                                     FontFamily="Consolas" FontSize="13" VerticalContentAlignment="Center"
-                                     Background="{DynamicResource Brush.SurfaceHover}" Foreground="{DynamicResource Brush.TextPrimary}"
-                                     BorderBrush="{DynamicResource Brush.BorderSubtle}" CaretBrush="{DynamicResource Brush.BrandRed}" />
+                        <Border Background="{DynamicResource Brush.SurfaceHover}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                                BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Padding="4,2">
+                            <PasswordBox x:Name="KeyBox" PasswordChanged="OnKeyChanged" Padding="6,7" MinHeight="34"
+                                         FontFamily="Consolas" FontSize="13" VerticalContentAlignment="Center" BorderThickness="0"
+                                         Background="Transparent" Foreground="{DynamicResource Brush.TextPrimary}"
+                                         CaretBrush="{DynamicResource Brush.BrandRed}" SelectionBrush="{DynamicResource Brush.BrandRed}" />
+                        </Border>
                         <TextBlock Text="{Binding KeyError}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusCritical}"
                                    Margin="0,8,0,0" TextWrapping="Wrap"
                                    Visibility="{Binding KeyError, Converter={StaticResource TextToVisibility}}" />
@@ -179,7 +182,7 @@
                 </Border>
 
                 <!-- ===== Claude au travail ===== -->
-                <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" MaxWidth="660" HorizontalAlignment="Left"
+                <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" Width="620" HorizontalAlignment="Left"
                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
                         <DockPanel>
@@ -213,9 +216,25 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel Margin="0,3" local:Motion.Entrance="True">
-                                        <Path DockPanel.Dock="Left" Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="10" Height="8" Stretch="Uniform"
-                                              Stroke="{DynamicResource Brush.StatusGood}" StrokeThickness="2" Margin="0,0,10,0"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" VerticalAlignment="Center" />
+                                        <Grid DockPanel.Dock="Left" Width="10" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <Path Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="10" Height="8" Stretch="Uniform"
+                                                  Stroke="{DynamicResource Brush.StatusGood}" StrokeThickness="2"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                  Visibility="{Binding IsDone, Converter={StaticResource BoolToVisibility}}" />
+                                            <!-- En cours : un point qui respire. -->
+                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.BrandRed}"
+                                                     Visibility="{Binding IsDone, Converter={StaticResource HiddenWhenTrue}}">
+                                                <Ellipse.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.25" Duration="0:0:0.7" />
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Ellipse.Triggers>
+                                            </Ellipse>
+                                        </Grid>
                                         <TextBlock Text="{Binding Text}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
                                     </DockPanel>
                                 </DataTemplate>
@@ -227,7 +246,7 @@
                 </Border>
 
                 <!-- ===== Échec ===== -->
-                <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" MaxWidth="660" HorizontalAlignment="Left"
+                <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" Width="620" HorizontalAlignment="Left"
                         Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
                         <TextBlock Text="L'analyse n'a pas abouti" Style="{StaticResource Text.Title}" />

@@ -14,11 +14,16 @@ using LDI12.Core.Model;
 namespace LDI12.App.ViewModels
 {
     /// <summary>Une ligne du fil de l'analyse : ce que Claude est en train de lire.</summary>
-    public sealed class AssistantTrace
+    public sealed class AssistantTrace : ObservableObject
     {
+        private bool _isDone;
+
         public AssistantTrace(string text) => Text = text;
 
         public string Text { get; }
+
+        /// <summary>Faux pour la dernière ligne : c'est ce que Claude fait en ce moment.</summary>
+        public bool IsDone { get => _isDone; set => Set(ref _isDone, value); }
     }
 
     /// <summary>Un constat de Claude, avec sa couleur.</summary>
@@ -370,7 +375,7 @@ namespace LDI12.App.ViewModels
             Raise(nameof(IsBusy));
 
             var cancellation = _running = new CancellationTokenSource();
-            var progress = new Progress<string>(text => Trace.Add(new AssistantTrace(text)));
+            var progress = new Progress<string>(AddTrace);
             _clock.Restart();
 
             try
@@ -380,7 +385,7 @@ namespace LDI12.App.ViewModels
                 var snapshot = _snapshot();
                 if (snapshot == null || snapshot.Metadata.RunMode != RunMode.Full)
                 {
-                    Trace.Add(new AssistantTrace("Diagnostic complet de la machine…"));
+                    AddTrace("Diagnostic complet de la machine…");
                     await _runDiagnosis().ConfigureAwait(true);
                     snapshot = _snapshot();
                 }
@@ -409,6 +414,13 @@ namespace LDI12.App.ViewModels
                 _clock.Stop();
                 Raise(nameof(IsBusy));
             }
+        }
+
+        /// <summary>Une ligne de plus au fil : la précédente est faite.</summary>
+        private void AddTrace(string text)
+        {
+            if (Trace.Count > 0) Trace[Trace.Count - 1].IsDone = true;
+            Trace.Add(new AssistantTrace(text));
         }
 
         private void Show(AssistantPlan plan, IReadOnlyList<AvailableAction> actions)
@@ -502,7 +514,7 @@ namespace LDI12.App.ViewModels
                 Trace.Clear();
                 foreach (var line in new[] { "Claude lit le diagnostic…", "Lecture : la machine", "Lecture : les pilotes",
                                              "Lecture : les périphériques (« pci »)", "Recherche sur le web : Realtek RTL8821CE driver" })
-                    Trace.Add(new AssistantTrace(line));
+                    AddTrace(line);
                 Stage = "Running";
                 return;
             }

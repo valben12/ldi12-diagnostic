@@ -240,7 +240,10 @@
                                     <TextBlock Grid.Column="1" Text="Rechercher" Margin="8,0,0,0" VerticalAlignment="Center" />
                                     <Border Grid.Column="2" Margin="10,0,0,0" Padding="5,0" VerticalAlignment="Center"
                                             CornerRadius="{DynamicResource Radius.Badge}" BorderThickness="1"
-                                            BorderBrush="{DynamicResource Brush.BorderStrong}">
+                                            BorderBrush="{DynamicResource Brush.BorderStrong}"
+                                            Visibility="{Binding ActualWidth,
+                                                RelativeSource={RelativeSource AncestorType=Window},
+                                                Converter={StaticResource WiderThan}, ConverterParameter=1150}">
                                         <TextBlock Text="Ctrl+K" FontSize="{DynamicResource Font.Size.Caption}"
                                                    Foreground="{DynamicResource Brush.TextTertiary}" />
                                     </Border>
@@ -612,8 +615,10 @@
             <!-- ================= Recherche universelle =================
                  Par-dessus tout, le fond assombri : un clic à côté la referme, Échap aussi. Les
                  flèches parcourent les résultats, Entrée ouvre celui qui est désigné. -->
-            <Grid Grid.ColumnSpan="2" Visibility="{Binding Search.IsOpen, Converter={StaticResource BoolToVisibility}}"
-                  DataContext="{Binding Search}">
+            <!-- Visibility se lie dans le contexte propre de la grille, la recherche elle-même :
+                 « Search.IsOpen » y échouait, et une liaison qui échoue laisse la grille visible. -->
+            <Grid Grid.ColumnSpan="2" DataContext="{Binding Search}"
+                  Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}}">
                 <Border Background="#8C000000" MouseLeftButtonDown="OnSearchBackdrop" />
                 <Border Width="620" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,84,0,0"
                         Background="{DynamicResource Brush.SurfaceSoft}" BorderBrush="{DynamicResource Brush.BorderStrong}"

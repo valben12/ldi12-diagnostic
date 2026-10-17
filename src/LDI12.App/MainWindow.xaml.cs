@@ -21,6 +21,7 @@ namespace LDI12.App
             FitToWorkArea();
 
             PreviewKeyDown += OnShortcut;
+            Closing += OnClosing;
             DataContextChanged += OnDataContextChanged;
             SourceInitialized += OnSourceInitialized;
             ContentRendered += OnContentRendered;
@@ -80,6 +81,20 @@ namespace LDI12.App
 
             shell.Navigate(index);
             e.Handled = true;
+        }
+
+        // ------------------------------------------------------------------ fermeture
+
+        /// <summary>Une copie, une réparation ou un nettoyage en cours : la fermeture se confirme.</summary>
+        private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (DataContext is not ViewModels.ShellViewModel shell) return;
+            var reason = shell.BusyReason;
+            if (reason == null) return;
+
+            var answer = MessageBox.Show(this, reason + "\n\nQuitter quand même ?", "LDI12 Diagnostic",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (answer != MessageBoxResult.Yes) e.Cancel = true;
         }
 
         // ------------------------------------------------------------------ recherche

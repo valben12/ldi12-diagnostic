@@ -197,6 +197,31 @@ namespace LDI12.App.ViewModels
             Search = new SearchViewModel(SearchEntries);
         }
 
+        /// <summary>
+        /// Ce qu'une fermeture de la fenêtre interromprait, en une phrase ; nul si rien ne tourne.
+        /// </summary>
+        /// <remarks>
+        /// Fermer la fenêtre en pleine copie l'arrêtait sans un mot : une heure de sauvegarde
+        /// perdue sur un clic de travers. La fenêtre demande maintenant confirmation, et dit ce
+        /// qui se passera.
+        /// </remarks>
+        public string? BusyReason
+        {
+            get
+            {
+                if (_userData.IsBackupTransferring)
+                    return "Une sauvegarde est en cours. Quitter l'arrête ; relancer la sauvegarde vers le même support " +
+                           "reprendra où elle en était, sans recopier ce qui est déjà vérifié.";
+                if (_userData.IsRestoreTransferring)
+                    return "Une restauration est en cours. Quitter l'arrête ; la relancer ne recopiera pas ce qui est déjà restauré.";
+                foreach (var item in _repairs.Items)
+                    if (item.IsBusy)
+                        return "La réparation « " + item.Title + " » est en cours. Quitter peut la laisser à mi-chemin.";
+                if (_cleanup.IsBusy) return "Un nettoyage est en cours. Quitter l'arrête entre deux fichiers.";
+                return null;
+            }
+        }
+
         /// <summary>La recherche universelle, Ctrl+K.</summary>
         public SearchViewModel Search { get; }
 

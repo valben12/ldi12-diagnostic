@@ -111,6 +111,18 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== L'assistant : le seul endroit où Claude est nommé ===== -->
+            <TextBlock Text="L'ASSISTANT" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel MaxWidth="960" HorizontalAlignment="Left">
+                    <TextBlock Text="Analyse par intelligence artificielle" Style="{StaticResource Text.Emphasis}" />
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="L'analyse des pilotes et le diagnostic guidé s'appuient sur Claude, le modèle d'IA d'Anthropic. Il lit le relevé du diagnostic, cherche au besoin sur le web les versions publiées par les constructeurs, et propose un plan fait des opérations de ce logiciel." />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Ce qui est envoyé : le relevé technique de la machine (matériel, pilotes, journaux, services), jamais un document ni un fichier personnel. Rien ne s'exécute sans un clic du technicien. L'assistant fonctionne avec votre propre clé d'API Anthropic, rangée chiffrée à côté du logiciel." />
+                </StackPanel>
+            </Border>
+
             <!-- ===== Ce qu'il sait faire ===== -->
             <TextBlock Text="CE QUE CE LOGICIEL SAIT FAIRE" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">

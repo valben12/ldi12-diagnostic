@@ -21,8 +21,8 @@ sa licence, sans que rien ne le signale. Elle est également consultable dans le
 | [HidSharp](http://www.zer7.com/files/oss/hidsharp/LICENSE.txt) | 2.1.0 | Accompagne la bibliothèque de capteurs | Voir la licence publiée par l'auteur |
 | [Mono.Posix.NETStandard](https://go.microsoft.com/fwlink/?linkid=869050) | 1.0.0 | Accompagne la bibliothèque de capteurs | Voir la licence publiée par l'éditeur |
 | [Newtonsoft.Json](https://www.newtonsoft.com/json) | 13.0.3 | Lecture et écriture des diagnostics archivés | **MIT** |
-| [Anthropic](https://github.com/anthropics/anthropic-sdk-csharp) | 12.58.0 | Accès à Claude, pour l'assistant : inactif sans clé d'API | **MIT** |
-| [Microsoft.Extensions.AI.Abstractions](https://github.com/dotnet/extensions) | 10.5.1 | Accompagne la bibliothèque d'accès à Claude | **MIT** |
+| [Anthropic](https://github.com/anthropics/anthropic-sdk-csharp) | 12.58.0 | Accès à Claude (Anthropic), le modèle d'IA de l'assistant : inactif sans clé d'API | **MIT** |
+| [Microsoft.Extensions.AI.Abstractions](https://github.com/dotnet/extensions) | 10.5.1 | Accompagne la bibliothèque d'Anthropic | **MIT** |
 
 HidSharp et Mono.Posix.NETStandard n'ont pas été choisis : ils arrivent avec
 LibreHardwareMonitorLib. Leurs paquets NuGet ne déclarent qu'une adresse de licence, sans la

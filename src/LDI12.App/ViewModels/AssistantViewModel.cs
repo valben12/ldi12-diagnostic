@@ -389,7 +389,7 @@ namespace LDI12.App.ViewModels
                     await _runDiagnosis().ConfigureAwait(true);
                     snapshot = _snapshot();
                 }
-                if (snapshot == null) throw new AssistantException("Le diagnostic n'a pas abouti : Claude n'a rien à analyser.");
+                if (snapshot == null) throw new AssistantException("Le diagnostic n'a pas abouti : il n'y a rien à analyser.");
 
                 var actions = _repairs.PlanCatalog();
                 var plan = await new ClaudeAnalyst(key)
@@ -512,7 +512,7 @@ namespace LDI12.App.ViewModels
             if (mode == "running")
             {
                 Trace.Clear();
-                foreach (var line in new[] { "Claude lit le diagnostic…", "Lecture : la machine", "Lecture : les pilotes",
+                foreach (var line in new[] { "Lecture du diagnostic…", "Lecture : la machine", "Lecture : les pilotes",
                                              "Lecture : les périphériques (« pci »)", "Recherche sur le web : Realtek RTL8821CE driver" })
                     AddTrace(line);
                 Stage = "Running";

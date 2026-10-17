@@ -108,9 +108,9 @@
                 <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" MaxWidth="620" HorizontalAlignment="Left"
                         Visibility="{Binding IsKey, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
-                        <TextBlock Text="Connecter Claude" Style="{StaticResource Text.Title}" />
+                        <TextBlock Text="Activer l'assistant" Style="{StaticResource Text.Title}" />
                         <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,16" TextWrapping="Wrap"
-                                   Text="Collez votre clé d'API Anthropic. Saisie une fois, elle reste chiffrée à côté du logiciel, et ne sert que sur ce support." />
+                                   Text="Collez votre clé d'API (console Anthropic). Saisie une fois, elle reste chiffrée à côté du logiciel, et ne sert que sur ce support." />
                         <Border Background="{DynamicResource Brush.SurfaceHover}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
                                 BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Padding="4,2">
                             <PasswordBox x:Name="KeyBox" PasswordChanged="OnKeyChanged" Padding="6,7" MinHeight="34"
@@ -149,7 +149,7 @@
                                     <Path Style="{StaticResource Icon}" Width="20" Height="20" Data="{StaticResource Icon.Sparkles}" Stroke="White" />
                                 </Border>
                                 <TextBlock Text="Diagnostic guidé" Style="{StaticResource Text.Title}" Margin="0,16,0,6" />
-                                <TextBlock Text="Le problème en trois clics ; Claude cherche la cause et prépare la réparation."
+                                <TextBlock Text="Le problème en trois clics : la cause est cherchée, la réparation préparée."
                                            Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
@@ -181,7 +181,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Claude au travail ===== -->
+                <!-- ===== Analyse en cours ===== -->
                 <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" Width="620" HorizontalAlignment="Left"
                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
@@ -207,7 +207,7 @@
                                 </Path>
                             </Border>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Claude analyse" Style="{StaticResource Text.Eyebrow}" />
+                                <TextBlock Text="Analyse en cours" Style="{StaticResource Text.Eyebrow}" />
                                 <TextBlock Text="{Binding RunTitle}" Style="{StaticResource Text.Title}" />
                             </StackPanel>
                         </DockPanel>

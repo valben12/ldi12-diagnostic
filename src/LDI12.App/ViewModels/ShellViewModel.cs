@@ -280,10 +280,10 @@ namespace LDI12.App.ViewModels
             Data("Relever ce qu'il y a à sauvegarder", "Place et durée, sans rien copier", "survey",
                  "releve volume taille");
 
-            entries.Add(new SearchEntry("Analyser les pilotes", "Assistant", "Claude compare chaque pilote au matériel",
-                () => Show(_assistant), "claude ia pilotes drivers mise a jour version constructeur"));
-            entries.Add(new SearchEntry("Diagnostic guidé", "Assistant", "Décrire le problème, Claude cherche la cause",
-                () => Show(_assistant), "claude ia panne probleme cause depannage"));
+            entries.Add(new SearchEntry("Analyser les pilotes", "Assistant", "Chaque pilote comparé au matériel",
+                () => Show(_assistant), "ia pilotes drivers mise a jour version constructeur"));
+            entries.Add(new SearchEntry("Diagnostic guidé", "Assistant", "Décrire le problème, la cause est cherchée",
+                () => Show(_assistant), "ia panne probleme cause depannage"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 

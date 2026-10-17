@@ -101,7 +101,7 @@ namespace LDI12.Core.Runtime
             {
                 Name = "Anthropic",
                 Version = "12.58.0",
-                Role = "Accès à Claude, pour l'assistant ; inactif sans clé d'API.",
+                Role = "Accès à Claude (Anthropic), le modèle d'IA de l'assistant ; inactif sans clé d'API.",
                 Licence = "MIT",
                 Url = "https://github.com/anthropics/anthropic-sdk-csharp",
             },
@@ -109,7 +109,7 @@ namespace LDI12.Core.Runtime
             {
                 Name = "Microsoft.Extensions.AI.Abstractions",
                 Version = "10.5.1",
-                Role = "Accompagne la bibliothèque d'accès à Claude.",
+                Role = "Accompagne la bibliothèque d'Anthropic.",
                 Licence = "MIT",
                 Url = "https://github.com/dotnet/extensions",
                 Transitive = true,

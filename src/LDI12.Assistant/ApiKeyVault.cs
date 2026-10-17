@@ -42,13 +42,13 @@ namespace LDI12.Assistant
     /// </remarks>
     public sealed class ApiKeyVault
     {
-        public const string FileName = "LDI12-Claude.cle";
+        public const string FileName = "LDI12-Assistant.cle";
 
         private static readonly byte[] Magic = Encoding.ASCII.GetBytes("LDI12CLE1");
 
         // Le secret du logiciel : il ne protège rien seul (il est dans l'exécutable), il rend
         // seulement le fichier inutilisable par un autre programme qui connaîtrait le format.
-        private static readonly byte[] AppSecret = Encoding.UTF8.GetBytes("LDI12 Diagnostic · clé Claude · Laguiole");
+        private static readonly byte[] AppSecret = Encoding.UTF8.GetBytes("LDI12 Diagnostic · clé de l'assistant · Laguiole");
 
         private const int Iterations = 120_000;
 

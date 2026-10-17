@@ -75,7 +75,7 @@ namespace LDI12.Assistant
             // problèmes connus d'une version. Bornée : une analyse ne doit pas devenir une enquête.
             tools.Insert(0, new BetaWebSearchTool20260209 { MaxUses = request.Mode == AssistantMode.Drivers ? 6 : 3 });
 
-            progress?.Report("Claude lit le diagnostic…");
+            progress?.Report("Lecture du diagnostic…");
 
             for (var turn = 0; turn < MaxTurns; turn++)
             {
@@ -108,7 +108,7 @@ namespace LDI12.Assistant
                 output += response.Usage.OutputTokens;
 
                 if (response.StopReason == BetaStopReason.Refusal)
-                    throw new AssistantException("Claude a décliné cette analyse. Reformulez le problème, ou passez par les réparations.");
+                    throw new AssistantException("Cette analyse a été refusée. Reformulez le problème, ou passez par les réparations.");
 
                 var assistant = new List<BetaContentBlockParam>();
                 var results = new List<BetaContentBlockParam>();
@@ -432,12 +432,12 @@ namespace LDI12.Assistant
             AnthropicRateLimitException => "Trop de demandes pour l'instant. Réessayez dans une minute.",
             AnthropicBadRequestException bad when bad.Message.IndexOf("credit", StringComparison.OrdinalIgnoreCase) >= 0
                 => "Le compte Anthropic n'a plus de crédit.",
-            Anthropic5xxException => "Le service de Claude est momentanément indisponible. Réessayez dans un instant.",
-            AnthropicIOException => "Claude est injoignable : vérifiez la connexion à Internet.",
-            AnthropicApiException api => "Claude a répondu par une erreur : " + api.Message,
-            AnthropicException other => "Échange avec Claude impossible : " + other.Message,
-            System.Net.Http.HttpRequestException => "Claude est injoignable : vérifiez la connexion à Internet.",
-            TaskCanceledException => "Claude n'a pas répondu à temps.",
+            Anthropic5xxException => "Le service d'analyse est momentanément indisponible. Réessayez dans un instant.",
+            AnthropicIOException => "Service d'analyse injoignable : vérifiez la connexion à Internet.",
+            AnthropicApiException api => "Le service d'analyse a répondu par une erreur : " + api.Message,
+            AnthropicException other => "Échange avec le service d'analyse impossible : " + other.Message,
+            System.Net.Http.HttpRequestException => "Service d'analyse injoignable : vérifiez la connexion à Internet.",
+            TaskCanceledException => "Le service d'analyse n'a pas répondu à temps.",
             _ => null,
         };
     }

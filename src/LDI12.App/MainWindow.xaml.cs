@@ -21,6 +21,7 @@ namespace LDI12.App
             FitToWorkArea();
 
             PreviewKeyDown += OnShortcut;
+            DataContextChanged += OnDataContextChanged;
             SourceInitialized += OnSourceInitialized;
             ContentRendered += OnContentRendered;
             Closed += OnClosed;
@@ -45,6 +46,19 @@ namespace LDI12.App
             var modifiers = System.Windows.Input.Keyboard.Modifiers;
             var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
 
+            // Ctrl+K, comme dans la plupart des logiciels de bureau ; Ctrl+F aussi, le réflexe de « chercher ».
+            if (modifiers == System.Windows.Input.ModifierKeys.Control &&
+                (key == System.Windows.Input.Key.K || key == System.Windows.Input.Key.F))
+            {
+                if (shell.Search.IsOpen) shell.Search.Close();
+                else shell.Search.Open();
+                e.Handled = true;
+                return;
+            }
+
+            // La recherche ouverte garde le clavier pour elle : ses touches sont traitées par son champ.
+            if (shell.Search.IsOpen) return;
+
             if (key == System.Windows.Input.Key.F5)
             {
                 var command = modifiers == System.Windows.Input.ModifierKeys.Control
@@ -65,6 +79,81 @@ namespace LDI12.App
             if (index < 0) return;
 
             shell.Navigate(index);
+            e.Handled = true;
+        }
+
+        // ------------------------------------------------------------------ recherche
+
+        private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.OldValue is ViewModels.ShellViewModel old) old.Search.PropertyChanged -= OnSearchChanged;
+            if (e.NewValue is ViewModels.ShellViewModel shell) shell.Search.PropertyChanged += OnSearchChanged;
+        }
+
+        /// <summary>Ouverte, la recherche prend le clavier : on tape sans avoir à cliquer dans le champ.</summary>
+        private void OnSearchChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(ViewModels.SearchViewModel.IsOpen) || sender is not ViewModels.SearchViewModel search) return;
+
+            if (search.IsOpen)
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+                {
+                    SearchBox.Focus();
+                    System.Windows.Input.Keyboard.Focus(SearchBox);
+                }));
+        }
+
+        private void OnSearchKey(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (DataContext is not ViewModels.ShellViewModel shell) return;
+            var search = shell.Search;
+
+            switch (e.Key)
+            {
+                case System.Windows.Input.Key.Down:
+                    search.Move(1);
+                    break;
+                case System.Windows.Input.Key.Up:
+                    search.Move(-1);
+                    break;
+                case System.Windows.Input.Key.Enter:
+                    search.Activate();
+                    break;
+                case System.Windows.Input.Key.Escape:
+                    search.Close();
+                    break;
+                default:
+                    return;
+            }
+
+            if (search.Selected != null) SearchResults.ScrollIntoView(search.Selected);
+            e.Handled = true;
+        }
+
+        private void OnSearchClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (DataContext is not ViewModels.ShellViewModel shell) return;
+            if (e.OriginalSource is DependencyObject source &&
+                System.Windows.Media.VisualTreeHelper.GetParent(source) != null &&
+                FindItem(source) is System.Windows.Controls.ListBoxItem item &&
+                item.DataContext is ViewModels.SearchEntry entry)
+            {
+                shell.Search.Selected = entry;
+                shell.Search.Activate();
+                e.Handled = true;
+            }
+        }
+
+        private static System.Windows.Controls.ListBoxItem? FindItem(DependencyObject? element)
+        {
+            while (element != null && element is not System.Windows.Controls.ListBoxItem)
+                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+            return element as System.Windows.Controls.ListBoxItem;
+        }
+
+        private void OnSearchBackdrop(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (DataContext is ViewModels.ShellViewModel shell) shell.Search.Close();
             e.Handled = true;
         }
 

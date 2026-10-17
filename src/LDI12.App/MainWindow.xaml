@@ -225,6 +225,27 @@
                             <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
                                     Command="{Binding CancelCommand}" Margin="0,0,10,0"
                                     Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- La recherche : tout le logiciel à quelques lettres, sans savoir où c'est rangé. -->
+                            <Button Style="{StaticResource Button.Ghost}" Command="{Binding Search.OpenCommand}" Margin="0,0,10,0"
+                                    ToolTip="Trouver un écran, une réparation, un outil (Ctrl+K)">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Path Style="{StaticResource Icon}" Width="13" Height="13" VerticalAlignment="Center"
+                                          Data="M 6,1 A 5,5 0 1 1 5.99,1 Z M 9.6,9.6 L 13,13"
+                                          Stroke="{DynamicResource Brush.TextSecondary}" />
+                                    <TextBlock Grid.Column="1" Text="Rechercher" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Margin="10,0,0,0" Padding="5,0" VerticalAlignment="Center"
+                                            CornerRadius="{DynamicResource Radius.Badge}" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Brush.BorderStrong}">
+                                        <TextBlock Text="Ctrl+K" FontSize="{DynamicResource Font.Size.Caption}"
+                                                   Foreground="{DynamicResource Brush.TextTertiary}" />
+                                    </Border>
+                                </Grid>
+                            </Button>
                             <Button Style="{StaticResource Button.Ghost}" Content="Analyse rapide"
                                     Command="{Binding RunQuickScanCommand}" Margin="0,0,10,0"
                                     Visibility="{Binding IsScanning, Converter={StaticResource HiddenWhenTrue}}" />
@@ -587,6 +608,80 @@
                     </Grid>
                 </Grid>
             </DockPanel>
+
+            <!-- ================= Recherche universelle =================
+                 Par-dessus tout, le fond assombri : un clic à côté la referme, Échap aussi. Les
+                 flèches parcourent les résultats, Entrée ouvre celui qui est désigné. -->
+            <Grid Grid.ColumnSpan="2" Visibility="{Binding Search.IsOpen, Converter={StaticResource BoolToVisibility}}"
+                  DataContext="{Binding Search}">
+                <Border Background="#8C000000" MouseLeftButtonDown="OnSearchBackdrop" />
+                <Border Width="620" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,84,0,0"
+                        Background="{DynamicResource Brush.SurfaceSoft}" BorderBrush="{DynamicResource Brush.BorderStrong}"
+                        BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="32" ShadowDepth="8" Opacity="0.45" Color="Black" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBox x:Name="SearchBox" Style="{StaticResource Field}"
+                                 Tag="Écran, réparation, outil : « dns », « pilote », « sauvegarde »…"
+                                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="OnSearchKey" />
+                        <ListBox x:Name="SearchResults" ItemsSource="{Binding Results}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                 Margin="0,10,0,0" Background="Transparent" BorderThickness="0" Focusable="False"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 PreviewMouseLeftButtonUp="OnSearchClick">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="Cursor" Value="Hand" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Row" Padding="12,8" Margin="0,0,0,2" CornerRadius="{DynamicResource Radius.Control}"
+                                                        Background="Transparent">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Kind}" Style="{StaticResource Text.Muted}"
+                                                   VerticalAlignment="Top" Margin="14,1,0,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Text="Rien ne correspond. Essayez un autre mot : « réseau », « disque », « mot de passe »…"
+                                   Style="{StaticResource Text.Muted}" Margin="4,12,0,4"
+                                   Visibility="{Binding HasNoResult, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="↑ ↓ pour parcourir · Entrée pour ouvrir · Échap pour fermer"
+                                   Style="{StaticResource Text.Muted}" FontSize="{DynamicResource Font.Size.Caption}"
+                                   Margin="4,10,0,0" Foreground="{DynamicResource Brush.TextTertiary}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>

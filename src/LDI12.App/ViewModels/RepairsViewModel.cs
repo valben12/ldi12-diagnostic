@@ -138,10 +138,21 @@ namespace LDI12.App.ViewModels
         public string? Recommendation
         {
             get => _recommendation;
-            internal set { if (Set(ref _recommendation, value)) Raise(nameof(IsRecommended)); }
+            internal set
+            {
+                if (!Set(ref _recommendation, value)) return;
+                Raise(nameof(IsRecommended));
+                Raise(nameof(RecommendationNote));
+            }
         }
 
         public bool IsRecommended => _recommendation != null;
+
+        /// <summary>La recommandation, seulement quand elle dit autre chose que le titre de la carte.</summary>
+        public string? RecommendationNote
+            => _recommendation != null && !string.Equals(_recommendation, Title, StringComparison.OrdinalIgnoreCase)
+                ? _recommendation
+                : null;
         public string PreviewSummary => _preview?.Summary ?? string.Empty;
         public IReadOnlyList<string> WillDo => _preview?.WillDo ?? Array.Empty<string>();
         public IReadOnlyList<string> WillNotDo => _preview?.WillNotDo ?? Array.Empty<string>();
@@ -388,7 +399,12 @@ namespace LDI12.App.ViewModels
 
                 // Les pilotes et les applications d'une sauvegarde se traitent avec elle, sur
                 // l'écran Données : seuls, ils n'ont ni sauvegarde ni support à qui s'adresser.
-                if (action.Descriptor.Id == ActionIds.ExportDrivers ||
+                // La sauvegarde et la restauration ont leur écran, Données, avec leurs supports et
+                // leurs choix : présentées ici aussi, elles demandaient un dossier qu'on ne pouvait
+                // pas choisir, et faisaient croire à un second chemin.
+                if (action.Descriptor.Id == ActionIds.BackupUserData ||
+                    action.Descriptor.Id == ActionIds.RestoreUserData ||
+                    action.Descriptor.Id == ActionIds.ExportDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreApplications ||
                     action.Descriptor.Id == ActionIds.RestorePrinters ||

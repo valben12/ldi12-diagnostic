@@ -194,6 +194,54 @@ namespace LDI12.App.ViewModels
             SelectedNavigation = Navigation[0];
             _isDarkTheme = ThemeManager.Current == AppTheme.Dark;
             ActionNavigator.Open = OpenAction;
+            Search = new SearchViewModel(SearchEntries);
+        }
+
+        /// <summary>La recherche universelle, Ctrl+K.</summary>
+        public SearchViewModel Search { get; }
+
+        /// <summary>
+        /// Ce que la recherche trouve : les écrans, les gestes de l'écran Données, chaque
+        /// réparation et chaque console de Windows, avec de quoi les ouvrir.
+        /// </summary>
+        private IReadOnlyList<SearchEntry> SearchEntries()
+        {
+            var entries = new List<SearchEntry>();
+            foreach (var item in Navigation)
+            {
+                var target = item;
+                entries.Add(new SearchEntry(item.Title, "Écran", item.Shortcut ?? string.Empty, () => SelectedNavigation = target));
+            }
+
+            void Data(string title, string detail, string mode, string keywords)
+                => entries.Add(new SearchEntry(title, "Données", detail, () =>
+                {
+                    if (_userData.CanChangeMode) _userData.ShowMode(mode);
+                    Show(_userData);
+                }, keywords));
+
+            Data("Sauvegarder les données", "Vers un support externe, chaque fichier relu", "backup",
+                 "copie disque externe cle usb transfert nouveau pc");
+            Data("Restaurer une sauvegarde", "Sur la machine réinstallée ou le nouveau PC", "restore",
+                 "restauration remettre transfert nouveau pc");
+            Data("Vérifier une sauvegarde", "Relire chaque fichier contre son empreinte", "restore",
+                 "verification integrite empreinte sha256 controle");
+            Data("Relever ce qu'il y a à sauvegarder", "Place et durée, sans rien copier", "survey",
+                 "releve volume taille");
+
+            foreach (var item in _repairs.Items)
+            {
+                var id = item.Descriptor.Id;
+                entries.Add(new SearchEntry(item.Title, "Réparation", item.Purpose, () => OpenAction(id), id));
+            }
+
+            foreach (var item in _tools.Items)
+            {
+                var id = item.Id;
+                entries.Add(new SearchEntry(item.Title, "Outil", item.Purpose, () => OpenAction(id), item.FileName));
+            }
+
+            return entries;
         }
 
         /// <summary>

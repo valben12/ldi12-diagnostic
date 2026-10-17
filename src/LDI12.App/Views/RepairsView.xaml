@@ -87,10 +87,10 @@
                                         </Grid.ColumnDefinitions>
                                         <Border Background="{DynamicResource Brush.BrandRedSoft}" CornerRadius="{DynamicResource Radius.Badge}"
                                                 Padding="8,2" VerticalAlignment="Top">
-                                            <TextBlock Text="Recommandé" Style="{StaticResource Text.Muted}" FontWeight="SemiBold"
+                                            <TextBlock Text="Recommandé par le diagnostic" Style="{StaticResource Text.Muted}" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource Brush.BrandRed}" />
                                         </Border>
-                                        <TextBlock Grid.Column="1" Text="{Binding Recommendation}" Style="{StaticResource Text.Muted}"
+                                        <TextBlock Grid.Column="1" Text="{Binding RecommendationNote}" Style="{StaticResource Text.Muted}"
                                                    Margin="10,2,0,0" TextWrapping="Wrap" />
                                     </Grid>
 

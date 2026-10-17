@@ -31,16 +31,18 @@ $screens = @(
     @{ Nav = 11; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
     @{ Nav = 11; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
     @{ Nav = 12; Name = 'outils';        Scroll = @() },
+    @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
     @{ Nav = 13; Name = 'rapports';      Scroll = @() },
     @{ Nav = 14; Name = 'historique';    Scroll = @() },
     @{ Nav = 15; Name = 'reglages';      Scroll = @() },
     @{ Nav = 16; Name = 'a-propos';      Scroll = @() }
 )
 
-function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode) {
+function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search) {
     $file = Join-Path $Out ("{0}-{1:00}-{2}{3}.png" -f $theme, $nav, $name, $(if ($scroll -gt 0) { "-$scroll" } else { '' }))
     $arguments = @('--screenshot', $file, '--theme', $theme, '--nav', $nav, '--size', $Size)
     if ($mode) { $arguments += @('--data-mode', $mode) }
+    if ($search) { $arguments += @('--search', $search) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
@@ -56,7 +58,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
 foreach ($theme in 'dark', 'light') {
     Write-Host "Thème $theme" -ForegroundColor Cyan
     foreach ($screen in $screens) {
-        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode
-        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode }
+        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode $screen.Search
+        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode $screen.Search }
     }
 }

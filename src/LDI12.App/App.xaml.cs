@@ -129,6 +129,8 @@ namespace LDI12.App
             var dataMode = ReadDataMode(e.Args);
             if (dataMode != null) _shell.UserData?.ShowMode(dataMode);
 
+            _searchQuery = ReadArgument(e.Args, "--search");
+
             if (_screenshotPath != null)
             {
                 if (_captureDelayMs > 0)
@@ -290,6 +292,17 @@ namespace LDI12.App
             return 0;
         }
 
+        private string? _searchQuery;
+
+        /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
+        private static string? ReadArgument(string[] args, string name)
+        {
+            for (var i = 0; i < args.Length - 1; i++)
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            return null;
+        }
+
         /// <summary>Geste à montrer sur l'écran Données (<c>--data-mode restore</c>).</summary>
         private static string? ReadDataMode(string[] args)
         {
@@ -368,6 +381,13 @@ namespace LDI12.App
         {
             if (_screenshotPath == null || MainWindow == null) return;
             _shell!.ScanCompleted -= OnScanCompletedForScreenshot;
+
+            // La recherche s'ouvre une fois l'analyse finie : réparations et outils sont alors connus.
+            if (_searchQuery != null)
+            {
+                _shell.Search.Open();
+                _shell.Search.Query = _searchQuery;
+            }
 
             // L'écran d'analyse s'efface en fondu : capturer immédiatement le saisirait à
             // mi-disparition, superposé aux résultats. On laisse la transition se terminer.

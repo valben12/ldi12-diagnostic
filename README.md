@@ -43,11 +43,18 @@ minutes selon l'état du disque.
 
 La moitié des interventions finit par une réinstallation ou un changement de machine. L'écran
 **Données** fait le transfert d'un bout à l'autre, en quatre étapes : que sauvegarder, où copier,
-ce qui part avec, puis préparer et copier.
+ce qui part avec, puis préparer et copier. Une barre en bas de l'écran rappelle le choix fait et
+porte les boutons, et pendant la copie un tableau de bord montre le débit, la courbe des deux
+dernières minutes, les fichiers et le temps restant ; l'icône de la barre des tâches suit la
+copie et clignote à la fin.
 
 - **Chaque fichier est relu sur le support** et comparé à l'original, empreinte SHA-256 à
   l'appui, pas dans le cache de Windows. Il est écrit sous un nom provisoire et ne prend son
   vrai nom qu'une fois vérifié : jamais de fichier à moitié écrit, jamais rien d'écrasé.
+- **Une sauvegarde se revérifie à tout moment.** Le manifeste note l'empreinte de chaque
+  fichier : « Vérifier la sauvegarde » relit le support et nomme ce qui est abîmé, illisible ou
+  disparu, avant d'effacer le disque du client ou de s'y fier. La restauration compare aussi
+  chaque fichier relu à son empreinte du jour de la sauvegarde.
 - **Un support débranché, plein ou une copie arrêtée** : relancer reprend où la copie s'était
   arrêtée, sans recopier ce qui est déjà vérifié. Un fichier tenu ouvert, une archive Outlook
   par exemple, est récupéré par un cliché instantané de Windows, toujours supprimé ensuite.
@@ -63,20 +70,22 @@ ce qui part avec, puis préparer et copier.
   modèles d'Office, fond d'écran, polices.
 - **La restauration remet chaque chose à sa place** : pilotes d'abord, puis imprimantes,
   données, lecteurs réseau et applications. Rien n'est supprimé sur la machine, un profil
-  remplacé est mis de côté, et la sauvegarde n'est jamais modifiée.
+  remplacé est mis de côté, un homonyme différent est gardé à côté de celui de la sauvegarde,
+  et la sauvegarde n'est jamais modifiée.
 - **Deux documents** sont déposés avec la sauvegarde : la fiche de réinstallation pour le
   technicien, et un rapport imprimable pour le client, ce qui est en sécurité et ce qui ne l'est
   pas, à signer des deux côtés.
 
 Un test sans aucune simulation tourne sous Windows à chaque modification : sauvegarde d'un jeu
 de fichiers piégeux, archive tenue ouverte, support arraché puis reprise, restauration sur un
-nouveau poste, et chaque fichier comparé à l'original.
+nouveau poste, chaque fichier comparé à l'original, puis un octet changé sur le support que la
+vérification doit trouver.
 
 ![Écran Données](docs/captures/dark-11-donnees.png)
 
 ## Ce qu'il sait réparer
 
-Vingt-trois opérations, du vidage de cache DNS à la sauvegarde vérifiée des données du client
+Vingt-quatre opérations, du vidage de cache DNS à la sauvegarde vérifiée des données du client
 et à leur restauration. Aucune ne part sur un simple clic : chacune affiche d'abord la commande
 exacte qu'elle va lancer, ce qu'elle va modifier, ce qu'elle ne touchera pas, et ce qui sera
 perdu au passage. Le nettoyage montre la liste des fichiers avant d'en supprimer un seul.
@@ -136,7 +145,7 @@ XAML d'une application WPF ciblant .NET Framework. La raison est détaillée dan
 [`docs/01-architecture.md`](docs/01-architecture.md) § 1.5.
 
 Les tests tournent avec `vstest.console.exe` sur `tests\LDI12.Tests\bin\Debug\net472\LDI12.Tests.dll`.
-Il y en a 1 073.
+Il y en a 1 106.
 
 ## Publier l'exécutable qui part sur la clé USB
 
@@ -209,13 +218,13 @@ l'interface se juge sur l'image, avant et après.
 | `LDI12.Platform` | Détection de Windows, registre de fonctionnalités, P/Invoke, passerelles WMI, registre, processus, journalisation. |
 | `LDI12.Collectors` | 39 sondes : matériel, écrans, erreurs signalées, stockage et SMART, Windows, logiciels, tâches planifiées, filet de sécurité, impression, son, stabilité, comptes, heure, ports série, réseau et environnement réseau, sécurité, performances, alimentation, températures. |
 | `LDI12.Engine` | Ordonnancement des sondes, 149 règles, corrélations, scoring, plan d'action, comparaison avant et après. |
-| `LDI12.Actions` | 23 opérations de réparation, de maintenance, de sauvegarde et de restauration, 23 consoles Windows, journal d'intervention. |
+| `LDI12.Actions` | 24 opérations de réparation, de maintenance, de sauvegarde et de restauration, 23 consoles Windows, journal d'intervention. |
 | `LDI12.Updates` | Vérification de mise à jour signée, téléchargement contrôlé par empreinte, remplacement sur place. |
 | `LDI12.Reports` | Fiches de caractéristiques, sérialisation JSON, historique local, rapport technicien, bilan client et comparatif en HTML autonome. |
 | `LDI12.Publishing.Klarvi` | Dépôt facultatif d'un dossier d'intervention dans Klarvi. Le contrat HTTP est provisoire et confiné à cette classe : le reste du logiciel ne connaît que `IReportPublisher`. |
 | `LDI12.ProbeHost` | Exécutable satellite : mode sans interface, hôte des sondes isolées, élévation ciblée. |
 | `LDI12.App` | Application WPF sans cadre système : thème sombre et clair, navigation, vue d'ensemble, écrans de domaine, réparations, nettoyage, sauvegarde et restauration, outils, export, réglages. |
-| `LDI12.Tests` | xUnit : 1 073 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus, et un aller-retour de sauvegarde sans simulation sous Windows. |
+| `LDI12.Tests` | xUnit : 1 106 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus, et un aller-retour de sauvegarde sans simulation sous Windows. |
 
 ## La conception, écrite
 

@@ -36,6 +36,14 @@
     <!-- Bordure de carte : plus claire en haut, presque éteinte en bas. C'est le relief d'une
          surface éclairée par le haut, obtenu par un dégradé de bordure d'un pixel, pas par une
          ombre portée, qui serait un nuanceur de pixels. -->
+    <!-- Fond des cartes : à peine plus clair en haut, comme éclairé d'au-dessus. Un dégradé de
+         deux couleurs ne coûte rien au rendu, et donne aux cartes le relief que l'ombre portée,
+         interdite ici, leur aurait donné. -->
+    <LinearGradientBrush x:Key="Brush.CardFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FF18181E" Offset="0" />
+        <GradientStop Color="#FF121217" Offset="1" />
+    </LinearGradientBrush>
+
     <LinearGradientBrush x:Key="Brush.CardEdge" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#30FFFFFF" Offset="0" />
         <GradientStop Color="#14FFFFFF" Offset="0.42" />

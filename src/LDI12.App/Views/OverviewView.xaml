@@ -326,7 +326,7 @@
                 <StackPanel>
                     <TextBlock Text="Aucune analyse pour l'instant" Style="{StaticResource Text.Emphasis}" />
                     <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
-                               Text="Une analyse rapide démarre automatiquement à l'ouverture pour donner l'état de la machine en quelques secondes. Le bouton « Diagnostic complet » lance ensuite l'analyse approfondie, qui ajoute les journaux d'événements, les périphériques et les tests réseau." />
+                               Text="Une analyse rapide démarre à l'ouverture. « Diagnostic complet » ajoute les journaux, les périphériques et les tests réseau." />
                 </StackPanel>
             </Border>
 

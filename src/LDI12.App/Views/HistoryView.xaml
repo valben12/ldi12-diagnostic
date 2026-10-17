@@ -41,13 +41,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.History}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Historique" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.History}" Content="Historique"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
                        TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
 
@@ -59,7 +54,7 @@
                     <TextBlock Text="ARCHIVER LE DIAGNOSTIC AFFICHÉ" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Un diagnostic archivé sert de point de comparaison après l'intervention : c'est lui qui permettra de montrer au client ce qui a changé. Il contient les numéros de série de la machine, les comptes Windows et les réseaux sans fil du logement, et il reste sur cet ordinateur jusqu'à ce que vous le supprimiez." />
+                               Text="Archivez avant d'intervenir, comparez après : le client voit ce qui a changé. L'archive reste sur ce poste jusqu'à ce que vous la supprimiez." />
                     <TextBlock Text="{Binding FolderSummary}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0" />
                     <TextBlock Text="{Binding FolderPath}" Style="{StaticResource Text.Muted}" Margin="0,3,0,0"
                                Opacity="0.75" TextWrapping="Wrap" />
@@ -257,7 +252,7 @@
                         Visibility="{Binding NotRechecked.Count, Converter={StaticResource CountToVisibility}}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
-                                   Text="Ces constats n'apparaissent plus, mais le contrôle qui les produisait n'a pas conclu lors du second diagnostic. Ils ne sont pas réglés pour autant : une analyse complète les tranchera." />
+                                   Text="Absents du second diagnostic, mais leur contrôle n'a pas conclu : rien ne prouve qu'ils soient réglés." />
                         <ItemsControl ItemsSource="{Binding NotRechecked}" ItemTemplate="{StaticResource ChangeTemplate}" />
                     </StackPanel>
                 </Border>

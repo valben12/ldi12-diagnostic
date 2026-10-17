@@ -16,13 +16,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{Binding IconKey, Converter={StaticResource IconKey}}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{Binding IconKey, Converter={StaticResource IconKey}}" Content="{Binding Title}"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,8,0,18" />
 
             <!-- ===== Constats ===== -->

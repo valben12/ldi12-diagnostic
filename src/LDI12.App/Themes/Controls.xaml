@@ -54,8 +54,40 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
+    <!-- En-tête d'écran : l'icône dans une pastille teintée, puis le titre en grand. Le même
+         sur tous les écrans : Tag porte le tracé de l'icône, Content le titre. -->
+    <Style x:Key="PageHeader" TargetType="ContentControl">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="44" Height="44" CornerRadius="13" VerticalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#40ED2E36" Offset="0" />
+                                    <GradientStop Color="#14ED2E36" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Path Style="{StaticResource Icon}" Width="21" Height="21"
+                                  Data="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stroke="{DynamicResource Brush.BrandRed}" />
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{TemplateBinding Content}" Style="{StaticResource Text.PageTitle}"
+                                   Margin="16,0,0,2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Card" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceSoft}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.CardFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardEdge}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />

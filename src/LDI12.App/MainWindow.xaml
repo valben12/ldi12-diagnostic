@@ -623,9 +623,6 @@
                 <Border Width="620" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,84,0,0"
                         Background="{DynamicResource Brush.SurfaceSoft}" BorderBrush="{DynamicResource Brush.BorderStrong}"
                         BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="32" ShadowDepth="8" Opacity="0.45" Color="Black" />
-                    </Border.Effect>
                     <StackPanel>
                         <TextBox x:Name="SearchBox" Style="{StaticResource Field}"
                                  Tag="Écran, réparation, outil : « dns », « pilote », « sauvegarde »…"

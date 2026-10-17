@@ -464,7 +464,14 @@ namespace LDI12.Actions.Backup
                 if (completed && conflicts.Count > 0)
                 {
                     var asides = new List<(FileEntry File, string Target)>(conflicts.Count);
-                    foreach (var (file, target) in conflicts) asides.Add((file, Beside(target)));
+                    long asideBytes = 0;
+                    foreach (var (file, target) in conflicts)
+                    {
+                        asides.Add((file, Beside(target)));
+                        asideBytes += file.SizeBytes;
+                    }
+
+                    tracker.Extend(asides.Count, asideBytes);
 
                     completed = copier.Run(asides, (_, result) =>
                     {

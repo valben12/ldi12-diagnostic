@@ -85,6 +85,24 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Du_travail_ajoute_en_route_agrandit_le_total_au_lieu_de_le_depasser()
+        {
+            var reports = new List<ActionProgress>();
+            var progress = new CopyProgress(new Sink(reports), 10, 1, "Restauration de");
+            progress.Folder("Documents");
+            progress.FileDone(10);
+            Assert.Equal(1, progress.Fraction);
+
+            progress.Extend(1, 10);
+            Assert.True(progress.Fraction < 1);
+
+            progress.FileDone(10);
+            Assert.Equal(1, progress.Fraction);
+            Assert.Equal(2, reports.Last().Figures!.FilesTotal);
+            Assert.Equal(2, reports.Last().Figures!.FilesDone);
+        }
+
+        [Fact]
         public void Le_temps_restant_n_est_pas_annonce_avant_d_avoir_mesure()
         {
             var clock = new Clock();

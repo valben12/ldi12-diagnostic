@@ -37,9 +37,9 @@ namespace LDI12.Actions.Backup
 
         private readonly IProgress<ActionProgress>? _sink;
         private readonly Func<TimeSpan> _clock;
-        private readonly long _totalUnits;
-        private readonly long _totalBytes;
-        private readonly int _totalFiles;
+        private long _totalUnits;
+        private long _totalBytes;
+        private int _totalFiles;
         private readonly string _verb;
 
         private long _done;
@@ -109,6 +109,22 @@ namespace LDI12.Actions.Backup
             _fileUnits = 0;
             _files++;
             Report(force: _files == _totalFiles);
+        }
+
+        /// <summary>
+        /// Du travail qui s'ajoute en route : des fichiers à copier une seconde fois, sous un autre nom.
+        /// </summary>
+        /// <remarks>
+        /// Sans cela, une restauration qui pose des homonymes à côté annoncerait « 105 fichiers sur
+        /// 100 ». La barre recule un peu, et c'est la vérité : il reste du travail.
+        /// </remarks>
+        public void Extend(int files, long bytes)
+        {
+            if (files <= 0) return;
+            bytes = Math.Max(0, bytes);
+            _totalFiles += files;
+            _totalBytes += bytes;
+            _totalUnits += bytes * 2 + files;
         }
 
         /// <summary>Des fichiers écartés sans être tentés : leur part est comptée comme vue.</summary>

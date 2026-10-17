@@ -297,24 +297,28 @@
                         <StackPanel>
                             <TextBlock Text="DÉBIT" Style="{StaticResource Text.Eyebrow}" />
                             <TextBlock Text="{Binding TransferSpeed}" Style="{StaticResource StatValue}" />
+                            <TextBlock Text="{Binding TransferSpeedNote}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource StatTile}">
                         <StackPanel>
                             <TextBlock Text="MIS EN SÛRETÉ" Style="{StaticResource Text.Eyebrow}" />
                             <TextBlock Text="{Binding TransferBytes}" Style="{StaticResource StatValue}" />
+                            <TextBlock Text="{Binding TransferBytesOf}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource StatTile}">
                         <StackPanel>
                             <TextBlock Text="FICHIERS" Style="{StaticResource Text.Eyebrow}" />
                             <TextBlock Text="{Binding TransferFiles}" Style="{StaticResource StatValue}" />
+                            <TextBlock Text="{Binding TransferFilesOf}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource StatTile}">
                         <StackPanel>
                             <TextBlock Text="TEMPS RESTANT" Style="{StaticResource Text.Eyebrow}" />
                             <TextBlock Text="{Binding TransferRemainingShort}" Style="{StaticResource StatValue}" />
+                            <TextBlock Text="{Binding TransferElapsed}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
                 </UniformGrid>
@@ -337,7 +341,6 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{Binding TransferDetail}" Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding TransferElapsed}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
                     </StackPanel>
                     <!-- Arrêt entre deux fichiers : rien n'est laissé à moitié écrit, et relancer reprend. -->
                     <Button Grid.Column="1" Style="{StaticResource Button.Ghost}" Content="Arrêter" VerticalAlignment="Center"
@@ -579,6 +582,9 @@
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0">
                             <Button Style="{StaticResource Button.Ghost}" Content="Ouvrir la sauvegarde" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                                     Command="{Binding DataContext.OpenBackupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Rapport client" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                    ToolTip="Le rapport à remettre au client : ce qui a été sauvegardé, où, et ce qui reste à faire."
+                                    Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                             <Button Style="{StaticResource Button.Ghost}" Content="Masquer" HorizontalAlignment="Stretch"
                                     Command="{Binding DataContext.DismissBackupResultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </StackPanel>

@@ -150,6 +150,9 @@ namespace LDI12.Actions.Backup
     /// </remarks>
     public sealed class BackupUserDataAction : IRepairAction
     {
+        /// <summary>Le rapport à remettre au client, déposé dans le dossier de sauvegarde.</summary>
+        public const string ClientReportFileName = ReinstallSheet.ReportFileName;
+
         /// <summary>Nom du paramètre portant le dossier choisi par le technicien.</summary>
         public const string DestinationParameter = "destination";
 

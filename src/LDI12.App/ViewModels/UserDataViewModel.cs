@@ -106,6 +106,7 @@ namespace LDI12.App.ViewModels
             RunBackupCommand = new AsyncRelayCommand(CopyAsync, () => CanCopy);
             OpenBackupCommand = new RelayCommand(OpenBackup, () => _lastBackupFolder != null && !IsCopying);
             PrepareRestoreCommand = new AsyncRelayCommand(PrepareRestoreAsync, () => CanPrepareRestore);
+            OpenReportCommand = new RelayCommand(OpenReport, () => !IsCopying && ReportPath != null);
             DismissBackupResultCommand = new RelayCommand(() => BackupResult = null);
             DismissRestoreResultCommand = new RelayCommand(() => RestoreResult = null);
             ShowBackupModeCommand = new RelayCommand(() => SelectMode(DataMode.Backup), () => CanChangeMode);
@@ -1275,8 +1276,10 @@ namespace LDI12.App.ViewModels
             TransferElapsed = "Écoulé : 6 min 02 s";
             TransferRemainingShort = "environ 8 min";
             TransferSpeed = "71,5 Mo/s";
-            TransferBytes = "25,9 Go sur 61,4 Go";
-            TransferFiles = "20 518 sur 48 213";
+            TransferBytes = "25,9 Go";
+            TransferBytesOf = "sur 61,4 Go";
+            TransferFiles = "20 518";
+            TransferFilesOf = "sur 48 213";
 
             _rates.Clear();
             for (var second = 0; second < CurveLength; second++)
@@ -1385,6 +1388,8 @@ namespace LDI12.App.ViewModels
             TransferSpeed = "—";
             TransferBytes = "—";
             TransferFiles = "—";
+            TransferBytesOf = string.Empty;
+            TransferFilesOf = string.Empty;
         }
 
         private void OnTransfer(ActionProgress report)
@@ -1411,6 +1416,8 @@ namespace LDI12.App.ViewModels
         private string _transferSpeed = "—";
         private string _transferBytes = "—";
         private string _transferFiles = "—";
+        private string _transferBytesOf = string.Empty;
+        private string _transferFilesOf = string.Empty;
         private System.Windows.Media.PointCollection _transferCurve = new System.Windows.Media.PointCollection();
         private readonly List<double> _rates = new List<double>();
         private readonly Stopwatch _rateClock = new Stopwatch();
@@ -1427,11 +1434,18 @@ namespace LDI12.App.ViewModels
         /// <summary>Le débit des dernières secondes : « 48 Mo/s ».</summary>
         public string TransferSpeed { get => _transferSpeed; private set => Set(ref _transferSpeed, value); }
 
-        /// <summary>« 12,4 Go sur 30 Go ».</summary>
+        /// <summary>« 12,4 Go », en grand ; le total dessous, « sur 30 Go ».</summary>
         public string TransferBytes { get => _transferBytes; private set => Set(ref _transferBytes, value); }
 
-        /// <summary>« 1 234 sur 5 678 ».</summary>
+        public string TransferBytesOf { get => _transferBytesOf; private set => Set(ref _transferBytesOf, value); }
+
+        /// <summary>« 1 234 », en grand ; le total dessous, « sur 5 678 ».</summary>
         public string TransferFiles { get => _transferFiles; private set => Set(ref _transferFiles, value); }
+
+        public string TransferFilesOf { get => _transferFilesOf; private set => Set(ref _transferFilesOf, value); }
+
+        /// <summary>Sous le débit : ce qu'il veut dire, relecture comprise.</summary>
+        public string TransferSpeedNote => "écrit puis relu";
 
         /// <summary>
         /// La courbe du débit, une valeur par seconde sur les deux dernières minutes.
@@ -1455,8 +1469,10 @@ namespace LDI12.App.ViewModels
         private void ShowFigures(TransferFigures figures)
         {
             var culture = System.Globalization.CultureInfo.CurrentCulture;
-            TransferBytes = ValueFormat.Bytes(figures.BytesDone) + " sur " + ValueFormat.Bytes(figures.BytesTotal);
-            TransferFiles = figures.FilesDone.ToString("N0", culture) + " sur " + figures.FilesTotal.ToString("N0", culture);
+            TransferBytes = ValueFormat.Bytes(figures.BytesDone);
+            TransferBytesOf = "sur " + ValueFormat.Bytes(figures.BytesTotal);
+            TransferFiles = figures.FilesDone.ToString("N0", culture);
+            TransferFilesOf = "sur " + figures.FilesTotal.ToString("N0", culture);
             if (figures.BytesPerSecond.HasValue) TransferSpeed = ValueFormat.Bytes((long)figures.BytesPerSecond.Value) + "/s";
 
             // Une copie suivie d'une autre (fichiers ouverts, plusieurs comptes) : les chiffres de
@@ -2416,6 +2432,7 @@ namespace LDI12.App.ViewModels
                 }
 
                 (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (OpenReportCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -2494,6 +2511,42 @@ namespace LDI12.App.ViewModels
             {
                 _logger.Error(Category, "Le dossier de sauvegarde n'a pas pu être ouvert.", ex);
                 Status = "Le dossier de sauvegarde n'a pas pu être ouvert : " + ex.Message;
+            }
+        }
+
+        public ICommand OpenReportCommand { get; }
+
+        /// <summary>Le rapport à remettre au client, s'il a été déposé avec la dernière sauvegarde.</summary>
+        private string? ReportPath
+        {
+            get
+            {
+                if (_lastBackupFolder == null) return null;
+                var path = Path.Combine(_lastBackupFolder, BackupUserDataAction.ClientReportFileName);
+                return File.Exists(path) ? path : null;
+            }
+        }
+
+        /// <summary>
+        /// Ouvre le rapport client dans le navigateur, pour l'imprimer ou le montrer.
+        /// </summary>
+        /// <remarks>
+        /// La sauvegarde finie, c'est le document qu'on remet : l'atteindre demandait d'ouvrir le
+        /// dossier de sauvegarde et de le chercher parmi les autres.
+        /// </remarks>
+        private void OpenReport()
+        {
+            var path = ReportPath;
+            if (path == null) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(Category, "Le rapport client n'a pas pu être ouvert.", ex);
+                Status = "Le rapport client n'a pas pu être ouvert : " + ex.Message;
             }
         }
 

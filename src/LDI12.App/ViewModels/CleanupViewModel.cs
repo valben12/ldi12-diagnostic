@@ -164,9 +164,34 @@ namespace LDI12.App.ViewModels
 
         public string Status { get => _status; private set => Set(ref _status, value); }
 
-        public string Summary { get => _summary; private set => Set(ref _summary, value); }
+        public string Summary
+        {
+            get => _summary;
+            private set { if (Set(ref _summary, value)) Raise(nameof(BarText)); }
+        }
 
         public bool HasSummary => Summary.Length > 0;
+
+        /// <summary>
+        /// La ligne de la barre du bas : ce que l'analyse a trouvé, ou ce qui reste à faire.
+        /// </summary>
+        /// <remarks>
+        /// Les sources font plusieurs écrans de haut, et les boutons étaient au bout de la liste :
+        /// la barre reste au pied de la fenêtre, avec ce qu'il faut savoir pour cliquer.
+        /// </remarks>
+        public string BarText
+        {
+            get
+            {
+                if (HasSummary) return Summary;
+
+                var count = 0;
+                foreach (var source in Sources) if (source.IsSelected) count++;
+                return count == 0
+                    ? "Cochez ce qu'il y a lieu de nettoyer."
+                    : count + " source(s) cochée(s). L'analyse relève ce qui partirait, sans rien supprimer.";
+            }
+        }
 
         public bool IsBusy
         {
@@ -226,6 +251,7 @@ namespace LDI12.App.ViewModels
             Raise(nameof(HasSelection));
             Raise(nameof(ContainsUserData));
             Raise(nameof(HasSummary));
+            Raise(nameof(BarText));
             RaiseStates();
         }
 

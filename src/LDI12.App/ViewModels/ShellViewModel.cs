@@ -75,6 +75,7 @@ namespace LDI12.App.ViewModels
         private readonly List<SectionViewModel> _sections = new List<SectionViewModel>();
         private readonly ReportsViewModel _reports;
         private readonly InterventionViewModel _intervention;
+        private readonly AssistantViewModel _assistant;
         private readonly RepairsViewModel _repairs;
         private readonly CleanupViewModel _cleanup;
         private readonly DiskUsageViewModel _diskUsage;
@@ -166,6 +167,8 @@ namespace LDI12.App.ViewModels
             _intervention = new InterventionViewModel(
                 LDI12.Reports.Interventions.InterventionStore.Default(), _actions.Journal, logger,
                 () => RunAsync(RunMode.Full), () => Snapshot);
+            _assistant = new AssistantViewModel(
+                logger, LDI12.Assistant.ApiKeyVault.Default(), () => Snapshot, () => RunAsync(RunMode.Full), _repairs);
             _userData.BackupFinished += (_, e) => _intervention.OnBackupFinished(e);
             _userData.RestoreFinished += (_, e) => _intervention.OnRestoreFinished(e);
             _userData.VerificationFinished += (_, e) => _intervention.OnVerificationFinished(e);
@@ -181,6 +184,7 @@ namespace LDI12.App.ViewModels
             {
                 new NavigationItem("Vue d'ensemble", "Icon.Home", _overview),
                 new NavigationItem("Intervention", "Icon.Clipboard", _intervention),
+                new NavigationItem("Assistant", "Icon.Sparkles", _assistant),
                 NavSection("Matériel", "Icon.Cpu", DiagnosticCategory.Hardware, startsGroup: true),
                 NavSection("Stockage", "Icon.HardDrive", DiagnosticCategory.Storage),
                 NavSection("Windows", "Icon.Window", DiagnosticCategory.Windows),
@@ -233,9 +237,13 @@ namespace LDI12.App.ViewModels
                     if (item.IsBusy)
                         return "La réparation « " + item.Title + " » est en cours. Quitter peut la laisser à mi-chemin.";
                 if (_cleanup.IsBusy) return "Un nettoyage est en cours. Quitter l'arrête entre deux fichiers.";
+                if (_assistant.IsBusy) return "L'assistant travaille : analyse ou plan en cours. Quitter l'interrompt.";
                 return null;
             }
         }
+
+        /// <summary>L'assistant, que les captures d'écran montrent sur un plan d'exemple.</summary>
+        public AssistantViewModel Assistant => _assistant;
 
         /// <summary>L'analyse du disque, que les captures d'écran lancent d'elles-mêmes.</summary>
         public DiskUsageViewModel DiskUsage => _diskUsage;
@@ -272,6 +280,10 @@ namespace LDI12.App.ViewModels
             Data("Relever ce qu'il y a à sauvegarder", "Place et durée, sans rien copier", "survey",
                  "releve volume taille");
 
+            entries.Add(new SearchEntry("Analyser les pilotes", "Assistant", "Claude compare chaque pilote au matériel",
+                () => Show(_assistant), "claude ia pilotes drivers mise a jour version constructeur"));
+            entries.Add(new SearchEntry("Diagnostic guidé", "Assistant", "Décrire le problème, Claude cherche la cause",
+                () => Show(_assistant), "claude ia panne probleme cause depannage"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 

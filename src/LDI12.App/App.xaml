@@ -51,6 +51,9 @@
             <DataTemplate DataType="{x:Type vm:InterventionViewModel}">
                 <views:InterventionView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AssistantViewModel}">
+                <views:AssistantView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:DiskUsageViewModel}">
                 <views:DiskUsageView />
             </DataTemplate>

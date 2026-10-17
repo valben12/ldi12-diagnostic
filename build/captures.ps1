@@ -17,35 +17,39 @@ Get-ChildItem $Out -Filter *.png -ErrorAction SilentlyContinue | Remove-Item -Fo
 $screens = @(
     @{ Nav = 0;  Name = 'vue-ensemble';  Scroll = @(600) },
     @{ Nav = 1;  Name = 'intervention';  Scroll = @() },
-    @{ Nav = 2;  Name = 'materiel';      Scroll = @() },
-    @{ Nav = 3;  Name = 'stockage';      Scroll = @() },
-    @{ Nav = 4;  Name = 'windows';       Scroll = @() },
-    @{ Nav = 5;  Name = 'reseau';        Scroll = @() },
-    @{ Nav = 6;  Name = 'securite';      Scroll = @() },
-    @{ Nav = 7;  Name = 'performances';  Scroll = @() },
-    @{ Nav = 8;  Name = 'surveillance';  Scroll = @() },
-    @{ Nav = 9;  Name = 'mesures';       Scroll = @() },
-    @{ Nav = 10;  Name = 'reparations';   Scroll = @() },
-    @{ Nav = 11; Name = 'nettoyage';     Scroll = @() },
-    @{ Nav = 12; Name = 'espace-disque'; Scroll = @(); Disk = 'C:\Program Files\Git' },
-    @{ Nav = 13; Name = 'donnees';       Scroll = @(700, 1400) },
-    @{ Nav = 13; Name = 'donnees-restauration'; Scroll = @(700); Mode = 'restore' },
-    @{ Nav = 13; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
-    @{ Nav = 13; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
-    @{ Nav = 14; Name = 'outils';        Scroll = @() },
+    @{ Nav = 2;  Name = 'assistant';     Scroll = @() },
+    @{ Nav = 2;  Name = 'assistant-analyse'; Scroll = @(); Assistant = 'running' },
+    @{ Nav = 2;  Name = 'assistant-plan'; Scroll = @(); Assistant = 'result' },
+    @{ Nav = 3;  Name = 'materiel';      Scroll = @() },
+    @{ Nav = 4;  Name = 'stockage';      Scroll = @() },
+    @{ Nav = 5;  Name = 'windows';       Scroll = @() },
+    @{ Nav = 6;  Name = 'reseau';        Scroll = @() },
+    @{ Nav = 7;  Name = 'securite';      Scroll = @() },
+    @{ Nav = 8;  Name = 'performances';  Scroll = @() },
+    @{ Nav = 9;  Name = 'surveillance';  Scroll = @() },
+    @{ Nav = 10;  Name = 'mesures';       Scroll = @() },
+    @{ Nav = 11;  Name = 'reparations';   Scroll = @() },
+    @{ Nav = 12; Name = 'nettoyage';     Scroll = @() },
+    @{ Nav = 13; Name = 'espace-disque'; Scroll = @(); Disk = 'C:\Program Files\Git' },
+    @{ Nav = 14; Name = 'donnees';       Scroll = @(700, 1400) },
+    @{ Nav = 14; Name = 'donnees-restauration'; Scroll = @(700); Mode = 'restore' },
+    @{ Nav = 14; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
+    @{ Nav = 14; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
+    @{ Nav = 15; Name = 'outils';        Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
-    @{ Nav = 15; Name = 'rapports';      Scroll = @() },
-    @{ Nav = 16; Name = 'historique';    Scroll = @() },
-    @{ Nav = 17; Name = 'reglages';      Scroll = @() },
-    @{ Nav = 18; Name = 'a-propos';      Scroll = @() }
+    @{ Nav = 16; Name = 'rapports';      Scroll = @() },
+    @{ Nav = 17; Name = 'historique';    Scroll = @() },
+    @{ Nav = 18; Name = 'reglages';      Scroll = @() },
+    @{ Nav = 19; Name = 'a-propos';      Scroll = @() }
 )
 
-function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk) {
+function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant) {
     $file = Join-Path $Out ("{0}-{1:00}-{2}{3}.png" -f $theme, $nav, $name, $(if ($scroll -gt 0) { "-$scroll" } else { '' }))
     $arguments = @('--screenshot', $file, '--theme', $theme, '--nav', $nav, '--size', $Size)
     if ($mode) { $arguments += @('--data-mode', $mode) }
     if ($search) { $arguments += @('--search', $search) }
     if ($disk) { $arguments += @('--disk-scan', ('"{0}"' -f $disk)) }
+    if ($assistant) { $arguments += @('--assistant-demo', $assistant) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
@@ -61,7 +65,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
 foreach ($theme in 'dark', 'light') {
     Write-Host "Thème $theme" -ForegroundColor Cyan
     foreach ($screen in $screens) {
-        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode $screen.Search $screen.Disk
-        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode $screen.Search $screen.Disk }
+        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode $screen.Search $screen.Disk $screen.Assistant
+        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode $screen.Search $screen.Disk $screen.Assistant }
     }
 }

@@ -131,6 +131,7 @@ namespace LDI12.App
 
             _searchQuery = ReadArgument(e.Args, "--search");
             _diskScanPath = ReadArgument(e.Args, "--disk-scan");
+            _assistantDemo = ReadArgument(e.Args, "--assistant-demo");
 
             if (_screenshotPath != null)
             {
@@ -298,6 +299,9 @@ namespace LDI12.App
         /// <summary>Dossier que l'analyse du disque explore avant la capture (<c>--disk-scan "C:\Program Files"</c>).</summary>
         private string? _diskScanPath;
 
+        /// <summary>État de l'assistant à montrer (<c>--assistant-demo result</c>), sur un plan d'exemple.</summary>
+        private string? _assistantDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -385,6 +389,8 @@ namespace LDI12.App
         {
             if (_screenshotPath == null || MainWindow == null) return;
             _shell!.ScanCompleted -= OnScanCompletedForScreenshot;
+
+            if (_assistantDemo != null) _shell.Assistant.ShowDemo(_assistantDemo);
 
             if (_diskScanPath != null)
             {

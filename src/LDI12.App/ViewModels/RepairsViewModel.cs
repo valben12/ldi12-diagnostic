@@ -191,6 +191,24 @@ namespace LDI12.App.ViewModels
         public ICommand AbandonCommand { get; }
         public ICommand CancelCommand { get; }
 
+        /// <summary>
+        /// Lancée depuis un plan validé d'un clic : le même relevé préalable, la même exécution et
+        /// le même journal qu'à la main, sans la confirmation qui a déjà eu lieu sur le plan.
+        /// </summary>
+        /// <returns>Le compte rendu, en une phrase.</returns>
+        public async Task<(bool Succeeded, string Summary)> RunFromPlanAsync()
+        {
+            await RefreshReadinessAsync().ConfigureAwait(true);
+            if (!IsAvailable) return (false, UnavailableReason ?? "Indisponible sur cette machine.");
+
+            await PreviewAsync().ConfigureAwait(true);
+            if (_preview == null) return (false, "Relevé préalable interrompu.");
+            if (!CanExecute) return (false, string.IsNullOrWhiteSpace(_preview.Summary) ? "Rien à faire." : _preview.Summary);
+
+            await ExecuteAsync().ConfigureAwait(true);
+            return _outcome == null ? (false, "Interrompue.") : (_outcome.Succeeded, _outcome.Summary);
+        }
+
         public void SetParameter(string key, string? value)
         {
             if (value == null) _parameters.Remove(key);
@@ -421,6 +439,58 @@ namespace LDI12.App.ViewModels
                 : "Session utilisateur. Les réparations qui exigent des privilèges ouvriront une " +
                   "invite Windows, une seule fois pour toute la session.";
         }
+
+        /// <summary>Les opérations qu'un plan de Claude peut proposer, telles que Claude les lit.</summary>
+        public IReadOnlyList<LDI12.Assistant.AvailableAction> PlanCatalog()
+        {
+            var catalog = new List<LDI12.Assistant.AvailableAction>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in Items)
+            {
+                if (!item.IsAvailable || !seen.Add(item.Descriptor.Id) || item.Descriptor.Id == ActionIds.RestartService) continue;
+                catalog.Add(Describe(item.Descriptor, null));
+            }
+
+            var restart = ActionCatalog.Find(ActionIds.RestartService, _logger);
+            if (restart != null) catalog.Add(Describe(restart.Descriptor, "service : nom court du service Windows (par exemple Spooler)"));
+            return catalog;
+        }
+
+        /// <summary>Lance une opération d'un plan validé ; null si elle n'est pas proposée sur cette machine.</summary>
+        public async Task<(bool Succeeded, string Summary)?> RunFromPlanAsync(string actionId, IReadOnlyDictionary<string, string> parameters)
+        {
+            RepairActionItem? item = null;
+            if (string.Equals(actionId, ActionIds.RestartService, StringComparison.OrdinalIgnoreCase))
+            {
+                var action = ActionCatalog.Find(ActionIds.RestartService, _logger);
+                if (action == null || !parameters.TryGetValue("service", out var service) || string.IsNullOrWhiteSpace(service)) return null;
+                item = new RepairActionItem(this, action, "Redémarrer le service « " + service + " »");
+            }
+            else
+            {
+                foreach (var candidate in Items)
+                    if (string.Equals(candidate.Descriptor.Id, actionId, StringComparison.OrdinalIgnoreCase)) { item = candidate; break; }
+            }
+            if (item == null) return null;
+
+            foreach (var parameter in parameters) item.SetParameter(parameter.Key, parameter.Value);
+            return await item.RunFromPlanAsync().ConfigureAwait(true);
+        }
+
+        private static LDI12.Assistant.AvailableAction Describe(ActionDescriptor descriptor, string? parameter) => new()
+        {
+            Id = descriptor.Id,
+            Title = descriptor.DisplayName,
+            Purpose = descriptor.Purpose,
+            Risk = descriptor.Risk switch
+            {
+                ActionRisk.ReadOnly => "lecture seule",
+                ActionRisk.Low => "faible",
+                ActionRisk.Moderate => "modéré",
+                _ => "élevé",
+            },
+            Parameter = parameter,
+        };
 
         /// <summary>
         /// Désigne une opération : encadrée quelques secondes, et amenée à l'écran par la vue.

@@ -597,6 +597,7 @@ namespace LDI12.App.ViewModels
             var signature = new System.Text.StringBuilder();
             foreach (var volume in volumes)
                 signature.Append(volume.Root).Append('|').Append(volume.Label).Append('|').Append(volume.HasWindows)
+                    .Append('|').Append(volume.IsLocked)
                     .Append('|').Append(volume.Profiles.Count).Append('|').Append(volume.Folders.Count).Append(';');
             if (signature.ToString() == _sourcesSignature && Sources.Count > 0) return;
             _sourcesSignature = signature.ToString();
@@ -605,7 +606,7 @@ namespace LDI12.App.ViewModels
             Sources.Clear();
             Sources.Add(new SourceTile(null, SelectSource));
             foreach (var volume in volumes)
-                if (volume.HasWindows ? volume.Profiles.Count > 0 || volume.Folders.Count > 0 : volume.Folders.Count > 0)
+                if (volume.IsLocked || (volume.HasWindows ? volume.Profiles.Count > 0 || volume.Folders.Count > 0 : volume.Folders.Count > 0))
                     Sources.Add(new SourceTile(volume, SelectSource));
 
             SourceTile? match = null;
@@ -622,7 +623,7 @@ namespace LDI12.App.ViewModels
 
         private void SelectSource(SourceTile tile, bool keepChoices)
         {
-            if (IsCopying) return;
+            if (IsCopying || tile.Volume?.IsLocked == true) return;
 
             var changed = _selectedSource?.Key != tile.Key;
             _selectedSource = tile;

@@ -34,11 +34,11 @@ namespace LDI12.Tests
         {
             var filter = BackupFilter.Parse(null, null);
 
-            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\~$Rapport.docx", SizeBytes = 162 }));
-            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\Thumbs.db", SizeBytes = 4096 }));
-            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\.DS_Store", SizeBytes = 6148 }));
-            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\desktop.ini", SizeBytes = 80 }));
-            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\Rapport.docx", SizeBytes = 20_000 }));
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\~$Rapport.docx", SizeBytes = 162 }));
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\Thumbs.db", SizeBytes = 4096 }));
+            Assert.True(filter.Excludes(new FileEntry { Path = @"C:\a\.DS_Store", SizeBytes = 6148 }));
+            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\a\desktop.ini", SizeBytes = 80 }));
+            Assert.False(filter.Excludes(new FileEntry { Path = @"C:\a\Rapport.docx", SizeBytes = 20_000 }));
 
             // Comptés à part : ce n'est pas un choix du technicien, et l'écran ne doit pas le lui prêter.
             Assert.Equal(3, filter.JunkFiles);

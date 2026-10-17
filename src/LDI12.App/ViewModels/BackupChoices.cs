@@ -77,7 +77,7 @@ namespace LDI12.App.ViewModels
         {
             Volume = volume;
             if (select == null) throw new ArgumentNullException(nameof(select));
-            SelectCommand = new RelayCommand(() => select(this));
+            SelectCommand = new RelayCommand(() => select(this), () => volume?.IsLocked != true);
         }
 
         /// <summary>Nul pour le compte ouvert sur ce PC.</summary>

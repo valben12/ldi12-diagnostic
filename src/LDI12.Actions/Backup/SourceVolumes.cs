@@ -33,10 +33,23 @@ namespace LDI12.Actions.Backup
         /// </summary>
         public IReadOnlyList<string> Folders { get; init; } = Array.Empty<string>();
 
+        /// <summary>
+        /// Branché mais illisible : chiffré par BitLocker et verrouillé, le plus souvent.
+        /// </summary>
+        /// <remarks>
+        /// Le disque d'un portable sous Windows 11 est chiffré d'office. Branché à l'atelier, il
+        /// n'apparaissait nulle part, et rien ne disait pourquoi : il est maintenant montré, avec
+        /// ce qu'il faut faire pour l'ouvrir, et il ne se choisit qu'une fois déverrouillé.
+        /// </remarks>
+        public bool IsLocked { get; init; }
+
         public string Title => Root.TrimEnd('\\') + (Label.Length > 0 ? " · " + Label : string.Empty);
 
         public string Description
-            => HasWindows
+            => IsLocked
+                ? "Illisible : verrouillé par BitLocker, le plus souvent. Le déverrouiller depuis l'Explorateur, avec la clé " +
+                  "de récupération du client (aka.ms/myrecoverykey) : il deviendra sauvegardable."
+                : HasWindows
                 ? (IsSystem ? "Ce PC : autres comptes" : "Windows") + " · " + Profiles.Count + " compte(s)"
                 : "Données · " + ValueFormat.Bytes(UsedBytes) + " utilisés";
     }
@@ -89,7 +102,17 @@ namespace LDI12.Actions.Backup
 
                 try
                 {
-                    if (!drive.IsReady) continue;
+                    // Un disque fixe qui ne répond pas est presque toujours un volume BitLocker
+                    // verrouillé : le montrer, plutôt que de le taire. Un lecteur de cartes vide,
+                    // amovible, ne l'est pas.
+                    if (!drive.IsReady)
+                    {
+                        if (drive.DriveType == DriveType.Fixed &&
+                            !string.Equals(drive.Name, system, StringComparison.OrdinalIgnoreCase))
+                            result.Add(new SourceVolume { Root = drive.Name, Kind = DestinationKind.Fixed, IsLocked = true });
+                        continue;
+                    }
+
                     result.Add(Describe(files, drive.Name, drive.VolumeLabel ?? string.Empty,
                         drive.DriveType == DriveType.Removable ? DestinationKind.Removable : DestinationKind.Fixed,
                         drive.TotalSize, drive.TotalSize - drive.TotalFreeSpace,

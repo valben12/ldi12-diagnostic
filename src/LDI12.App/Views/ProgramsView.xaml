@@ -61,7 +61,7 @@
 
         <StackPanel Grid.Row="0" local:Motion.Entrance="True">
             <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Layers}" Content="Programmes" />
-            <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,16" TextTrimming="CharacterEllipsis">
+            <TextBlock Margin="0,8,0,16" TextTrimming="CharacterEllipsis">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
                         <Setter Property="Text" Value="{Binding Summary}" />

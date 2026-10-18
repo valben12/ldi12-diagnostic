@@ -162,7 +162,7 @@
                         <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="20,16" local:Motion.Entrance="True">
                             <StackPanel>
                                 <DockPanel>
-                                    <Border DockPanel.Dock="Right" Style="{StaticResource Chip}" VerticalAlignment="Top">
+                                    <Border DockPanel.Dock="Right" VerticalAlignment="Top" CornerRadius="8" Padding="9,3" Background="{DynamicResource Brush.SurfaceHover}">
                                         <TextBlock Text="{Binding CodeHex}" FontFamily="Consolas" Style="{StaticResource Text.Muted}" />
                                     </Border>
                                     <StackPanel>

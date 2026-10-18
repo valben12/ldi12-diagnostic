@@ -253,6 +253,8 @@
                         <TextBlock Text="{Binding Error}" Style="{StaticResource Text.Body}" Margin="0,8,0,16" TextWrapping="Wrap" />
                         <WrapPanel>
                             <Button Style="{StaticResource Button.Primary}" Content="Réessayer" Command="{Binding RetryCommand}" Margin="0,0,10,0" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Revenir à l'étape" Command="{Binding ReturnToStepCommand}" Margin="0,0,10,0"
+                                    Visibility="{Binding CanReturnToStep, Converter={StaticResource BoolToVisibility}}" />
                             <Button Style="{StaticResource Button.Ghost}" Content="Retour" Command="{Binding BackCommand}" />
                         </WrapPanel>
                     </StackPanel>

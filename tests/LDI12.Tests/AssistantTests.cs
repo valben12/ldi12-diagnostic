@@ -107,7 +107,7 @@ namespace LDI12.Tests
                 ""summary"": ""Le pilote va bien, le son part ailleurs."",
                 ""confidence"": ""moyenne"",
                 ""hypotheses"": [
-                    { ""cause"": ""Haut-parleurs défectueux"", ""likelihood"": 20, ""state"": ""à vérifier"" },
+                    { ""cause"": ""Haut-parleurs défectueux"", ""likelihood"": 19.6, ""state"": ""à vérifier"" },
                     { ""cause"": ""Sortie HDMI par défaut"", ""likelihood"": 140, ""state"": ""à vérifier"" },
                     { ""cause"": ""Son coupé"", ""likelihood"": 0, ""state"": ""écartée"" }
                 ],
@@ -124,6 +124,7 @@ namespace LDI12.Tests
             Assert.Equal("en_cours", step.Status);
             Assert.Equal("Sortie HDMI par défaut", step.Hypotheses[0].Cause);
             Assert.Equal(100, step.Hypotheses[0].Likelihood);
+            Assert.Contains(step.Hypotheses, h => h.Cause == "Haut-parleurs défectueux" && h.Likelihood == 20);
             var check = Assert.Single(step.Checks);
             Assert.Equal(new[] { "Oui", "Non" }, check.Answers);
             Assert.Equal("AUDIO-TEST-SOUND", step.Steps[0].ActionId);

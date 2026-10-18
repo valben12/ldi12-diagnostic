@@ -114,7 +114,7 @@ namespace LDI12.Assistant
         }
 
         /// <summary>Étape suivante : le compte rendu de la précédente part comme résultat de son submit_step.</summary>
-        public Task<AssistantPlan> ContinueAsync(StepFeedback feedback, IProgress<string>? progress, CancellationToken cancellationToken)
+        public async Task<AssistantPlan> ContinueAsync(StepFeedback feedback, IProgress<string>? progress, CancellationToken cancellationToken)
         {
             if (!CanContinue || _pending == null) throw new AssistantException("La séance est terminée : relancez une nouvelle analyse.");
 
@@ -123,11 +123,27 @@ namespace LDI12.Assistant
                     ? new BetaToolResultBlockParam { ToolUseID = _stepToolId!, Content = feedback.Render(_round) }
                     : block)
                 .ToList();
+            // En cas d'échec (réseau, quota, annulation), la séance revient à l'étape rendue : le
+            // technicien peut réessayer la suite sans tout reprendre.
+            var count = _messages.Count;
+            var pending = _pending;
+            var stepToolId = _stepToolId;
+
             _messages.Add(new() { Role = Role.User, Content = results });
             _pending = null;
             _stepToolId = null;
             progress?.Report("Analyse des résultats de l'étape " + _round + "…");
-            return RunAsync(progress, cancellationToken);
+            try
+            {
+                return await RunAsync(progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                _messages.RemoveRange(count, _messages.Count - count);
+                _pending = pending;
+                _stepToolId = stepToolId;
+                throw;
+            }
         }
 
         private async Task<AssistantPlan> RunAsync(IProgress<string>? progress, CancellationToken cancellationToken)
@@ -514,7 +530,7 @@ namespace LDI12.Assistant
             {
                 Cause = Text(item, "cause"),
                 Likelihood = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("likelihood", out var l) && l.ValueKind == JsonValueKind.Number
-                    ? Math.Max(0, Math.Min(100, l.GetInt32()))
+                    ? (int)Math.Round(Math.Max(0, Math.Min(100, l.GetDouble())))
                     : 0,
                 State = Text(item, "state") is { Length: > 0 } state ? state : "à vérifier",
             }).OrderByDescending(h => h.State == "confirmée").ThenByDescending(h => h.Likelihood).ToList();

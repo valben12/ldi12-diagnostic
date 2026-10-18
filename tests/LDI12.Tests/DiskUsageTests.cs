@@ -76,6 +76,19 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Une_erreur_imprevue_sur_un_dossier_ne_fait_pas_tomber_l_analyse()
+        {
+            var disk = new FakeDisk().File(@"R\a.txt", 10).File(@"R\Bizarre\b.txt", 99).File(@"R\Autre\c.txt", 5);
+            disk.Throwing.Add(@"R\Bizarre");
+
+            var tree = Scan(disk);
+
+            Assert.Equal(1, tree.UnreadableDirectories);
+            Assert.True(tree.Root.Children.Single(c => c.Name == "Bizarre").Unreadable);
+            Assert.Equal(15, tree.Root.Size);
+        }
+
+        [Fact]
         public void Retirer_un_element_met_a_jour_la_lignee_et_les_types()
         {
             var tree = Scan(new FakeDisk()
@@ -212,6 +225,9 @@ namespace LDI12.Tests
 
             public HashSet<string> Denied { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            /// <summary>Des dossiers dont la lecture lève une exception, comme un nom que le framework refuse.</summary>
+            public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             public FakeDisk File(string path, long size, bool cloudOnly = false)
             {
                 var parent = EnsureDirectory(Parent(path));
@@ -229,6 +245,7 @@ namespace LDI12.Tests
             {
                 var key = Normalize(path);
                 if (Denied.Contains(key)) return false;
+                if (Throwing.Contains(key)) throw new ArgumentException("Caractères non conformes dans le chemin.");
                 if (_directories.TryGetValue(key, out var entries)) into.AddRange(entries);
                 return true;
             }

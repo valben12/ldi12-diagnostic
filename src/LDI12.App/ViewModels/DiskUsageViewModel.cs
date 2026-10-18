@@ -494,7 +494,13 @@ namespace LDI12.App.ViewModels
         {
             if (IsScanning || string.IsNullOrWhiteSpace(path)) return;
 
-            path = Path.GetFullPath(path);
+            try { path = Path.GetFullPath(path); }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is IOException || ex is System.Security.SecurityException)
+            {
+                // Un chemin collé à la main, mal formé : on le dit, sans quitter l'écran.
+                Status = "Chemin invalide : " + path;
+                return;
+            }
             var isVolume = string.Equals(Path.GetPathRoot(path), path, StringComparison.OrdinalIgnoreCase);
             long? volumeSize = null, volumeFree = null;
             if (isVolume)
@@ -771,7 +777,7 @@ namespace LDI12.App.ViewModels
                 await Task.Run(() => RecycleBin.Send(path, node.IsDirectory)).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is OperationCanceledException
-                                       || ex is System.Security.SecurityException)
+                                       || ex is System.Security.SecurityException || ex is ArgumentException || ex is NotSupportedException)
             {
                 _logger.Warn(Category, "Corbeille impossible pour " + path, ex);
                 Status = "« " + node.Name + " » n'a pas pu être mis à la corbeille : " + ex.Message;

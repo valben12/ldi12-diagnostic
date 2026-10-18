@@ -77,43 +77,55 @@ namespace LDI12.Core.DiskUsage
                             children.Clear();
                             progress._current = job.Path;
 
-                            if (!_lister.TryList(job.Path, entries))
+                            long files = 0, bytes = 0;
+                            try
                             {
+                                if (!_lister.TryList(job.Path, entries))
+                                {
+                                    job.Node.Unreadable = true;
+                                    Interlocked.Increment(ref unreadable);
+                                }
+
+                                foreach (var entry in entries)
+                                {
+                                    if (entry.IsDirectory)
+                                    {
+                                        if (entry.IsReparsePoint) continue;
+                                        var directory = new DiskNode(entry.Name, DiskNodeKind.Directory, job.Node) { LastWriteUtcTicks = entry.LastWriteUtcTicks };
+                                        children.Add(directory);
+                                        Interlocked.Increment(ref outstanding);
+                                        pending.Add(new Job(directory, System.IO.Path.Combine(job.Path, entry.Name)));
+                                    }
+                                    else
+                                    {
+                                        var size = entry.IsCloudOnly || entry.IsReparsePoint ? 0 : entry.Size;
+                                        children.Add(new DiskNode(entry.Name, DiskNodeKind.File, job.Node)
+                                        {
+                                            Size = size,
+                                            Files = 1,
+                                            LastWriteUtcTicks = entry.LastWriteUtcTicks,
+                                        });
+                                        files++;
+                                        bytes += size;
+                                    }
+                                }
+                            }
+                            catch (Exception ex) when (!(ex is OperationCanceledException))
+                            {
+                                // Un nom que le framework refuse, un lecteur qui disparaît : le
+                                // dossier est compté illisible, l'analyse continue sans lui.
                                 job.Node.Unreadable = true;
                                 Interlocked.Increment(ref unreadable);
                             }
-
-                            long files = 0, bytes = 0;
-                            foreach (var entry in entries)
+                            finally
                             {
-                                if (entry.IsDirectory)
-                                {
-                                    if (entry.IsReparsePoint) continue;
-                                    var directory = new DiskNode(entry.Name, DiskNodeKind.Directory, job.Node) { LastWriteUtcTicks = entry.LastWriteUtcTicks };
-                                    children.Add(directory);
-                                    Interlocked.Increment(ref outstanding);
-                                    pending.Add(new Job(directory, System.IO.Path.Combine(job.Path, entry.Name)));
-                                }
-                                else
-                                {
-                                    var size = entry.IsCloudOnly || entry.IsReparsePoint ? 0 : entry.Size;
-                                    children.Add(new DiskNode(entry.Name, DiskNodeKind.File, job.Node)
-                                    {
-                                        Size = size,
-                                        Files = 1,
-                                        LastWriteUtcTicks = entry.LastWriteUtcTicks,
-                                    });
-                                    files++;
-                                    bytes += size;
-                                }
+                                job.Node.SetChildren(children);
+                                Interlocked.Add(ref progress._files, files);
+                                Interlocked.Add(ref progress._bytes, bytes);
+                                Interlocked.Increment(ref progress._directories);
+
+                                if (Interlocked.Decrement(ref outstanding) == 0) pending.CompleteAdding();
                             }
-
-                            job.Node.SetChildren(children);
-                            Interlocked.Add(ref progress._files, files);
-                            Interlocked.Add(ref progress._bytes, bytes);
-                            Interlocked.Increment(ref progress._directories);
-
-                            if (Interlocked.Decrement(ref outstanding) == 0) pending.CompleteAdding();
                         }
                     }
                     catch (OperationCanceledException)

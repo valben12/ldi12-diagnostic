@@ -235,6 +235,7 @@ namespace LDI12.App.ViewModels
         private CancellationTokenSource? _running;
         private ClaudeAnalyst? _analyst;
         private AssistantRequest? _lastRequest;
+        private StepFeedback? _failedFeedback;
         private IReadOnlyList<AvailableAction> _actions = Array.Empty<AvailableAction>();
         private string _stage = "Key";
         private string _keyInput = string.Empty;
@@ -286,8 +287,9 @@ namespace LDI12.App.ViewModels
             GuideCommand = new RelayCommand(() => Stage = "Guide");
             StartGuidedCommand = new AsyncRelayCommand(StartGuidedAsync, () => SelectedProblem != null);
             BackCommand = new RelayCommand(() => Stage = "Home");
+            ReturnToStepCommand = new RelayCommand(() => Stage = "Result");
             CancelCommand = new RelayCommand(() => _running?.Cancel());
-            RetryCommand = new AsyncRelayCommand(() => _lastRequest == null ? Task.CompletedTask : StartAsync(_lastRequest, _runTitle));
+            RetryCommand = new AsyncRelayCommand(RetryAsync);
             ApplyCommand = new AsyncRelayCommand(ApplyAllAsync, () => !_isApplying && PendingCount > 0);
             ContinueCommand = new AsyncRelayCommand(ContinueAsync, () => !_isApplying && _analyst?.CanContinue == true);
             SolvedCommand = new RelayCommand(Solved);
@@ -312,6 +314,11 @@ namespace LDI12.App.ViewModels
         public ICommand GuideCommand { get; }
         public AsyncRelayCommand StartGuidedCommand { get; }
         public ICommand BackCommand { get; }
+
+        /// <summary>Après l'échec de la suite : l'étape précédente reste là, à reprendre.</summary>
+        public ICommand ReturnToStepCommand { get; }
+
+        public bool CanReturnToStep => _failedFeedback != null;
         public ICommand CancelCommand { get; }
         public ICommand RetryCommand { get; }
         public AsyncRelayCommand ApplyCommand { get; }
@@ -546,6 +553,8 @@ namespace LDI12.App.ViewModels
             }
 
             _lastRequest = request;
+            _failedFeedback = null;
+            Raise(nameof(CanReturnToStep));
             _analyst = new ClaudeAnalyst(key);
             _round = 0;
             History.Clear();
@@ -575,7 +584,8 @@ namespace LDI12.App.ViewModels
                     if (action.Risk == "modéré" || action.Risk == "élevé") _risky.Add(action.Id);
 
                 // Ce qui se relit à l'instant pour ce domaine part avec la demande : une lecture de moins.
-                var prefetched = live == null ? null : Prefetch(live, request.Problem);
+                // Hors du fil de l'interface : l'essai réseau peut attendre plusieurs secondes.
+                var prefetched = live == null ? null : await Task.Run(() => Prefetch(live, request.Problem), token).ConfigureAwait(true);
                 var withLive = prefetched == null ? request : new AssistantRequest
                 {
                     Mode = request.Mode, Problem = request.Problem, Details = request.Details, Notes = request.Notes, LiveContext = prefetched,
@@ -596,15 +606,43 @@ namespace LDI12.App.ViewModels
                 Note = _stepNote,
             };
 
-            var done = string.Join(" · ", feedback.Operations.Select(o => o.Title)
-                .Concat(feedback.Answers.Where(a => a.Answer != "sans réponse").Select(a => a.Answer)));
-            History.Add(new RoundSummary(_round, _summary, done.Length == 0 ? "rien de fait" : done));
-            Raise(nameof(HasHistory));
-
-            await RunAsync((_, progress, token) => _analyst.ContinueAsync(feedback, progress, token)).ConfigureAwait(true);
+            await ContinueWithAsync(feedback).ConfigureAwait(true);
         }
 
-        private async Task RunAsync(Func<ILiveMachine?, IProgress<string>, CancellationToken, Task<AssistantPlan>> work)
+        /// <summary>
+        /// Envoie le compte rendu d'une étape. En cas d'échec, il est gardé : « Réessayer » le renvoie
+        /// tel quel au lieu de reprendre la séance depuis le début.
+        /// </summary>
+        private async Task ContinueWithAsync(StepFeedback feedback)
+        {
+            var analyst = _analyst;
+            if (analyst == null) return;
+            var round = _round;
+            var summary = _summary;
+            _failedFeedback = null;
+
+            if (await RunAsync((_, progress, token) => analyst.ContinueAsync(feedback, progress, token)).ConfigureAwait(true))
+            {
+                var done = string.Join(" · ", feedback.Operations.Select(o => o.Title)
+                    .Concat(feedback.Answers.Where(a => a.Answer != "sans réponse").Select(a => a.Answer)));
+                History.Add(new RoundSummary(round, summary, done.Length == 0 ? "rien de fait" : done));
+                Raise(nameof(HasHistory));
+            }
+            else if (Stage == "Failed" && analyst.CanContinue)
+            {
+                _failedFeedback = feedback;
+            }
+            Raise(nameof(CanReturnToStep));
+        }
+
+        private Task RetryAsync()
+        {
+            if (_failedFeedback != null && _analyst?.CanContinue == true) return ContinueWithAsync(_failedFeedback);
+            return _lastRequest == null ? Task.CompletedTask : StartAsync(_lastRequest, _runTitle);
+        }
+
+        /// <summary>Vrai si l'étape est arrivée et s'affiche.</summary>
+        private async Task<bool> RunAsync(Func<ILiveMachine?, IProgress<string>, CancellationToken, Task<AssistantPlan>> work)
         {
             Trace.Clear();
             Stage = "Running";
@@ -620,6 +658,7 @@ namespace LDI12.App.ViewModels
                 Show(plan);
                 _logger.Info(Category, RunTitle + ", étape " + plan.Round + " : " + plan.Status + ", " + plan.Steps.Count + " action(s), "
                                        + plan.Checks.Count + " vérification(s), " + plan.CostDollars.ToString("0.00", Formats.French) + " $ cumulés.");
+                return true;
             }
             catch (OperationCanceledException)
             {
@@ -631,12 +670,21 @@ namespace LDI12.App.ViewModels
                 Error = ex.Message;
                 Stage = "Failed";
             }
+            catch (Exception ex) when (!(ex is OutOfMemoryException))
+            {
+                // Imprévu (réponse illisible, diagnostic interrompu) : l'écran reste cohérent, le
+                // détail part au journal.
+                _logger.Error(Category, RunTitle + " : échec inattendu.", ex);
+                Error = "L'analyse s'est interrompue sur une erreur imprévue. Réessayez ; si elle revient, le journal en garde le détail.";
+                Stage = "Failed";
+            }
             finally
             {
                 _clock.Stop();
                 Raise(nameof(IsBusy));
                 ContinueCommand.RaiseCanExecuteChanged();
             }
+            return false;
         }
 
         private static string? Prefetch(ILiveMachine live, string? component)
@@ -676,7 +724,8 @@ namespace LDI12.App.ViewModels
         {
             ClearRound();
             _round = plan.Round;
-            var titles = _actions.ToDictionary(a => a.Id, a => a.Title, StringComparer.OrdinalIgnoreCase);
+            var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var action in _actions) titles[action.Id] = action.Title;
 
             Summary = plan.Summary;
             Confidence = "Confiance " + plan.Confidence;
@@ -786,7 +835,19 @@ namespace LDI12.App.ViewModels
         {
             step.StatusKey = "Running";
             step.Status = "En cours…";
-            var outcome = await _repairs.RunFromPlanAsync(step.Step.ActionId!, step.Step.Parameters).ConfigureAwait(true);
+            (bool Succeeded, string Summary)? outcome;
+            try
+            {
+                outcome = await _repairs.RunFromPlanAsync(step.Step.ActionId!, step.Step.Parameters).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (!(ex is OutOfMemoryException))
+            {
+                // La carte ne doit pas rester « en cours » : l'échec s'y lit, la suite reste possible.
+                _logger.Error(Category, step.Title + " : échec inattendu.", ex);
+                step.Status = "Échec inattendu : " + ex.Message;
+                step.StatusKey = "Bad";
+                return false;
+            }
             if (outcome == null)
             {
                 step.Status = "Opération non proposée sur cette machine.";

@@ -202,6 +202,25 @@ namespace LDI12.Tests
             Assert.True(brief.Length < 6000, "Fiche de " + brief.Length + " caractères.");
         }
 
+        [Fact]
+        public async Task Une_operation_trop_recente_pour_ce_windows_est_refusee_avec_son_repli()
+        {
+            // Le démarrage rapide n'existe pas sous Windows 7 : l'action ne le vérifie pas elle-même,
+            // le runner s'en charge pour toutes.
+            var context = new ActionContext(
+                new FakePlatformInfo(build: 7601, elevated: true), new FakeProcessRunner(), new FakeProcessLauncher(), new FakeFileSystemGateway(),
+                new RunRegistry(), new FakeSystemRestoreGateway(), NullLogger.Instance, null, null, null, new FakeControl());
+            var runner = new ActionRunner(context, new LDI12.Actions.Journal.InterventionJournal(), NullLogger.Instance);
+            var action = new FastStartupOffAction();
+
+            var readiness = runner.Readiness(action);
+            Assert.Equal(ActionAvailability.Unavailable, readiness.Availability);
+            Assert.Contains("Windows 7", readiness.Workaround);
+
+            var preview = await runner.PreviewAsync(action, null, CancellationToken.None);
+            Assert.False(preview.CanExecute);
+        }
+
         private static ActionContext Context(FakeControl control, params (string Key, string Value)[] parameters)
             => Context(control, new RunRegistry(), parameters);
 

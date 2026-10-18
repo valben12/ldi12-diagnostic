@@ -404,7 +404,7 @@ namespace LDI12.Actions.Repairs
 
             progress?.Report(new ActionProgress("Synchronisation…"));
             var result = await context.Processes.RunAsync(
-                new ProcessRequest("w32tm.exe", "/resync /force") { Timeout = TimeSpan.FromSeconds(40), OutputEncoding = ConsoleOutputEncoding.OemCodePage },
+                new ProcessRequest("w32tm.exe", "/resync /rediscover") { Timeout = TimeSpan.FromSeconds(40), OutputEncoding = ConsoleOutputEncoding.OemCodePage },
                 cancellationToken).ConfigureAwait(false);
 
             // w32tm répond 0 en cas de réussite ; un serveur injoignable donne un code non nul.

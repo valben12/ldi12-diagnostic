@@ -68,6 +68,8 @@ namespace LDI12.App.ViewModels
 
         public ActionDescriptor Descriptor => _action.Descriptor;
 
+        internal IRepairAction Action => _action;
+
         public string Title { get => _title; private set => Set(ref _title, value); }
 
         public string Purpose => Descriptor.Purpose;
@@ -496,6 +498,10 @@ namespace LDI12.App.ViewModels
             {
                 foreach (var candidate in Items)
                     if (string.Equals(candidate.Descriptor.Id, actionId, StringComparison.OrdinalIgnoreCase)) { item = candidate; break; }
+
+                // Des paramètres, ou l'opération déjà en cours à l'écran : un élément à part, pour ne
+                // laisser ni filtre ni cible collés à la carte de l'écran Réparations.
+                if (item != null && (parameters.Count > 0 || item.IsBusy)) item = new RepairActionItem(this, item.Action);
             }
             if (item == null) return null;
 

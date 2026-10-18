@@ -54,6 +54,9 @@
             <DataTemplate DataType="{x:Type vm:AssistantViewModel}">
                 <views:AssistantView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:CrashesViewModel}">
+                <views:CrashesView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:DiskUsageViewModel}">
                 <views:DiskUsageView />
             </DataTemplate>

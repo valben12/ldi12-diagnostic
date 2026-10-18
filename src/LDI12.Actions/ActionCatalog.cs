@@ -62,6 +62,8 @@ namespace LDI12.Actions
                 () => new AudioRestoreVolumeAction(),
                 () => new AudioTestSoundAction(),
                 () => new AudioServicesRestartAction(),
+                () => new CrashDumpsReadAction(),
+                () => new CrashDumpsEnableAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

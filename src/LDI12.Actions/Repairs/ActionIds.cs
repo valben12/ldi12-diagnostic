@@ -110,6 +110,22 @@
         /// <summary>Relancer les services audio de Windows.</summary>
         public const string AudioServicesRestart = "AUDIO-RESTART-SERVICES";
 
+        /// <summary>Lire les minividages des écrans bleus (écran Plantages).</summary>
+        public const string CrashDumpsRead = "CRASH-DUMPS-READ";
+
+        /// <summary>Régler Windows pour qu'un écran bleu laisse un minividage.</summary>
+        public const string CrashDumpsEnable = "CRASH-DUMPS-ENABLE";
+
+        /// <summary>
+        /// Les opérations qui appartiennent à un écran dédié : elles n'ont de sens qu'avec ce qu'il
+        /// montre, et ne figurent pas dans la liste des Réparations.
+        /// </summary>
+        public static readonly System.Collections.Generic.ISet<string> OwnedByScreens =
+            new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                CrashDumpsRead,
+            };
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

@@ -1040,6 +1040,36 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        public Measured<byte[]> ReadBytes(string path, int maxBytes)
+        {
+            try
+            {
+                var full = Extended(path);
+                if (!File.Exists(full))
+                    return Measured.Missing<byte[]>("Le fichier est absent : " + path, DataSource.FileSystem);
+
+                using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var length = (int)Math.Min(stream.Length, Math.Max(0, maxBytes));
+                var buffer = new byte[length];
+                var read = 0;
+                while (read < length)
+                {
+                    var chunk = stream.Read(buffer, read, length - read);
+                    if (chunk <= 0) break;
+                    read += chunk;
+                }
+                if (read < length) Array.Resize(ref buffer, read);
+                return Measured.Ok(buffer, DataSource.FileSystem);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                       ex is PathTooLongException || ex is ArgumentException ||
+                                       ex is NotSupportedException)
+            {
+                return Measured.Missing<byte[]>(
+                    "Le fichier n'a pas pu être lu : " + ex.Message, DataSource.FileSystem);
+            }
+        }
+
         public bool ReplaceText(string path, string content)
         {
             try

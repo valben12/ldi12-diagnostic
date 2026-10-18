@@ -132,6 +132,7 @@ namespace LDI12.App
             _searchQuery = ReadArgument(e.Args, "--search");
             _diskScanPath = ReadArgument(e.Args, "--disk-scan");
             _assistantDemo = ReadArgument(e.Args, "--assistant-demo");
+            _crashDemo = Array.IndexOf(e.Args, "--crash-demo") >= 0;
 
             if (_screenshotPath != null)
             {
@@ -302,6 +303,9 @@ namespace LDI12.App
         /// <summary>État de l'assistant à montrer (<c>--assistant-demo result</c>), sur un plan d'exemple.</summary>
         private string? _assistantDemo;
 
+        /// <summary>Montrer l'écran Plantages sur un historique d'exemple (<c>--crash-demo</c>).</summary>
+        private bool _crashDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -391,6 +395,7 @@ namespace LDI12.App
             _shell!.ScanCompleted -= OnScanCompletedForScreenshot;
 
             if (_assistantDemo != null) _shell.Assistant.ShowDemo(_assistantDemo);
+            if (_crashDemo) _shell.Crashes.ShowDemo();
 
             if (_diskScanPath != null)
             {

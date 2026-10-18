@@ -34,22 +34,24 @@ $screens = @(
     @{ Nav = 12; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
     @{ Nav = 12; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
     @{ Nav = 13; Name = 'outils';        Scroll = @() },
-    @{ Nav = 14; Name = 'surveillance';  Scroll = @() },
-    @{ Nav = 15; Name = 'mesures';       Scroll = @() },
+    @{ Nav = 14; Name = 'plantages';     Scroll = @(700); Demo = 'crash' },
+    @{ Nav = 15; Name = 'surveillance';  Scroll = @() },
+    @{ Nav = 16; Name = 'mesures';       Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
-    @{ Nav = 16; Name = 'rapports';      Scroll = @() },
-    @{ Nav = 17; Name = 'historique';    Scroll = @() },
-    @{ Nav = 18; Name = 'reglages';      Scroll = @() },
-    @{ Nav = 19; Name = 'a-propos';      Scroll = @() }
+    @{ Nav = 17; Name = 'rapports';      Scroll = @() },
+    @{ Nav = 18; Name = 'historique';    Scroll = @() },
+    @{ Nav = 19; Name = 'reglages';      Scroll = @() },
+    @{ Nav = 20; Name = 'a-propos';      Scroll = @() }
 )
 
-function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant) {
+function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant, [string]$demo) {
     $file = Join-Path $Out ("{0}-{1:00}-{2}{3}.png" -f $theme, $nav, $name, $(if ($scroll -gt 0) { "-$scroll" } else { '' }))
     $arguments = @('--screenshot', $file, '--theme', $theme, '--nav', $nav, '--size', $Size)
     if ($mode) { $arguments += @('--data-mode', $mode) }
     if ($search) { $arguments += @('--search', $search) }
     if ($disk) { $arguments += @('--disk-scan', ('"{0}"' -f $disk)) }
     if ($assistant) { $arguments += @('--assistant-demo', $assistant) }
+    if ($demo -eq 'crash') { $arguments += @('--crash-demo') }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
@@ -65,7 +67,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
 foreach ($theme in 'dark', 'light') {
     Write-Host "Thème $theme" -ForegroundColor Cyan
     foreach ($screen in $screens) {
-        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode $screen.Search $screen.Disk $screen.Assistant
-        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode $screen.Search $screen.Disk $screen.Assistant }
+        Capture $theme $screen.Nav $screen.Name 0 $screen.Mode $screen.Search $screen.Disk $screen.Assistant $screen.Demo
+        foreach ($offset in $screen.Scroll) { Capture $theme $screen.Nav $screen.Name $offset $screen.Mode $screen.Search $screen.Disk $screen.Assistant $screen.Demo }
     }
 }

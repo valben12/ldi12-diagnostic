@@ -68,6 +68,18 @@ namespace LDI12.Tests
                 ? Measured.Ok(text, DataSource.FileSystem)
                 : Measured.Missing<string>("Le fichier est absent : " + path, DataSource.FileSystem);
 
+        public Dictionary<string, byte[]> Bytes { get; } = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+
+        public Measured<byte[]> ReadBytes(string path, int maxBytes)
+        {
+            if (!Bytes.TryGetValue(path, out var data))
+                return Measured.Missing<byte[]>("Le fichier est absent : " + path, DataSource.FileSystem);
+            var length = Math.Min(data.Length, maxBytes);
+            var copy = new byte[length];
+            Array.Copy(data, copy, length);
+            return Measured.Ok(copy, DataSource.FileSystem);
+        }
+
         public bool ReplaceText(string path, string content)
         {
             if (LockedFiles.Contains(path) || Gone(path)) return false;

@@ -405,6 +405,46 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        /// <summary>Vrai si l'application tourne déjà en administrateur : aucune invite ne sera montrée.</summary>
+        public async Task<bool> IsElevatedAsync()
+            => (await GetRunnerAsync().ConfigureAwait(true))?.Context.Platform.IsElevated == true;
+
+        /// <summary>
+        /// Lance une opération pour le compte d'un écran dédié, sans carte ni confirmation : la
+        /// lecture des plantages, la suppression d'un paquet de pilote choisi sur sa ligne.
+        /// L'invite UAC, le journal d'intervention et le délai restent ceux de toute opération.
+        /// </summary>
+        public async Task<ActionOutcome> RunQuietAsync(
+            string actionId, IReadOnlyDictionary<string, string>? parameters, IProgress<ActionProgress>? progress, CancellationToken cancellationToken)
+        {
+            var runner = await GetRunnerAsync().ConfigureAwait(true);
+            var action = ActionCatalog.Find(actionId, _logger);
+            if (runner == null || action == null) return ActionOutcome.Simple(ActionStatus.Unavailable, "Opération indisponible.");
+
+            var readiness = runner.Readiness(action, parameters);
+            if (readiness.Availability == ActionAvailability.Unavailable)
+                return ActionOutcome.Simple(ActionStatus.Unavailable, readiness.Reason ?? "Indisponible sur cette machine.");
+
+            try
+            {
+                var preview = await runner.PreviewAsync(action, parameters, cancellationToken).ConfigureAwait(true);
+                if (!preview.CanExecute)
+                    return ActionOutcome.Simple(
+                        preview.Outcome == PreviewOutcome.NothingToDo ? ActionStatus.NothingToDo : ActionStatus.Failed,
+                        string.IsNullOrWhiteSpace(preview.Summary) ? "Rien à faire." : preview.Summary);
+
+                return await runner.ExecuteAsync(action, preview, parameters, progress, cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return ActionOutcome.Simple(ActionStatus.Cancelled, "Interrompue.");
+            }
+            finally
+            {
+                NotifyJournalChanged();
+            }
+        }
+
         public async Task InitializeAsync()
         {
             var runner = await GetRunnerAsync().ConfigureAwait(true);
@@ -418,6 +458,7 @@ namespace LDI12.App.ViewModels
                 // un plan de l'assistant : seuls, ils n'auraient rien sur quoi porter.
                 if (PlanOnly.ContainsKey(action.Descriptor.Id)) continue;
                 if (action.Descriptor.Id == ActionIds.Cleanup) continue;
+                if (ActionIds.OwnedByScreens.Contains(action.Descriptor.Id)) continue;
 
                 // Les pilotes et les applications d'une sauvegarde se traitent avec elle, sur
                 // l'écran Données : seuls, ils n'ont ni sauvegarde ni support à qui s'adresser.

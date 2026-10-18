@@ -178,6 +178,11 @@
                                                                             <Setter TargetName="Hover" Property="Opacity" Value="1" />
                                                                             <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
                                                                         </Trigger>
+                                                                        <!-- Repliée sur l'écran affiché : le titre passe à la couleur de la marque. -->
+                                                                        <DataTrigger Binding="{Binding ShowsCurrent}" Value="True">
+                                                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.BrandRed}" />
+                                                                            <Setter TargetName="Chevron" Property="Stroke" Value="{DynamicResource Brush.BrandRed}" />
+                                                                        </DataTrigger>
                                                                         <Trigger Property="IsChecked" Value="True">
                                                                             <Trigger.EnterActions>
                                                                                 <BeginStoryboard>

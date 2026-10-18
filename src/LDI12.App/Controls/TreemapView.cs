@@ -57,6 +57,10 @@ namespace LDI12.App.Controls
         private readonly Border _selection;
         private readonly DispatcherTimer _debounce;
         private CancellationTokenSource? _rendering;
+        private bool _pending;
+
+        /// <summary>Cartes en attente de rendu : les captures d'écran attendent qu'il n'y en ait plus.</summary>
+        public static int Pending { get; private set; }
         private TreemapImage? _image;
         private double _scaleX = 1, _scaleY = 1;
 
@@ -108,7 +112,12 @@ namespace LDI12.App.Controls
                 ThemeManager.Changed += OnThemeChanged;
                 Schedule();
             };
-            Unloaded += (_, __) => ThemeManager.Changed -= OnThemeChanged;
+            Unloaded += (_, __) =>
+            {
+                ThemeManager.Changed -= OnThemeChanged;
+                _debounce.Stop();
+                SetPending(false);
+            };
             Cursor = Cursors.Hand;
         }
 
@@ -160,8 +169,16 @@ namespace LDI12.App.Controls
 
         private void Schedule()
         {
+            SetPending(true);
             _debounce.Stop();
             _debounce.Start();
+        }
+
+        private void SetPending(bool pending)
+        {
+            if (_pending == pending) return;
+            _pending = pending;
+            Pending += pending ? 1 : -1;
         }
 
         private async void Render()
@@ -171,6 +188,7 @@ namespace LDI12.App.Controls
             var tree = Tree;
             if (root == null || ActualWidth < 4 || ActualHeight < 4)
             {
+                SetPending(false);
                 _image = null;
                 _front.Source = null;
                 _back.Source = null;
@@ -214,6 +232,7 @@ namespace LDI12.App.Controls
             _image = image;
             _hover.Visibility = Visibility.Collapsed;
             PlaceSelection(animate: false);
+            SetPending(false);
         }
 
         private int BackgroundColor()

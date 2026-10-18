@@ -30,7 +30,7 @@ namespace LDI12.App.ViewModels
     /// </remarks>
     public sealed class NavigationGroup : ObservableObject
     {
-        private bool _isExpanded;
+        private bool _isExpanded, _holdsCurrent;
         private Severity? _worst;
 
         public NavigationGroup(string title, bool expanded)
@@ -43,6 +43,9 @@ namespace LDI12.App.ViewModels
 
         public bool HasHeader => Title.Length > 0;
 
+        /// <summary>La catégorie vient de s'ouvrir : la barre referme les autres.</summary>
+        public event EventHandler? Expanded;
+
         public bool IsExpanded
         {
             get => _isExpanded;
@@ -51,6 +54,8 @@ namespace LDI12.App.ViewModels
                 if (!Set(ref _isExpanded, value)) return;
                 Raise(nameof(ShowsItems));
                 Raise(nameof(ShowsAlert));
+                Raise(nameof(ShowsCurrent));
+                if (value) Expanded?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -67,6 +72,20 @@ namespace LDI12.App.ViewModels
                 Raise(nameof(ShowsAlert));
             }
         }
+
+        /// <summary>Elle contient l'écran affiché.</summary>
+        public bool HoldsCurrent
+        {
+            get => _holdsCurrent;
+            set
+            {
+                if (!Set(ref _holdsCurrent, value)) return;
+                Raise(nameof(ShowsCurrent));
+            }
+        }
+
+        /// <summary>Repliée sur l'écran affiché : son titre le signale, on sait toujours où l'on est.</summary>
+        public bool ShowsCurrent => HasHeader && !_isExpanded && _holdsCurrent;
 
         /// <summary>Repliée avec un problème dedans : la pastille passe sur le titre.</summary>
         public bool ShowsAlert => HasHeader && !_isExpanded && _worst.HasValue && _worst.Value >= Severity.Warning;
@@ -275,9 +294,10 @@ namespace LDI12.App.ViewModels
                 Navigation[index].Shortcut = "Ctrl+" + (index + 1).ToString(CultureInfo.InvariantCulture);
 
             // Les catégories de la barre latérale, dans l'ordre d'une intervention : constater,
-            // agir, mesurer dans la durée, rendre compte. Les moins fréquentes s'ouvrent repliées.
+            // agir, mesurer dans la durée, rendre compte. Une seule ouverte à la fois : la barre
+            // tient toujours en hauteur, sans défilement, même sur un petit écran.
             var diagnostic = new NavigationGroup("Diagnostic", true);
-            var act = new NavigationGroup("Agir", true);
+            var act = new NavigationGroup("Agir", false);
             var measure = new NavigationGroup("Mesurer", false);
             var report = new NavigationGroup("Comptes rendus", false);
             var software = new NavigationGroup("Logiciel", false);
@@ -286,6 +306,13 @@ namespace LDI12.App.ViewModels
             Assign(measure, "Surveillance", "Mesures");
             Assign(report, "Rapports", "Historique");
             Assign(software, "Réglages", "À propos");
+            var groups = new[] { diagnostic, act, measure, report, software };
+            foreach (var group in groups)
+                group.Expanded += (sender, __) =>
+                {
+                    foreach (var other in groups)
+                        if (!ReferenceEquals(other, sender)) other.IsExpanded = false;
+                };
             NavigationView = new System.Windows.Data.ListCollectionView(Navigation);
             NavigationView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(NavigationItem.Group)));
 
@@ -479,8 +506,11 @@ namespace LDI12.App.ViewModels
             get => _selectedNavigation;
             set
             {
+                var previous = _selectedNavigation;
                 if (!Set(ref _selectedNavigation, value)) return;
                 CurrentContent = value?.Content;
+                if (previous != null) previous.Group.HoldsCurrent = false;
+                if (value != null) value.Group.HoldsCurrent = true;
                 // Un écran ouvert par raccourci, recherche ou lien : sa catégorie s'ouvre, l'entrée active reste visible.
                 if (value != null) value.Group.IsExpanded = true;
             }

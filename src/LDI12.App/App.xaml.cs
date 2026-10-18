@@ -407,10 +407,13 @@ namespace LDI12.App
 
             // L'écran d'analyse s'efface en fondu : capturer immédiatement le saisirait à
             // mi-disparition, superposé aux résultats. On laisse la transition se terminer.
+            // La carte du disque se dessine en arrière-plan : on attend qu'elle soit prête (au plus 8 s).
             DispatcherTimer? settle = null;
+            var waited = 0;
             settle = new DispatcherTimer(TimeSpan.FromMilliseconds(420), DispatcherPriority.Background,
                 (_, __) =>
                 {
+                    if (Controls.TreemapView.Pending > 0 && (waited += 420) < 8000) return;
                     settle!.Stop();
                     CaptureNow();
                 },

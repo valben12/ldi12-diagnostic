@@ -697,7 +697,7 @@
 
                             <!-- Reprise : une sauvegarde arrêtée en route (support débranché, plein, ou arrêt
                                  demandé) repart où elle s'était arrêtée, dans le même dossier. -->
-                            <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0" IsChecked="{Binding ResumeBackup}">
+                            <CheckBox Style="{StaticResource Switch}" Margin="0,16,0,0" IsChecked="{Binding ResumeBackup}">
                                 <StackPanel>
                                     <TextBlock Text="Reprendre une sauvegarde interrompue" Style="{StaticResource Text.Body}"
                                                Foreground="{DynamicResource Brush.TextPrimary}" />

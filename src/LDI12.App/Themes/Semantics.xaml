@@ -501,6 +501,81 @@
         </Setter>
     </Style>
 
+    <!-- Toute case du logiciel prend ce dessin, y compris celles qu'un écran oublierait de
+         styler : une seule case grise de Windows au milieu des autres se remarque. -->
+    <Style TargetType="CheckBox" BasedOn="{StaticResource Check}" />
+
+    <!-- Interrupteur : pour un réglage qui s'allume ou s'éteint, plutôt qu'une case qu'on coche.
+         Le curseur glisse et la piste se colore ; même disposition que la case, pour que le
+         texte qui l'accompagne reste à sa place. -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="36" Height="20" VerticalAlignment="Top" Margin="0,0,0,0">
+                            <Border x:Name="Track" CornerRadius="10" BorderThickness="1"
+                                    Background="{DynamicResource Brush.SurfaceHover}" BorderBrush="{DynamicResource Brush.BorderStrong}" />
+                            <Border x:Name="Lit" CornerRadius="10" Opacity="0" Background="{DynamicResource Brush.BrandRed}" />
+                            <Ellipse x:Name="Knob" Width="14" Height="14" HorizontalAlignment="Left" Margin="3,0,0,0"
+                                     Fill="{DynamicResource Brush.TextSecondary}">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="Slide" X="0" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" Margin="12,1,0,0" VerticalAlignment="Top" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Knob" Property="Fill" Value="White" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Slide" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <PowerEase EasingMode="EaseOut" Power="3" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Lit" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.16" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Slide" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <PowerEase EasingMode="EaseOut" Power="3" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Lit" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Console Windows absente : la carte s'éteint, mais sa raison reste lisible. -->
     <Style x:Key="ToolCard" TargetType="Border" BasedOn="{StaticResource Card}">
         <Style.Triggers>

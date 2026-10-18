@@ -69,7 +69,7 @@
             <TextBlock Text="MISES À JOUR" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
                 <StackPanel>
-                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding CheckUpdatesOnStartup}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding CheckUpdatesOnStartup}">
                         <TextBlock Text="Vérifier au démarrage s'il existe une version plus récente"
                                    Style="{StaticResource Text.Body}"
                                    Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />
@@ -103,7 +103,7 @@
             <TextBlock Text="CAPTEURS MATÉRIELS" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
                 <StackPanel>
-                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding AdvancedSensors}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AdvancedSensors}">
                         <TextBlock Text="Lire la température du processeur et les sondes de la carte mère"
                                    Style="{StaticResource Text.Body}"
                                    Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />

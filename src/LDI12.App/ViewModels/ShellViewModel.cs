@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,64 @@ using LDI12.Reports.Facts;
 
 namespace LDI12.App.ViewModels
 {
+    /// <summary>
+    /// Une catégorie de la barre latérale : Diagnostic, Agir, Mesurer… repliable d'un clic.
+    /// </summary>
+    /// <remarks>
+    /// Vingt entrées à plat se parcourent ; cinq catégories se lisent. Repliée, une catégorie
+    /// garde la pastille de la plus grave de ses entrées : rien de ce qui demande attention ne
+    /// disparaît en la fermant. Les entrées d'accueil (vue d'ensemble, intervention, assistant)
+    /// n'ont pas de titre et restent toujours visibles.
+    /// </remarks>
+    public sealed class NavigationGroup : ObservableObject
+    {
+        private bool _isExpanded;
+        private Severity? _worst;
+
+        public NavigationGroup(string title, bool expanded)
+        {
+            Title = title;
+            _isExpanded = expanded;
+        }
+
+        public string Title { get; }
+
+        public bool HasHeader => Title.Length > 0;
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (!Set(ref _isExpanded, value)) return;
+                Raise(nameof(ShowsItems));
+                Raise(nameof(ShowsAlert));
+            }
+        }
+
+        /// <summary>Les entrées se montrent : catégorie ouverte, ou entrées d'accueil sans titre.</summary>
+        public bool ShowsItems => !HasHeader || _isExpanded;
+
+        /// <summary>La plus grave des pastilles de la catégorie.</summary>
+        public Severity? Worst
+        {
+            get => _worst;
+            set
+            {
+                if (!Set(ref _worst, value)) return;
+                Raise(nameof(ShowsAlert));
+            }
+        }
+
+        /// <summary>Repliée avec un problème dedans : la pastille passe sur le titre.</summary>
+        public bool ShowsAlert => HasHeader && !_isExpanded && _worst.HasValue && _worst.Value >= Severity.Warning;
+
+        public override string ToString() => Title;
+
+        /// <summary>Les entrées d'accueil, sans titre de catégorie.</summary>
+        public static readonly NavigationGroup None = new NavigationGroup(string.Empty, true);
+    }
+
     public sealed class NavigationItem : ObservableObject
     {
         private Severity? _worst;
@@ -43,6 +102,9 @@ namespace LDI12.App.ViewModels
         /// doit tenir entière dans la plus petite fenêtre.
         /// </remarks>
         public bool StartsGroup { get; init; }
+
+        /// <summary>La catégorie qui la porte dans la barre latérale.</summary>
+        public NavigationGroup Group { get; set; } = NavigationGroup.None;
 
         /// <summary>Le raccourci clavier qui ouvre l'écran, « Ctrl+3 » ; nul au-delà du neuvième.</summary>
         public string? Shortcut { get; set; }
@@ -116,6 +178,7 @@ namespace LDI12.App.ViewModels
             RunQuickScanCommand = new AsyncRelayCommand(() => RunAsync(RunMode.Quick), () => !IsScanning);
             CancelCommand = new RelayCommand(Cancel, () => IsScanning);
             ToggleThemeCommand = new RelayCommand(ToggleTheme);
+            OpenOverviewCommand = new RelayCommand(() => SelectedNavigation = Navigation[0]);
 
             // Le barème est relu avant la première analyse : un seuil ajusté doit s'appliquer
             // dès l'analyse rapide du démarrage, sans quoi le premier score afficherait autre
@@ -192,13 +255,13 @@ namespace LDI12.App.ViewModels
                 NavSection("Réseau", "Icon.Globe", DiagnosticCategory.Network),
                 NavSection("Sécurité", "Icon.Shield", DiagnosticCategory.Security),
                 NavSection("Performances", "Icon.Activity", DiagnosticCategory.Performance),
-                new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
-                new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Réparations", "Icon.Wrench", _repairs) { StartsGroup = true },
                 new NavigationItem("Nettoyage", "Icon.Trash", _cleanup),
                 new NavigationItem("Espace disque", "Icon.Treemap", _diskUsage),
                 new NavigationItem("Données", "Icon.Archive", _userData),
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
+                new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
+                new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
                 new NavigationItem("Historique", "Icon.History", _history),
                 new NavigationItem("Réglages", "Icon.Sliders", _settingsScreen) { StartsGroup = true },
@@ -210,6 +273,21 @@ namespace LDI12.App.ViewModels
 
             for (var index = 0; index < Navigation.Count && index < 9; index++)
                 Navigation[index].Shortcut = "Ctrl+" + (index + 1).ToString(CultureInfo.InvariantCulture);
+
+            // Les catégories de la barre latérale, dans l'ordre d'une intervention : constater,
+            // agir, mesurer dans la durée, rendre compte. Les moins fréquentes s'ouvrent repliées.
+            var diagnostic = new NavigationGroup("Diagnostic", true);
+            var act = new NavigationGroup("Agir", true);
+            var measure = new NavigationGroup("Mesurer", false);
+            var report = new NavigationGroup("Comptes rendus", false);
+            var software = new NavigationGroup("Logiciel", false);
+            Assign(diagnostic, "Matériel", "Stockage", "Windows", "Réseau", "Sécurité", "Performances");
+            Assign(act, "Réparations", "Nettoyage", "Espace disque", "Données", "Outils");
+            Assign(measure, "Surveillance", "Mesures");
+            Assign(report, "Rapports", "Historique");
+            Assign(software, "Réglages", "À propos");
+            NavigationView = new System.Windows.Data.ListCollectionView(Navigation);
+            NavigationView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(NavigationItem.Group)));
 
             SelectedNavigation = Navigation[0];
             _isDarkTheme = ThemeManager.Current == AppTheme.Dark;
@@ -368,6 +446,15 @@ namespace LDI12.App.ViewModels
 
         public ObservableCollection<NavigationItem> Navigation { get; }
 
+        /// <summary>La barre latérale : les mêmes entrées, rangées par catégorie.</summary>
+        public System.Windows.Data.ListCollectionView NavigationView { get; private set; } = null!;
+
+        private void Assign(NavigationGroup group, params string[] titles)
+        {
+            foreach (var item in Navigation)
+                if (Array.IndexOf(titles, item.Title) >= 0) item.Group = group;
+        }
+
         /// <summary>Le bandeau de mise à jour, et ce qu'il déclenche.</summary>
         public UpdateViewModel Updates { get; }
 
@@ -379,6 +466,9 @@ namespace LDI12.App.ViewModels
         public ICommand CancelCommand { get; }
         public ICommand ToggleThemeCommand { get; }
 
+        /// <summary>La pastille d'état de la barre supérieure ramène à la vue d'ensemble.</summary>
+        public ICommand OpenOverviewCommand { get; }
+
         public SystemSnapshot? Snapshot { get; private set; }
 
         /// <summary>Diagnostic terminé, sert notamment au mode capture d'écran.</summary>
@@ -387,7 +477,13 @@ namespace LDI12.App.ViewModels
         public NavigationItem? SelectedNavigation
         {
             get => _selectedNavigation;
-            set { if (Set(ref _selectedNavigation, value)) CurrentContent = value?.Content; }
+            set
+            {
+                if (!Set(ref _selectedNavigation, value)) return;
+                CurrentContent = value?.Content;
+                // Un écran ouvert par raccourci, recherche ou lien : sa catégorie s'ouvre, l'entrée active reste visible.
+                if (value != null) value.Group.IsExpanded = true;
+            }
         }
 
         public object? CurrentContent { get => _currentContent; private set => Set(ref _currentContent, value); }
@@ -588,7 +684,27 @@ namespace LDI12.App.ViewModels
                 }
                 item.Worst = worst;
             }
+
+            foreach (var group in Navigation.Select(n => n.Group).Distinct())
+                group.Worst = Navigation.Where(n => n.Group == group && n.Worst.HasValue).Select(n => n.Worst).Max();
+
+            HealthScore = snapshot.Score?.Global;
+            HealthBand = snapshot.Score?.Band;
+            HealthText = snapshot.Score == null ? string.Empty : snapshot.Score.Global + " · " + DiagnosticScore.BandLabel(snapshot.Score.Band);
         }
+
+        /// <summary>L'état général, rappelé dans la barre supérieure quel que soit l'écran.</summary>
+        public int? HealthScore { get => _healthScore; private set { if (Set(ref _healthScore, value)) Raise(nameof(HasHealth)); } }
+
+        public ScoreBand? HealthBand { get => _healthBand; private set => Set(ref _healthBand, value); }
+
+        public string HealthText { get => _healthText; private set => Set(ref _healthText, value); }
+
+        public bool HasHealth => _healthScore.HasValue;
+
+        private int? _healthScore;
+        private ScoreBand? _healthBand;
+        private string _healthText = string.Empty;
 
         /// <summary>
         /// Le plan affiché par l'écran d'analyse.

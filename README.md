@@ -81,11 +81,11 @@ de fichiers piégeux, archive tenue ouverte, support arraché puis reprise, rest
 nouveau poste, chaque fichier comparé à l'original, puis un octet changé sur le support que la
 vérification doit trouver.
 
-![Écran Données](docs/captures/dark-11-donnees.png)
+![Écran Données](docs/captures/dark-12-donnees.png)
 
 ## Ce qu'il sait réparer
 
-Vingt-quatre opérations, du vidage de cache DNS à la sauvegarde vérifiée des données du client
+Quarante et une opérations, du vidage de cache DNS à la sauvegarde vérifiée des données du client
 et à leur restauration. Aucune ne part sur un simple clic : chacune affiche d'abord la commande
 exacte qu'elle va lancer, ce qu'elle va modifier, ce qu'elle ne touchera pas, et ce qui sera
 perdu au passage. Le nettoyage montre la liste des fichiers avant d'en supprimer un seul.
@@ -95,6 +95,28 @@ Cette obligation n'est pas une convention d'écriture, elle est portée par le t
 lequel une action puisse s'exécuter sans que ce qu'elle allait faire ait d'abord été établi.
 
 ![Écran Réparations](docs/images/reparations.webp)
+
+## Approfondir
+
+Cinq écrans reprennent, dans la même interface et avec la même règle de prévisualisation, ce
+que le technicien allait chercher dans autant d'outils séparés.
+
+- **Disques** (GSmartControl, HDDScan, optimisation de Windows) : chaque attribut SMART nommé
+  et expliqué, un bilan en clair, l'autotest intégré au disque court ou long avec son journal,
+  un test de surface en lecture seule dont la carte des temps de réponse se dessine en direct,
+  et l'optimisation de chaque volume : TRIM pour un SSD, défragmentation pour un disque dur.
+- **Plantages** (BlueScreenView, WhoCrashed) : les minividages lus sans débogueur, le code
+  d'arrêt expliqué, le pilote mis en cause et son éditeur, les arrêts brutaux et les programmes
+  qui plantent ; une conclusion qui mène à l'opération utile.
+- **Programmes** (Process Explorer, Autoruns) : les processus en arborescence avec leur
+  signature vérifiée, et tout ce qui démarre seul, par catégorie, désactivable et rétablissable
+  d'un clic. Rien n'est supprimé.
+- **Magasin de pilotes** (Driver Store Explorer) : chaque paquet ajouté, ses anciennes versions
+  et la place qu'elles prennent ; le nettoyage ne touche jamais un pilote en service.
+- **Réseau local** (Advanced IP Scanner, Wireshark) : les appareils du réseau, leur fabricant,
+  leurs services et partages, le réveil à distance ; les connexions de ce PC programme par
+  programme ; une écoute du trafic sans pilote, résumée à l'écran et enregistrée dans un
+  fichier que Wireshark ouvre.
 
 ## Ce qu'il ne fait pas
 
@@ -206,7 +228,7 @@ qui se passe quand le contenu passe sous les bords, et c'est précisément là q
 d'affichage se voient. Les captures de ce fichier ont été prises ainsi.
 
 L'intégration continue le fait pour chaque écran : un commit dont le message contient
-`[captures]` fait capturer les dix-sept écrans en thème sombre et en thème clair, par
+`[captures]` fait capturer les vingt-cinq écrans en thème sombre et en thème clair, par
 `build\captures.ps1`, et les dépose dans [`docs/captures`](docs/captures). Une modification de
 l'interface se juge sur l'image, avant et après.
 
@@ -218,13 +240,13 @@ l'interface se juge sur l'image, avant et après.
 | `LDI12.Platform` | Détection de Windows, registre de fonctionnalités, P/Invoke, passerelles WMI, registre, processus, journalisation. |
 | `LDI12.Collectors` | 39 sondes : matériel, écrans, erreurs signalées, stockage et SMART, Windows, logiciels, tâches planifiées, filet de sécurité, impression, son, stabilité, comptes, heure, ports série, réseau et environnement réseau, sécurité, performances, alimentation, températures. |
 | `LDI12.Engine` | Ordonnancement des sondes, 149 règles, corrélations, scoring, plan d'action, comparaison avant et après. |
-| `LDI12.Actions` | 24 opérations de réparation, de maintenance, de sauvegarde et de restauration, 23 consoles Windows, journal d'intervention. |
+| `LDI12.Actions` | 41 opérations de réparation, de maintenance, de sauvegarde et de restauration, 23 consoles Windows, journal d'intervention. |
 | `LDI12.Updates` | Vérification de mise à jour signée, téléchargement contrôlé par empreinte, remplacement sur place. |
 | `LDI12.Reports` | Fiches de caractéristiques, sérialisation JSON, historique local, rapport technicien, bilan client et comparatif en HTML autonome. |
 | `LDI12.Publishing.Klarvi` | Dépôt facultatif d'un dossier d'intervention dans Klarvi. Le contrat HTTP est provisoire et confiné à cette classe : le reste du logiciel ne connaît que `IReportPublisher`. |
 | `LDI12.ProbeHost` | Exécutable satellite : mode sans interface, hôte des sondes isolées, élévation ciblée. |
 | `LDI12.App` | Application WPF sans cadre système : thème sombre et clair, navigation, vue d'ensemble, écrans de domaine, réparations, nettoyage, sauvegarde et restauration, outils, export, réglages. |
-| `LDI12.Tests` | xUnit : 1 106 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus, et un aller-retour de sauvegarde sans simulation sous Windows. |
+| `LDI12.Tests` | xUnit : plus de 1 100 tests, dont des règles d'architecture qui vérifient les cloisonnements décrits ci-dessus, et un aller-retour de sauvegarde sans simulation sous Windows. |
 
 ## La conception, écrite
 

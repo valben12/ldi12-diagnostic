@@ -87,7 +87,7 @@ namespace LDI12.Tests
             }");
             var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "REPAIR-NETWORK-STACK", "REPAIR-RESTART-SERVICE" };
 
-            var plan = ClaudeAnalyst.ParsePlan(input, known);
+            var plan = ClaudeAnalyst.ParseStep(input, known);
 
             Assert.Equal("forte", plan.Confidence);
             Assert.Single(plan.Findings);
@@ -97,6 +97,57 @@ namespace LDI12.Tests
             Assert.Equal("Spooler", plan.Steps[2].Parameters["service"]);
             Assert.False(plan.Steps[3].IsAutomatic);
             Assert.Equal("Site du fabricant.", plan.Steps[3].Manual);
+        }
+
+        [Fact]
+        public void Une_etape_porte_ses_hypotheses_classees_et_ses_verifications_a_boutons()
+        {
+            var input = Parse(@"{
+                ""status"": ""en_cours"",
+                ""summary"": ""Le pilote va bien, le son part ailleurs."",
+                ""confidence"": ""moyenne"",
+                ""hypotheses"": [
+                    { ""cause"": ""Haut-parleurs défectueux"", ""likelihood"": 20, ""state"": ""à vérifier"" },
+                    { ""cause"": ""Sortie HDMI par défaut"", ""likelihood"": 140, ""state"": ""à vérifier"" },
+                    { ""cause"": ""Son coupé"", ""likelihood"": 0, ""state"": ""écartée"" }
+                ],
+                ""steps"": [ { ""title"": ""Jouer une note"", ""why"": ""Entendre."", ""action_id"": ""AUDIO-TEST-SOUND"" } ],
+                ""checks"": [
+                    { ""question"": ""Avez-vous entendu la note ?"", ""answers"": [ ""Oui"", ""Non"" ] },
+                    { ""question"": ""Question sans réponses"", ""answers"": [ ""Seule"" ] }
+                ],
+                ""next"": ""Selon la réponse, on change de sortie.""
+            }");
+
+            var step = ClaudeAnalyst.ParseStep(input, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AUDIO-TEST-SOUND" });
+
+            Assert.Equal("en_cours", step.Status);
+            Assert.Equal("Sortie HDMI par défaut", step.Hypotheses[0].Cause);
+            Assert.Equal(100, step.Hypotheses[0].Likelihood);
+            var check = Assert.Single(step.Checks);
+            Assert.Equal(new[] { "Oui", "Non" }, check.Answers);
+            Assert.Equal("AUDIO-TEST-SOUND", step.Steps[0].ActionId);
+            Assert.Contains("change de sortie", step.Next);
+        }
+
+        [Fact]
+        public void Le_compte_rendu_d_une_etape_dit_ce_qui_a_ete_fait_et_repondu()
+        {
+            var feedback = new StepFeedback
+            {
+                Operations = new[] { ("Jouer une note", "réussie — Note jouée sur « Haut-parleurs »") },
+                Answers = new[] { ("Avez-vous entendu la note ?", "Non"), ("Et au casque ?", "sans réponse") },
+                Manual = new[] { ("Brancher un casque", true) },
+                Note = "Le voyant du clavier est éteint",
+            };
+
+            var text = feedback.Render(2);
+
+            Assert.Contains("étape 2", text);
+            Assert.Contains("« Avez-vous entendu la note ? » : Non", text);
+            Assert.Contains("« Brancher un casque » : fait", text);
+            Assert.Contains("voyant du clavier", text);
+            Assert.Contains("submit_step", text);
         }
 
         [Fact]

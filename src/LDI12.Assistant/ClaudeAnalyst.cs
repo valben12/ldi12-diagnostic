@@ -14,31 +14,39 @@ using LDI12.Core.Model;
 
 namespace LDI12.Assistant
 {
+    /// <summary>Ce que l'analyse peut relire à l'instant sur la machine : ce que le diagnostic ne fige pas.</summary>
+    public interface ILiveMachine
+    {
+        /// <summary>« audio », « network », « device » (cible : identifiant), « service » (cible : nom court).</summary>
+        string Read(string what, string? target);
+    }
+
     /// <summary>
-    /// Claude, au travail en arrière-plan : il lit le diagnostic, cherche au besoin sur le web,
-    /// et rend un plan fait d'opérations de LDI12.
+    /// Une séance de dépannage avec Claude, menée en arrière-plan, étape par étape.
     /// </summary>
     /// <remarks>
-    /// <b>Aucune conversation.</b> Le technicien ne voit ni Claude ni sa console : il a posé le
-    /// problème en quelques choix, l'analyse tourne, un plan revient. Claude ne pose pas de
-    /// question ; ce qu'il ne sait pas, il le lit dans le relevé, et ce que le relevé ne dit pas,
-    /// il le signale comme incertain.
+    /// <b>Pas une conversation : des étapes.</b> Le technicien ne tape rien à Claude et ne lit
+    /// aucune réponse en prose. Chaque étape revient structurée (hypothèses, opérations à lancer,
+    /// vérifications à faire avec leurs réponses toutes prêtes, gestes manuels), l'écran en fait
+    /// des cartes et des boutons, et ce que le technicien a fait et constaté repart vers Claude
+    /// d'un clic sur « Continuer ». Sous le capot, chaque étape est la réponse à l'outil
+    /// submit_step : le compte rendu du technicien est le résultat de cet outil, si bien que la
+    /// séance reste une seule suite de messages, mise en cache d'un tour sur l'autre.
     /// <para>
-    /// <b>Rien ne touche la machine ici.</b> Les outils offerts à Claude ne font que lire le
-    /// relevé déjà fait. Le plan désigne des opérations de LDI12 par leur identifiant ; c'est
-    /// l'écran qui les montre, et le technicien qui les lance, d'un clic, avec les mêmes relevés
-    /// préalables et le même journal que s'il les lançait lui-même.
+    /// <b>Rien ne touche la machine ici.</b> Les outils offerts à Claude ne font que lire : le
+    /// relevé du diagnostic, et quelques états relus à l'instant (son, réseau, un périphérique,
+    /// un service). Les opérations du plan passent par l'écran, et le clic du technicien.
     /// </para>
     /// </remarks>
     public sealed class ClaudeAnalyst
     {
         public const string Model = "claude-opus-5-5";
 
-        /// <summary>
-        /// Huit tours au plus : la fiche envoyée d'emblée suffit le plus souvent, et chaque tour
-        /// renvoie toute la conversation. Au-delà, l'analyse coûte sans éclairer davantage.
-        /// </summary>
-        private const int MaxTurns = 8;
+        /// <summary>Lectures au plus par étape, avant que Claude ne rende la sienne.</summary>
+        private const int MaxTurnsPerRound = 6;
+
+        /// <summary>Au-delà, la séance s'arrête : le problème demande l'atelier, pas une étape de plus.</summary>
+        public const int MaxRounds = 8;
 
         // Tarif public de Claude Opus 5.5, en dollars par million de jetons, et par recherche web.
         private const double InputPrice = 4.0;
@@ -48,12 +56,29 @@ namespace LDI12.Assistant
         private const double SearchPrice = 0.01;
 
         private readonly AnthropicClient _client;
+        private readonly List<BetaMessageParam> _messages = new List<BetaMessageParam>();
+
+        /// <summary>Les résultats d'outils de la dernière réponse, en attente du compte rendu de l'étape.</summary>
+        private List<BetaContentBlockParam>? _pending;
+        private string? _stepToolId;
+
+        private SystemSnapshot? _snapshot;
+        private IReadOnlyList<AvailableAction> _actions = Array.Empty<AvailableAction>();
+        private HashSet<string> _known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private ILiveMachine? _live;
+        private bool _drivers;
+        private long _input, _output, _cacheWrite, _cacheRead;
+        private int _searches, _round;
 
         public ClaudeAnalyst(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("Clé vide.", nameof(apiKey));
             _client = new AnthropicClient { ApiKey = apiKey.Trim(), MaxRetries = 3, Timeout = TimeSpan.FromMinutes(5) };
         }
+
+        public int Round => _round;
+
+        public bool CanContinue => _stepToolId != null && _round < MaxRounds;
 
         /// <summary>Vérifie la clé sans rien consommer : la fiche du modèle se lit gratuitement.</summary>
         public async Task CheckAsync(CancellationToken cancellationToken)
@@ -68,31 +93,54 @@ namespace LDI12.Assistant
             }
         }
 
-        public async Task<AssistantPlan> AnalyseAsync(
-            SystemSnapshot snapshot, AssistantRequest request, IReadOnlyList<AvailableAction> actions,
+        /// <summary>Première étape : la demande, la fiche de la machine, et ce qui a été relu à l'instant.</summary>
+        public Task<AssistantPlan> StartAsync(
+            SystemSnapshot snapshot, AssistantRequest request, IReadOnlyList<AvailableAction> actions, ILiveMachine? live,
             IProgress<string>? progress, CancellationToken cancellationToken)
         {
-            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             if (request == null) throw new ArgumentNullException(nameof(request));
-            actions ??= Array.Empty<AvailableAction>();
+            _actions = actions ?? Array.Empty<AvailableAction>();
+            _known = new HashSet<string>(_actions.Select(a => a.Id), StringComparer.OrdinalIgnoreCase);
+            _live = live;
+            _drivers = request.Mode == AssistantMode.Drivers;
 
-            var known = new HashSet<string>(actions.Select(a => a.Id), StringComparer.OrdinalIgnoreCase);
-            var messages = new List<BetaMessageParam>
-            {
-                new() { Role = Role.User, Content = Task(request) + "\n" + MachineBrief.Compose(snapshot, request.Mode) },
-            };
-            long input = 0, output = 0, cacheWrite = 0, cacheRead = 0;
-            var searches = 0;
-            var drivers = request.Mode == AssistantMode.Drivers;
-
-            var tools = new List<BetaToolUnion> { ReadTool(), PlanTool() };
-            // La recherche web sert surtout aux pilotes : versions publiées par le constructeur,
-            // problèmes connus d'une version. Bornée : une analyse ne doit pas devenir une enquête.
-            tools.Insert(0, new BetaWebSearchTool20260209 { MaxUses = drivers ? 3 : 2 });
-
+            var first = Task(request) + "\n" + MachineBrief.Compose(snapshot, request.Mode);
+            if (!string.IsNullOrWhiteSpace(request.LiveContext)) first += "\n## Relevé à l'instant\n" + request.LiveContext;
+            _messages.Clear();
+            _messages.Add(new() { Role = Role.User, Content = first });
             progress?.Report("Lecture du diagnostic…");
+            return RunAsync(progress, cancellationToken);
+        }
 
-            for (var turn = 0; turn < MaxTurns; turn++)
+        /// <summary>Étape suivante : le compte rendu de la précédente part comme résultat de son submit_step.</summary>
+        public Task<AssistantPlan> ContinueAsync(StepFeedback feedback, IProgress<string>? progress, CancellationToken cancellationToken)
+        {
+            if (!CanContinue || _pending == null) throw new AssistantException("La séance est terminée : relancez une nouvelle analyse.");
+
+            var results = _pending
+                .Select(block => block.TryPickToolResult(out var result) && result.ToolUseID == _stepToolId
+                    ? new BetaToolResultBlockParam { ToolUseID = _stepToolId!, Content = feedback.Render(_round) }
+                    : block)
+                .ToList();
+            _messages.Add(new() { Role = Role.User, Content = results });
+            _pending = null;
+            _stepToolId = null;
+            progress?.Report("Analyse des résultats de l'étape " + _round + "…");
+            return RunAsync(progress, cancellationToken);
+        }
+
+        private async Task<AssistantPlan> RunAsync(IProgress<string>? progress, CancellationToken cancellationToken)
+        {
+            var tools = new List<BetaToolUnion>
+            {
+                new BetaWebSearchTool20260209 { MaxUses = _drivers ? 3 : 2 },
+                ReadTool(),
+                LiveTool(),
+                StepTool(),
+            };
+
+            for (var turn = 0; turn < MaxTurnsPerRound; turn++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -106,18 +154,17 @@ namespace LDI12.Assistant
                         Betas = new List<ApiEnum<string, AnthropicBeta>> { AnthropicBeta.ServerSideFallback2026_07_01 },
                         Fallbacks = new Default(),
                         // Les pilotes se jugent sur des faits (versions, dates, codes) : un effort
-                        // modeste suffit et réduit la réflexion facturée. Un problème décrit en
-                        // quelques mots demande davantage de raisonnement.
-                        OutputConfig = new BetaOutputConfig { Effort = drivers ? Effort.Low : Effort.Medium },
-                        // Cache placé à chaque tour sur le dernier bloc : les tours suivants relisent
-                        // la conversation au vingtième du prix au lieu de la repayer entière.
+                        // modeste suffit. Une panne décrite en quelques mots demande davantage de raisonnement.
+                        OutputConfig = new BetaOutputConfig { Effort = _drivers ? Effort.Low : Effort.Medium },
+                        // Cache placé à chaque tour sur le dernier bloc : les tours et les étapes suivantes
+                        // relisent la séance au vingtième du prix au lieu de la repayer entière.
                         CacheControl = new BetaCacheControlEphemeral(),
                         System = new List<BetaTextBlockParam>
                         {
-                            new() { Text = SystemPrompt(actions), CacheControl = new BetaCacheControlEphemeral() },
+                            new() { Text = SystemPrompt(_actions), CacheControl = new BetaCacheControlEphemeral() },
                         },
                         Tools = tools,
-                        Messages = messages,
+                        Messages = _messages,
                     }, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException) && Translate(ex) is { } message)
@@ -125,17 +172,18 @@ namespace LDI12.Assistant
                     throw new AssistantException(message, ex);
                 }
 
-                input += response.Usage.InputTokens;
-                output += response.Usage.OutputTokens;
-                cacheWrite += response.Usage.CacheCreationInputTokens ?? 0;
-                cacheRead += response.Usage.CacheReadInputTokens ?? 0;
+                _input += response.Usage.InputTokens;
+                _output += response.Usage.OutputTokens;
+                _cacheWrite += response.Usage.CacheCreationInputTokens ?? 0;
+                _cacheRead += response.Usage.CacheReadInputTokens ?? 0;
 
                 if (response.StopReason == BetaStopReason.Refusal)
                     throw new AssistantException("Cette analyse a été refusée. Reformulez le problème, ou passez par les réparations.");
 
                 var assistant = new List<BetaContentBlockParam>();
                 var results = new List<BetaContentBlockParam>();
-                AssistantPlan? plan = null;
+                AssistantPlan? step = null;
+                string? stepId = null;
 
                 foreach (var block in response.Content)
                 {
@@ -153,7 +201,7 @@ namespace LDI12.Assistant
                     }
                     else if (block.TryPickServerToolUse(out var server))
                     {
-                        searches++;
+                        _searches++;
                         progress?.Report("Recherche sur le web : " + Describe(server.Input, "query"));
                         assistant.Add(new BetaServerToolUseBlockParam
                         {
@@ -170,60 +218,78 @@ namespace LDI12.Assistant
                     {
                         assistant.Add(new BetaToolUseBlockParam { ID = use.ID, Name = use.Name, Input = use.Input });
 
-                        if (use.Name == "submit_plan")
+                        if (use.Name == "submit_step")
                         {
-                            plan = ParsePlan(use.Input, known);
-                            results.Add(new BetaToolResultBlockParam { ToolUseID = use.ID, Content = "Plan reçu." });
+                            step = ParseStep(use.Input, _known);
+                            stepId = use.ID;
+                            // Le résultat de cet outil sera le compte rendu du technicien, à l'étape suivante.
+                            results.Add(new BetaToolResultBlockParam { ToolUseID = use.ID, Content = "En attente." });
                             continue;
                         }
 
-                        var section = Describe(use.Input, "section");
-                        var query = Describe(use.Input, "query");
-                        progress?.Report("Lecture : " + Label(section) + (query.Length > 0 ? " (« " + query + " »)" : string.Empty));
-                        results.Add(new BetaToolResultBlockParam
-                        {
-                            ToolUseID = use.ID,
-                            Content = use.Name == "read_machine_data"
-                                ? MachineData.Read(snapshot, section, query.Length > 0 ? query : null)
-                                : "Outil inconnu.",
-                        });
+                        results.Add(new BetaToolResultBlockParam { ToolUseID = use.ID, Content = Execute(use.Name, use.Input, progress) });
                     }
                 }
 
-                if (plan != null)
+                _messages.Add(new() { Role = Role.Assistant, Content = assistant });
+
+                if (step != null)
                 {
-                    progress?.Report("Plan prêt.");
+                    _round++;
+                    _pending = results;
+                    _stepToolId = stepId;
+                    progress?.Report("Étape " + _round + " prête.");
                     return new AssistantPlan
                     {
-                        Summary = plan.Summary,
-                        Confidence = plan.Confidence,
-                        Findings = plan.Findings,
-                        Steps = plan.Steps,
-                        InputTokens = input + cacheWrite + cacheRead,
-                        OutputTokens = output,
-                        WebSearches = searches,
-                        CostDollars = (input * InputPrice + cacheWrite * CacheWritePrice + cacheRead * CacheReadPrice + output * OutputPrice) / 1_000_000
-                                      + searches * SearchPrice,
+                        Round = _round,
+                        Status = step.Status,
+                        Summary = step.Summary,
+                        Confidence = step.Confidence,
+                        Hypotheses = step.Hypotheses,
+                        Findings = step.Findings,
+                        Steps = step.Steps,
+                        Checks = step.Checks,
+                        Next = step.Next,
+                        InputTokens = _input + _cacheWrite + _cacheRead,
+                        OutputTokens = _output,
+                        WebSearches = _searches,
+                        CostDollars = (_input * InputPrice + _cacheWrite * CacheWritePrice + _cacheRead * CacheReadPrice + _output * OutputPrice) / 1_000_000
+                                      + _searches * SearchPrice,
                     };
                 }
-
-                messages.Add(new() { Role = Role.Assistant, Content = assistant });
 
                 // Recherche web longue : le serveur rend la main, on le relance tel quel.
                 if (response.StopReason == BetaStopReason.PauseTurn) continue;
 
-                if (results.Count > 0)
-                {
-                    messages.Add(new() { Role = Role.User, Content = results });
-                }
-                else
-                {
-                    // Une réponse en texte libre : le plan ne passe que par submit_plan.
-                    messages.Add(new() { Role = Role.User, Content = "Termine en appelant submit_plan avec ton plan." });
-                }
+                _messages.Add(results.Count > 0
+                    ? new BetaMessageParam { Role = Role.User, Content = results }
+                    : new BetaMessageParam { Role = Role.User, Content = "Rends ton étape avec submit_step." });
             }
 
-            throw new AssistantException("L'analyse n'a pas abouti dans le nombre d'étapes prévu. Relancez-la, ou précisez le problème.");
+            throw new AssistantException("L'analyse n'a pas abouti dans le nombre de lectures prévu. Relancez-la, ou précisez le problème.");
+        }
+
+        private string Execute(string tool, IReadOnlyDictionary<string, JsonElement> input, IProgress<string>? progress)
+        {
+            if (tool == "read_machine_data")
+            {
+                var section = Describe(input, "section");
+                var query = Describe(input, "query");
+                progress?.Report("Lecture : " + Label(section) + (query.Length > 0 ? " (« " + query + " »)" : string.Empty));
+                return MachineData.Read(_snapshot!, section, query.Length > 0 ? query : null);
+            }
+
+            if (tool == "read_live")
+            {
+                var what = Describe(input, "what");
+                var target = Describe(input, "target");
+                progress?.Report("Relevé à l'instant : " + LiveLabel(what));
+                if (_live == null) return "Relevé à l'instant indisponible.";
+                try { return _live.Read(what, target.Length > 0 ? target : null); }
+                catch (Exception ex) when (!(ex is OutOfMemoryException)) { return "Relevé impossible : " + ex.Message; }
+            }
+
+            return "Outil inconnu.";
         }
 
         private static string Task(AssistantRequest request)
@@ -241,40 +307,51 @@ namespace LDI12.Assistant
             }
             else
             {
-                text.AppendLine("Diagnostique le problème décrit par le technicien.");
-                text.AppendLine("Problème : " + (string.IsNullOrWhiteSpace(request.Problem) ? "non précisé" : request.Problem));
-                if (request.Details.Count > 0) text.AppendLine("Précisions : " + string.Join(" ; ", request.Details));
+                text.AppendLine("Dépanne le problème décrit par le technicien, étape par étape.");
+                text.AppendLine("Domaine : " + (string.IsNullOrWhiteSpace(request.Problem) ? "non précisé" : request.Problem));
+                if (request.Details.Count > 0) text.AppendLine("Observations cochées : " + string.Join(" ; ", request.Details));
             }
 
             if (!string.IsNullOrWhiteSpace(request.Notes))
-                text.AppendLine("Ce que dit le client : « " + request.Notes!.Trim() + " »");
+                text.AppendLine("Constat du technicien : « " + request.Notes!.Trim() + " »");
 
-            text.AppendLine("La fiche de la machine suit. Si elle suffit, appelle directement submit_plan ;");
-            text.AppendLine("sinon lis seulement la section qui manque, filtrée si possible.");
+            text.AppendLine("La fiche de la machine suit. Si elle suffit, rends directement ta première étape avec submit_step ;");
+            text.AppendLine("sinon lis seulement ce qui manque.");
             return text.ToString();
         }
 
         private static string SystemPrompt(IReadOnlyList<AvailableAction> actions)
         {
             var text = new StringBuilder();
-            text.AppendLine("Tu es l'assistant de diagnostic de LDI12 Diagnostic, le logiciel d'un dépanneur informatique.");
-            text.AppendLine("Tu travailles en arrière-plan : personne ne lit tes messages, aucun humain ne peut te répondre.");
-            text.AppendLine("Ne pose aucune question. Ce que tu ne peux pas établir, dis-le dans le plan, avec ta confiance.");
+            text.AppendLine("Tu es l'assistant de dépannage de LDI12 Diagnostic, le logiciel d'un dépanneur informatique.");
+            text.AppendLine("Tu travailles en arrière-plan : personne ne lit de prose. Tout ce que tu rends passe par submit_step,");
+            text.AppendLine("que le logiciel transforme en cartes et en boutons. Le technicien agit, répond d'un clic, et le logiciel");
+            text.AppendLine("te renvoie ses résultats comme résultat de submit_step : tu proposes alors l'étape suivante.");
             text.AppendLine();
-            text.AppendLine("Tes sources : la fiche de la machine jointe à la demande, l'outil read_machine_data pour le détail d'une");
-            text.AppendLine("section (relevé que LDI12 vient de faire), et la recherche web avec parcimonie. N'invente aucune donnée.");
-            text.AppendLine("Sois économe : chaque lecture est renvoyée à tous les tours suivants. Ne relis pas ce que la fiche dit déjà.");
+            text.AppendLine("Tes sources : la fiche de la machine jointe à la demande ; read_machine_data pour le détail d'une section");
+            text.AppendLine("du diagnostic ; read_live pour l'état à l'instant (son, réseau, un périphérique, un service), utile pour");
+            text.AppendLine("constater l'effet d'une opération ; la recherche web avec parcimonie. N'invente aucune donnée.");
+            text.AppendLine("Sois économe : chaque lecture est renvoyée à tous les tours suivants. Ne relis pas ce que tu sais déjà.");
             text.AppendLine();
-            text.AppendLine("Ton rendu : un seul appel à submit_plan. Le technicien voit le plan, et le lance d'un clic.");
-            text.AppendLine("- En français, phrases courtes et concrètes, pour un technicien. Pas de jargon inutile.");
-            text.AppendLine("- Étapes dans l'ordre où les faire, les moins risquées d'abord. Pas plus de huit.");
-            text.AppendLine("- Une étape automatique désigne une opération de LDI12 par son identifiant exact, pris dans la liste ci-dessous,");
-            text.AppendLine("  avec ses paramètres (par exemple device = l'identifiant « id » du périphérique dans la fiche).");
-            text.AppendLine("- Préfère toujours une opération de LDI12 à un geste manuel quand elle fait la même chose.");
-            text.AppendLine("- Ce qu'aucune opération ne fait (télécharger un pilote chez le constructeur, changer une pièce, un réglage du BIOS)");
-            text.AppendLine("  devient une étape manuelle : action_id vide, et dans « manual » le geste précis. Pour un téléchargement,");
-            text.AppendLine("  donne le site officiel du constructeur trouvé par ta recherche, jamais une adresse supposée.");
-            text.AppendLine("- Ne propose une réinstallation de Windows que si le relevé la justifie clairement, et dis pourquoi.");
+            text.AppendLine("Vise une seule étape. Si la cause est claire, propose d'emblée toutes les opérations qui la règlent,");
+            text.AppendLine("avec au plus une vérification finale, et status « resolu » si elles suffisent selon toi. N'étale le dépannage");
+            text.AppendLine("en plusieurs étapes que si la cause est vraiment incertaine : chaque étape coûte du temps au technicien.");
+            text.AppendLine();
+            text.AppendLine("Une bonne étape :");
+            text.AppendLine("- Des hypothèses classées, avec une vraisemblance de 0 à 100, mises à jour à chaque étape (écartée, confirmée).");
+            text.AppendLine("- Peu d'actions à la fois (une à quatre), les plus probables et les moins risquées d'abord, pour savoir ce qui a agi.");
+            text.AppendLine("- Pour tout ce que le logiciel ne peut pas voir (son entendu ou non, voyant allumé, câble, autre appareil,");
+            text.AppendLine("  écran, bruit), une vérification sous forme de question fermée avec deux à quatre réponses courtes.");
+            text.AppendLine("  Ne pose jamais de question ouverte. Après une opération dont seul l'humain peut juger l'effet,");
+            text.AppendLine("  ajoute la vérification qui le dit (par exemple après AUDIO-TEST-SOUND : « Avez-vous entendu la note ? »).");
+            text.AppendLine("- status « resolu » quand les résultats montrent que c'est réglé ; « hors_portee » quand il faut une pièce,");
+            text.AppendLine("  l'atelier ou le constructeur (dis lequel) ; sinon « en_cours ».");
+            text.AppendLine("- En français, phrases courtes et concrètes, pour un technicien.");
+            text.AppendLine("- Une action automatique désigne une opération de LDI12 par son identifiant exact, pris dans la liste,");
+            text.AppendLine("  avec ses paramètres (device = l'« id » d'un périphérique, endpoint = l'identifiant d'une sortie audio).");
+            text.AppendLine("- Ce qu'aucune opération ne fait devient un geste manuel : action_id vide, et dans « manual » le geste précis.");
+            text.AppendLine("  Pour un téléchargement, le site officiel du constructeur trouvé par ta recherche, jamais une adresse supposée.");
+            text.AppendLine("- Ne propose une réinstallation de Windows que si les étapes l'imposent clairement, et dis pourquoi.");
             text.AppendLine();
             text.AppendLine("Opérations de LDI12 disponibles sur cette machine :");
             foreach (var action in actions)
@@ -290,8 +367,8 @@ namespace LDI12.Assistant
         private static BetaTool ReadTool() => new()
         {
             Name = "read_machine_data",
-            Description = "Lit une section du relevé que LDI12 a fait de la machine, en JSON. "
-                          + "Pour les listes (devices, drivers, services), « query » garde les seuls éléments qui contiennent ce texte.",
+            Description = "Lit une section du relevé que LDI12 a fait de la machine. "
+                          + "Pour les listes (devices, drivers, services, startup), « query » garde les seuls éléments qui contiennent ce texte.",
             InputSchema = new()
             {
                 Properties = new Dictionary<string, JsonElement>
@@ -312,21 +389,39 @@ namespace LDI12.Assistant
             },
         };
 
-        private static BetaTool PlanTool() => new()
+        private static BetaTool LiveTool() => new()
         {
-            Name = "submit_plan",
-            Description = "Rend le diagnostic et le plan au technicien. À appeler une seule fois, pour terminer.",
+            Name = "read_live",
+            Description = "Relit l'état de la machine à l'instant, après une opération par exemple. "
+                          + "audio : sorties et entrées audio (défaut, volume, coupure, état) ; network : cartes réseau, adresses, passerelle, DNS, "
+                          + "et un test de connexion ; device : un périphérique (target = son id) ; service : un service (target = nom court).",
             InputSchema = new()
             {
                 Properties = new Dictionary<string, JsonElement>
                 {
+                    ["what"] = JsonSerializer.SerializeToElement(new { type = "string", @enum = new[] { "audio", "network", "device", "service" } }),
+                    ["target"] = JsonSerializer.SerializeToElement(new { type = "string", description = "Pour device : l'id ; pour service : le nom court." }),
+                },
+                Required = new List<string> { "what" },
+            },
+        };
+
+        private static BetaTool StepTool() => new()
+        {
+            Name = "submit_step",
+            Description = "Rend une étape du dépannage au technicien. Le résultat de cet outil sera le compte rendu de ce qu'il a fait et constaté.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["status"] = JsonSerializer.SerializeToElement(new { type = "string", @enum = new[] { "en_cours", "resolu", "hors_portee" } }),
                     ["summary"] = JsonSerializer.SerializeToElement(new
                     {
                         type = "string",
-                        description = "Deux ou trois phrases : ce qui se passe, et ce que le plan va régler.",
+                        description = "Deux phrases au plus : ce qui est compris à ce point, et ce que cette étape va établir ou régler.",
                     }),
                     ["confidence"] = JsonSerializer.SerializeToElement(new { type = "string", @enum = new[] { "faible", "moyenne", "forte" } }),
-                    ["findings"] = JsonSerializer.SerializeToElement(new
+                    ["hypotheses"] = JsonSerializer.SerializeToElement(new
                     {
                         type = "array",
                         items = new
@@ -334,8 +429,24 @@ namespace LDI12.Assistant
                             type = "object",
                             properties = new
                             {
+                                cause = new { type = "string" },
+                                likelihood = new { type = "integer", minimum = 0, maximum = 100 },
+                                state = new { type = "string", @enum = new[] { "à vérifier", "écartée", "confirmée" } },
+                            },
+                            required = new[] { "cause", "likelihood", "state" },
+                        },
+                    }),
+                    ["findings"] = JsonSerializer.SerializeToElement(new
+                    {
+                        type = "array",
+                        description = "Faits relevés qui comptent (version, date, code d'erreur, état).",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
                                 title = new { type = "string" },
-                                detail = new { type = "string", description = "Le fait relevé, avec sa valeur : version, date, code d'erreur." },
+                                detail = new { type = "string" },
                                 severity = new { type = "string", @enum = new[] { "info", "attention", "problème", "critique" } },
                             },
                             required = new[] { "title", "detail", "severity" },
@@ -344,76 +455,118 @@ namespace LDI12.Assistant
                     ["steps"] = JsonSerializer.SerializeToElement(new
                     {
                         type = "array",
+                        description = "Opérations de LDI12 à lancer maintenant, et gestes manuels.",
                         items = new
                         {
                             type = "object",
                             properties = new
                             {
                                 title = new { type = "string", description = "Le geste, en quelques mots." },
-                                why = new { type = "string", description = "Pourquoi cette étape, en une phrase." },
-                                action_id = new { type = "string", description = "Identifiant exact d'une opération de LDI12, ou chaîne vide pour une étape manuelle." },
+                                why = new { type = "string", description = "Ce qu'il établit ou règle, en une phrase." },
+                                action_id = new { type = "string", description = "Identifiant exact d'une opération de LDI12, ou chaîne vide pour un geste manuel." },
                                 parameters = new
                                 {
                                     type = "object",
-                                    description = "Paramètres de l'opération, s'il en faut (par exemple {\"service\": \"Spooler\"}).",
+                                    description = "Paramètres de l'opération, s'il en faut (par exemple {\"endpoint\": \"{0.0.0.00000000}.{…}\"}).",
                                     additionalProperties = new { type = "string" },
                                 },
-                                manual = new { type = "string", description = "Pour une étape manuelle : le geste précis, et le site officiel s'il faut télécharger." },
+                                manual = new { type = "string", description = "Pour un geste manuel : le geste précis." },
                             },
                             required = new[] { "title", "why", "action_id" },
                         },
                     }),
+                    ["checks"] = JsonSerializer.SerializeToElement(new
+                    {
+                        type = "array",
+                        description = "Vérifications que seul le technicien peut faire, chacune avec ses réponses à un clic.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                question = new { type = "string" },
+                                answers = new { type = "array", items = new { type = "string" }, minItems = 2, maxItems = 4 },
+                            },
+                            required = new[] { "question", "answers" },
+                        },
+                    }),
+                    ["next"] = JsonSerializer.SerializeToElement(new { type = "string", description = "Ce qui se passera ensuite, en une phrase." }),
                 },
-                Required = new List<string> { "summary", "confidence", "findings", "steps" },
+                Required = new List<string> { "status", "summary", "confidence", "hypotheses", "steps" },
             },
         };
 
-        /// <summary>Le plan tel que Claude l'a rendu ; une opération inconnue devient une étape manuelle, jamais une exécution.</summary>
-        internal static AssistantPlan ParsePlan(IReadOnlyDictionary<string, JsonElement> input, ISet<string> known)
+        /// <summary>L'étape telle que Claude l'a rendue ; une opération inconnue devient un geste manuel, jamais une exécution.</summary>
+        internal static AssistantPlan ParseStep(IReadOnlyDictionary<string, JsonElement> input, ISet<string> known)
         {
             string Text(JsonElement element, string name)
                 => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                     ? value.GetString() ?? string.Empty
                     : string.Empty;
 
-            var findings = new List<PlanFinding>();
-            if (input.TryGetValue("findings", out var findingArray) && findingArray.ValueKind == JsonValueKind.Array)
-                foreach (var item in findingArray.EnumerateArray())
-                    findings.Add(new PlanFinding { Title = Text(item, "title"), Detail = Text(item, "detail"), Severity = Text(item, "severity") });
+            string Top(string name, string fallback)
+                => input.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? fallback : fallback;
+
+            IEnumerable<JsonElement> Array(string name)
+                => input.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.Array ? value.EnumerateArray() : Enumerable.Empty<JsonElement>();
+
+            var hypotheses = Array("hypotheses").Select(item => new Hypothesis
+            {
+                Cause = Text(item, "cause"),
+                Likelihood = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("likelihood", out var l) && l.ValueKind == JsonValueKind.Number
+                    ? Math.Max(0, Math.Min(100, l.GetInt32()))
+                    : 0,
+                State = Text(item, "state") is { Length: > 0 } state ? state : "à vérifier",
+            }).OrderByDescending(h => h.State == "confirmée").ThenByDescending(h => h.Likelihood).ToList();
+
+            var findings = Array("findings")
+                .Select(item => new PlanFinding { Title = Text(item, "title"), Detail = Text(item, "detail"), Severity = Text(item, "severity") })
+                .ToList();
+
+            var checks = Array("checks").Select(item => new CheckQuestion
+            {
+                Question = Text(item, "question"),
+                Answers = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("answers", out var answers) && answers.ValueKind == JsonValueKind.Array
+                    ? answers.EnumerateArray().Where(a => a.ValueKind == JsonValueKind.String).Select(a => a.GetString() ?? string.Empty)
+                        .Where(a => a.Length > 0).Take(4).ToList()
+                    : new List<string>(),
+            }).Where(c => c.Question.Length > 0 && c.Answers.Count >= 2).ToList();
 
             var steps = new List<PlanStep>();
-            if (input.TryGetValue("steps", out var stepArray) && stepArray.ValueKind == JsonValueKind.Array)
+            foreach (var item in Array("steps"))
             {
-                foreach (var item in stepArray.EnumerateArray())
+                var id = Text(item, "action_id").Trim();
+                var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("parameters", out var map) && map.ValueKind == JsonValueKind.Object)
+                    foreach (var property in map.EnumerateObject())
+                        if (property.Value.ValueKind == JsonValueKind.String) parameters[property.Name] = property.Value.GetString() ?? string.Empty;
+
+                var manual = Text(item, "manual");
+                var isKnown = id.Length > 0 && known.Contains(id);
+                if (id.Length > 0 && !isKnown && manual.Length == 0)
+                    manual = "Opération proposée inconnue de LDI12 (« " + id + " ») : à faire à la main si elle a un sens.";
+
+                steps.Add(new PlanStep
                 {
-                    var id = Text(item, "action_id").Trim();
-                    var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("parameters", out var map) && map.ValueKind == JsonValueKind.Object)
-                        foreach (var property in map.EnumerateObject())
-                            if (property.Value.ValueKind == JsonValueKind.String) parameters[property.Name] = property.Value.GetString() ?? string.Empty;
-
-                    var manual = Text(item, "manual");
-                    var isKnown = id.Length > 0 && known.Contains(id);
-                    if (id.Length > 0 && !isKnown && manual.Length == 0)
-                        manual = "Opération proposée inconnue de LDI12 (« " + id + " ») : à faire à la main si elle a un sens.";
-
-                    steps.Add(new PlanStep
-                    {
-                        Title = Text(item, "title"),
-                        Why = Text(item, "why"),
-                        ActionId = isKnown ? known.First(k => string.Equals(k, id, StringComparison.OrdinalIgnoreCase)) : null,
-                        Parameters = parameters,
-                        Manual = manual.Length > 0 ? manual : null,
-                    });
-                }
+                    Title = Text(item, "title"),
+                    Why = Text(item, "why"),
+                    ActionId = isKnown ? known.First(k => string.Equals(k, id, StringComparison.OrdinalIgnoreCase)) : null,
+                    Parameters = parameters,
+                    Manual = manual.Length > 0 ? manual : null,
+                });
             }
 
+            var status = Top("status", "en_cours");
             return new AssistantPlan
             {
-                Summary = input.TryGetValue("summary", out var summary) && summary.ValueKind == JsonValueKind.String ? summary.GetString() ?? string.Empty : string.Empty,
-                Confidence = input.TryGetValue("confidence", out var confidence) && confidence.ValueKind == JsonValueKind.String ? confidence.GetString() ?? "moyenne" : "moyenne",
+                Status = status == "resolu" || status == "hors_portee" ? status : "en_cours",
+                Summary = Top("summary", string.Empty),
+                Confidence = Top("confidence", "moyenne"),
+                Hypotheses = hypotheses,
                 Findings = findings,
                 Steps = steps,
+                Checks = checks,
+                Next = Top("next", string.Empty),
             };
         }
 
@@ -436,6 +589,15 @@ namespace LDI12.Assistant
 
         private static string Describe(IReadOnlyDictionary<string, JsonElement> input, string name)
             => input.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+
+        private static string LiveLabel(string what) => what switch
+        {
+            "audio" => "le son",
+            "network" => "le réseau",
+            "device" => "un périphérique",
+            "service" => "un service",
+            _ => what,
+        };
 
         private static string Label(string section) => section switch
         {

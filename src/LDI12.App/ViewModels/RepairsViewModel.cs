@@ -450,6 +450,7 @@ namespace LDI12.App.ViewModels
             [ActionIds.EnableDevice] = "device : identifiant d'instance du périphérique désactivé",
             [ActionIds.ReinstallDevice] = "device : identifiant d'instance du périphérique en erreur",
             [ActionIds.StartupDisable] = "entry : nom de l'entrée de démarrage, tel que dans la section startup",
+            [ActionIds.AudioDefaultOutput] = "endpoint : identifiant de la sortie audio, tel que dans la lecture live audio",
         };
 
         /// <summary>Les paramètres facultatifs des opérations proposées seules.</summary>
@@ -457,6 +458,7 @@ namespace LDI12.App.ViewModels
         {
             [ActionIds.DriverUpdates] = "filter (facultatif) : ne garder que les pilotes dont le nom contient ce texte",
             [ActionIds.PowerPlan] = "plan : equilibre ou performances",
+            [ActionIds.AudioRestoreVolume] = "endpoint (facultatif) : la sortie à rétablir, la sortie par défaut sinon",
         };
 
         /// <summary>Les opérations qu'un plan de l'assistant peut proposer, telles que l'assistant les lit.</summary>

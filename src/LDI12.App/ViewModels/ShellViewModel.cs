@@ -168,7 +168,8 @@ namespace LDI12.App.ViewModels
                 LDI12.Reports.Interventions.InterventionStore.Default(), _actions.Journal, logger,
                 () => RunAsync(RunMode.Full), () => Snapshot);
             _assistant = new AssistantViewModel(
-                logger, LDI12.Assistant.ApiKeyVault.Default(), () => Snapshot, () => RunAsync(RunMode.Full), _repairs);
+                logger, LDI12.Assistant.ApiKeyVault.Default(), () => Snapshot, () => RunAsync(RunMode.Full), _repairs,
+                async () => (await _diagnostics.GetPlatformAsync(System.Threading.CancellationToken.None).ConfigureAwait(true)).Control);
             _userData.BackupFinished += (_, e) => _intervention.OnBackupFinished(e);
             _userData.RestoreFinished += (_, e) => _intervention.OnRestoreFinished(e);
             _userData.VerificationFinished += (_, e) => _intervention.OnVerificationFinished(e);
@@ -287,7 +288,7 @@ namespace LDI12.App.ViewModels
 
             entries.Add(new SearchEntry("Analyser les pilotes", "Assistant", "Chaque pilote comparé au matériel",
                 () => Show(_assistant), "ia pilotes drivers mise a jour version constructeur"));
-            entries.Add(new SearchEntry("Diagnostic guidé", "Assistant", "Décrire le problème, la cause est cherchée",
+            entries.Add(new SearchEntry("Dépannage guidé", "Assistant", "Le domaine, ce qu'on observe : la cause est cherchée et réglée",
                 () => Show(_assistant), "ia panne probleme cause depannage"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));

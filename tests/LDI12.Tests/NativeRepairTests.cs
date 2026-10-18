@@ -152,6 +152,37 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public async Task Une_sortie_audio_debranchee_ne_devient_pas_la_sortie_par_defaut()
+        {
+            var control = new FakeControl();
+            control.Audio.Add(new AudioOutputState { Id = "hp", Name = "Haut-parleurs", State = "active" });
+            control.Audio.Add(new AudioOutputState { Id = "casque", Name = "Casque", State = "débranchée" });
+            control.Audio.Add(new AudioOutputState { Id = "hdmi", Name = "Écran HDMI", State = "active", IsDefault = true, IsDefaultCommunications = true });
+
+            var action = new AudioDefaultOutputAction();
+            var unplugged = await action.PreviewAsync(Context(control, ("endpoint", "casque")), CancellationToken.None);
+            var speakers = Context(control, ("endpoint", "hp"));
+            var preview = await action.PreviewAsync(speakers, CancellationToken.None);
+            await action.ExecuteAsync(speakers, preview, null, CancellationToken.None);
+
+            Assert.Equal(PreviewOutcome.Blocked, unplugged.Outcome);
+            Assert.Equal(PreviewOutcome.Ready, preview.Outcome);
+            Assert.Contains("Écran HDMI", preview.Measurements.Single().Value);
+            Assert.Equal(new[] { "default hp" }, control.Calls);
+        }
+
+        [Fact]
+        public async Task Un_son_ni_coupe_ni_a_zero_n_est_pas_retouche()
+        {
+            var control = new FakeControl();
+            control.Audio.Add(new AudioOutputState { Id = "hp", Name = "Haut-parleurs", State = "active", IsDefault = true, VolumePercent = 60, Muted = false });
+
+            var preview = await new AudioRestoreVolumeAction().PreviewAsync(Context(control), CancellationToken.None);
+
+            Assert.Equal(PreviewOutcome.NothingToDo, preview.Outcome);
+        }
+
+        [Fact]
         public void La_fiche_de_la_machine_donne_l_identifiant_des_peripheriques_en_erreur_et_reste_courte()
         {
             var snapshot = new SystemSnapshot
@@ -237,6 +268,12 @@ namespace LDI12.Tests
                 Binary.Add((hive, subKey, name, value));
                 return ControlResult.Ok("ok");
             }
+
+            public List<AudioOutputState> Audio { get; } = new List<AudioOutputState>();
+            public IReadOnlyList<AudioOutputState> AudioEndpoints() => Audio;
+            public ControlResult SetDefaultAudioEndpoint(string endpointId) { Calls.Add("default " + endpointId); return ControlResult.Ok("ok"); }
+            public ControlResult RestoreAudioVolume(string? endpointId) { Calls.Add("volume " + (endpointId ?? "défaut")); return ControlResult.Ok("ok"); }
+            public ControlResult PlayTestSound() { Calls.Add("tone"); return ControlResult.Ok("joué"); }
 
             public Guid? ActivePowerScheme() => null;
             public bool PowerSchemeExists(Guid scheme) => false;

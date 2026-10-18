@@ -98,6 +98,18 @@
         /// <summary>Remettre l'horloge à l'heure.</summary>
         public const string TimeResync = "TIME-RESYNC";
 
+        /// <summary>Faire d'une sortie audio la sortie par défaut (paramètre « endpoint »).</summary>
+        public const string AudioDefaultOutput = "AUDIO-SET-DEFAULT";
+
+        /// <summary>Lever la coupure du son et remonter un volume nul (paramètre facultatif « endpoint »).</summary>
+        public const string AudioRestoreVolume = "AUDIO-RESTORE-VOLUME";
+
+        /// <summary>Jouer une note sur la sortie par défaut.</summary>
+        public const string AudioTestSound = "AUDIO-TEST-SOUND";
+
+        /// <summary>Relancer les services audio de Windows.</summary>
+        public const string AudioServicesRestart = "AUDIO-RESTART-SERVICES";
+
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>
         public const string ToolPrefix = "TOOL-";
     }

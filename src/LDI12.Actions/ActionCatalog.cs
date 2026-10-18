@@ -58,6 +58,10 @@ namespace LDI12.Actions
                 () => new FastStartupOffAction(),
                 () => new PowerPlanAction(),
                 () => new TimeResyncAction(),
+                () => new AudioDefaultOutputAction(),
+                () => new AudioRestoreVolumeAction(),
+                () => new AudioTestSoundAction(),
+                () => new AudioServicesRestartAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

@@ -148,8 +148,8 @@
                                 <Border Style="{StaticResource Badge}">
                                     <Path Style="{StaticResource Icon}" Width="20" Height="20" Data="{StaticResource Icon.Sparkles}" Stroke="White" />
                                 </Border>
-                                <TextBlock Text="Diagnostic guidé" Style="{StaticResource Text.Title}" Margin="0,16,0,6" />
-                                <TextBlock Text="Le problème en trois clics : la cause est cherchée, la réparation préparée."
+                                <TextBlock Text="Dépannage guidé" Style="{StaticResource Text.Title}" Margin="0,16,0,6" />
+                                <TextBlock Text="Le domaine, ce que vous observez : la cause est cherchée et réglée, pas à pas s'il le faut."
                                            Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
@@ -160,18 +160,18 @@
                     </DockPanel>
                 </StackPanel>
 
-                <!-- ===== Le diagnostic guidé : trois questions, aucune conversation ===== -->
+                <!-- ===== Le dépannage guidé : le domaine, ce qu'on observe, aucune conversation ===== -->
                 <Border Style="{StaticResource StageCard}" Margin="0,22,0,0"
                         Visibility="{Binding IsGuide, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
-                        <TextBlock Text="1. Quel genre de problème ?" Style="{StaticResource Text.Title}" Margin="0,0,0,12" />
+                        <TextBlock Text="1. Où est le problème ?" Style="{StaticResource Text.Title}" Margin="0,0,0,12" />
                         <ItemsControl ItemsSource="{Binding Problems}" ItemsPanel="{StaticResource Wrap}"
                                       ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
-                        <TextBlock Text="2. Ce qui s'y ajoute" Style="{StaticResource Text.Title}" Margin="0,18,0,12" />
+                        <TextBlock Text="2. Ce que vous observez" Style="{StaticResource Text.Title}" Margin="0,18,0,12" />
                         <ItemsControl ItemsSource="{Binding Details}" ItemsPanel="{StaticResource Wrap}"
                                       ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
-                        <TextBlock Text="3. Ce qu'en dit le client" Style="{StaticResource Text.Title}" Margin="0,18,0,12" />
-                        <TextBox Style="{StaticResource Field}" Tag="Facultatif : « l'écran devient noir quand je lance un jeu »"
+                        <TextBlock Text="3. Votre constat" Style="{StaticResource Text.Title}" Margin="0,18,0,12" />
+                        <TextBox Style="{StaticResource Field}" Tag="Facultatif : « le pilote est installé, reconnu, mais aucun son ne sort »"
                                  Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" VerticalContentAlignment="Top" />
                         <WrapPanel Margin="0,18,0,0">
@@ -258,21 +258,127 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Le plan ===== -->
+                <!-- ===== Le dépannage réglé ===== -->
+                <Border Style="{StaticResource StageCard}" Margin="0,22,0,0" Width="620" HorizontalAlignment="Left"
+                        Visibility="{Binding IsDone, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="12" Margin="0,0,14,0"
+                                    Background="{DynamicResource Brush.StatusGoodSoft}">
+                                <Path Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="18" Height="14" Stretch="Uniform"
+                                      Stroke="{DynamicResource Brush.StatusGood}" StrokeThickness="2.4"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding RunTitle}" Style="{StaticResource Text.Eyebrow}" />
+                                <TextBlock Text="{Binding ApplyText}" Style="{StaticResource Text.Title}" />
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Text="{Binding CostText}" Style="{StaticResource Text.Muted}" Margin="0,14,0,16" TextWrapping="Wrap" />
+                        <WrapPanel>
+                            <Button Style="{StaticResource Button.Primary}" Content="Vérifier par un diagnostic" Command="{Binding VerifyCommand}" Margin="0,0,10,0" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Nouveau dépannage" Command="{Binding BackCommand}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== L'étape ===== -->
                 <StackPanel Margin="0,22,0,0" Visibility="{Binding IsResult, Converter={StaticResource BoolToVisibility}}">
+
+                    <!-- Les étapes passées, une ligne chacune. -->
+                    <ItemsControl ItemsSource="{Binding History}" Focusable="False" Margin="0,0,0,8"
+                                  Visibility="{Binding HasHistory, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="4,0,0,8">
+                                    <Border DockPanel.Dock="Left" Width="8" Height="8" CornerRadius="4" Margin="0,6,12,0" VerticalAlignment="Top"
+                                            Background="{DynamicResource Brush.TextTertiary}" />
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap">
+                                            <Run Text="{Binding Title, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  ·  " /><Run Text="{Binding Summary, Mode=OneWay}" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Done}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.TextTertiary}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Ce qui est compris, et les causes envisagées. -->
                     <Border Style="{StaticResource StageCard}">
                         <StackPanel>
                             <DockPanel>
-                                <Border DockPanel.Dock="Right" CornerRadius="11" Padding="10,3" VerticalAlignment="Top"
-                                        Background="{DynamicResource Brush.StatusGoodSoft}">
-                                    <TextBlock Text="{Binding Confidence}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusGood}" />
+                                <Border DockPanel.Dock="Right" CornerRadius="11" Padding="10,3" VerticalAlignment="Top">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.StatusInfoSoft}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding StatusKey}" Value="Resolved">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKey}" Value="OutOfReach">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush.StatusWarningSoft}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding StatusText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Muted}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.StatusInfo}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding StatusKey}" Value="Resolved">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.StatusGood}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusKey}" Value="OutOfReach">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.StatusWarning}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </Border>
                                 <TextBlock Text="{Binding RunTitle}" Style="{StaticResource Text.Title}" />
                             </DockPanel>
                             <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,10,0,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Brush.TextPrimary}" />
 
-                            <ItemsControl ItemsSource="{Binding Findings}" Margin="0,16,0,0" Focusable="False"
+                            <!-- Les hypothèses : une barre de vraisemblance chacune ; écartée, elle s'efface. -->
+                            <ItemsControl ItemsSource="{Binding Hypotheses}" Margin="0,16,0,0" Focusable="False"
+                                          Visibility="{Binding HasHypotheses, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,10" local:Motion.Entrance="True">
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StateKey}" Value="Ruled">
+                                                            <Setter Property="Opacity" Value="0.45" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Grid.Style>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="140" />
+                                                <ColumnDefinition Width="44" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                <TextBlock Text="{Binding Cause}" Style="{StaticResource Text.Body}" Foreground="{DynamicResource Brush.TextPrimary}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding StateText}" Style="{StaticResource Text.Muted}" />
+                                            </StackPanel>
+                                            <ProgressBar Grid.Column="1" Style="{StaticResource Progress}" Height="6" Maximum="1" VerticalAlignment="Center"
+                                                         local:Motion.Fill="{Binding Share, Mode=OneWay}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding LikelihoodText}" Style="{StaticResource Text.Muted}"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding Findings}" Margin="0,8,0,0" Focusable="False"
                                           Visibility="{Binding HasFindings, Converter={StaticResource BoolToVisibility}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -290,18 +396,24 @@
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="Le plan" Style="{StaticResource Text.Eyebrow}" Margin="4,8,0,10" />
+                    <!-- À faire : chaque opération se lance de sa carte, chaque geste manuel se coche. -->
+                    <TextBlock Text="À faire" Style="{StaticResource Text.Eyebrow}" Margin="4,8,0,10" />
                     <ItemsControl ItemsSource="{Binding Steps}" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Style="{StaticResource Card}" Padding="18,14" Margin="0,0,0,8" local:Motion.Entrance="True">
                                     <DockPanel>
-                                        <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" VerticalAlignment="Top" Margin="0,2,14,0"
-                                                  IsEnabled="{Binding IsAutomatic}" />
+                                        <Grid DockPanel.Dock="Right" Margin="14,0,0,0" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource Button.Ghost}" Content="Lancer" Command="{Binding RunCommand}"
+                                                    Visibility="{Binding IsAutomatic, Converter={StaticResource BoolToVisibility}}" />
+                                            <CheckBox Content="Fait" IsChecked="{Binding IsChecked}" VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource Brush.TextSecondary}"
+                                                      Visibility="{Binding IsAutomatic, Converter={StaticResource HiddenWhenTrue}}" />
+                                        </Grid>
                                         <StackPanel>
                                             <DockPanel>
                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding KindText}" Style="{StaticResource Text.Muted}"
-                                                           Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+                                                           Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="300" />
                                                 <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextPrimary}"
                                                            TextWrapping="Wrap">
                                                     <Run Text="{Binding Number, Mode=OneWay}" Foreground="{DynamicResource Brush.TextTertiary}" /><Run Text=".  " Foreground="{DynamicResource Brush.TextTertiary}" /><Run Text="{Binding Title, Mode=OneWay}" />
@@ -320,21 +432,55 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Text="{Binding CostText}" Style="{StaticResource Text.Muted}" Margin="4,6,0,90" />
+                    <!-- À vérifier : une question, ses réponses en boutons. -->
+                    <TextBlock Text="À vérifier" Style="{StaticResource Text.Eyebrow}" Margin="4,10,0,10"
+                               Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}" />
+                    <ItemsControl ItemsSource="{Binding Checks}" Focusable="False"
+                                  Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Padding="18,14" Margin="0,0,0,8" local:Motion.Entrance="True">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Question}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Brush.TextPrimary}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                        <ItemsControl ItemsSource="{Binding Answers}" ItemsPanel="{StaticResource Wrap}"
+                                                      ItemTemplate="{StaticResource ChipTemplate}" Focusable="False" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBox Style="{StaticResource Field}" Margin="0,8,0,0" Tag="Ce que vous avez constaté de plus (facultatif)"
+                             Text="{Binding StepNote, UpdateSourceTrigger=PropertyChanged}"
+                             Visibility="{Binding IsResolved, Converter={StaticResource HiddenWhenTrue}}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" VerticalContentAlignment="Top" />
+
+                    <TextBlock Text="{Binding Next}" Style="{StaticResource Text.Muted}" Margin="4,10,0,0" TextWrapping="Wrap"
+                               Visibility="{Binding HasNext, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="{Binding CostText}" Style="{StaticResource Text.Muted}" Margin="4,6,0,90" Foreground="{DynamicResource Brush.TextTertiary}" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
-        <!-- La barre d'action du plan, toujours à portée. -->
+        <!-- La barre de l'étape, toujours à portée : lancer, continuer, ou c'est réglé. -->
         <Border VerticalAlignment="Bottom" Padding="28,14" BorderThickness="0,1,0,0"
                 Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
                 Visibility="{Binding IsResult, Converter={StaticResource BoolToVisibility}}">
             <DockPanel MaxWidth="1000">
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
-                    <Button Style="{StaticResource Button.Ghost}" Content="Vérifier par un diagnostic" Command="{Binding VerifyCommand}" Margin="0,0,10,0"
-                            Visibility="{Binding IsApplied, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource Button.Ghost}" Content="Nouvelle analyse" Command="{Binding BackCommand}" Margin="0,0,10,0" />
-                    <Button Style="{StaticResource Button.Primary}" Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}" />
+                    <Button Style="{StaticResource Button.Ghost}" Content="Nouveau" Command="{Binding BackCommand}" Margin="0,0,10,0" />
+                    <!-- Un seul bouton plein à la fois : lancer tant qu'il reste à lancer, puis continuer ou conclure. -->
+                    <Button Style="{StaticResource Button.Primary}" Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}" Margin="0,0,10,0"
+                            Visibility="{Binding HasPending, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource Button.Primary}" Content="{Binding ContinueLabel}" Command="{Binding ContinueCommand}" Margin="0,0,10,0"
+                            Visibility="{Binding ContinueIsPrimary, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource Button.Ghost}" Content="{Binding ContinueLabel}" Command="{Binding ContinueCommand}" Margin="0,0,10,0"
+                            Visibility="{Binding ContinueIsPrimary, Converter={StaticResource HiddenWhenTrue}}" />
+                    <Button Style="{StaticResource Button.Primary}" Content="C'est réglé" Command="{Binding SolvedCommand}"
+                            Visibility="{Binding SolvedIsPrimary, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource Button.Ghost}" Content="C'est réglé" Command="{Binding SolvedCommand}"
+                            Visibility="{Binding SolvedIsPrimary, Converter={StaticResource HiddenWhenTrue}}" />
                 </WrapPanel>
                 <TextBlock Text="{Binding ApplyText}" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            Margin="0,0,16,0" />

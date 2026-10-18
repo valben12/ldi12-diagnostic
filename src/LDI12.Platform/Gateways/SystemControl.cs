@@ -176,6 +176,35 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        public IReadOnlyList<AudioOutputState> AudioEndpoints()
+        {
+            try { return AudioNative.Endpoints(); }
+            catch (Exception ex) when (ex is COMException || ex is InvalidCastException || ex is InvalidComObjectException)
+            {
+                _logger.Warn(Category, "Lecture des sorties audio impossible.", ex);
+                return Array.Empty<AudioOutputState>();
+            }
+        }
+
+        public ControlResult SetDefaultAudioEndpoint(string endpointId)
+            => Log("Sortie audio par défaut", Audio(() => AudioNative.SetDefault(endpointId)));
+
+        public ControlResult RestoreAudioVolume(string? endpointId)
+            => Log("Volume audio", Audio(() => AudioNative.RestoreVolume(endpointId)));
+
+        public ControlResult PlayTestSound()
+            => Log("Son de test", Audio(AudioNative.PlayTone));
+
+        private static ControlResult Audio(Func<ControlResult> action)
+        {
+            try { return action(); }
+            catch (Exception ex) when (ex is COMException || ex is InvalidCastException || ex is InvalidComObjectException
+                                       || ex is InvalidOperationException || ex is System.TimeoutException)
+            {
+                return ControlResult.Fail("Le son de Windows n'a pas répondu : " + ex.Message);
+            }
+        }
+
         public Task<DriverUpdateSearch> SearchDriverUpdatesAsync(CancellationToken cancellationToken)
             => WindowsUpdateAgent.SearchAsync(cancellationToken);
 

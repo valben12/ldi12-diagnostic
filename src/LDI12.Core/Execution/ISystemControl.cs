@@ -70,6 +70,32 @@ namespace LDI12.Core.Execution
         public IReadOnlyList<DriverUpdateInfo> Updates { get; init; } = Array.Empty<DriverUpdateInfo>();
     }
 
+    /// <summary>Une sortie ou une entrée audio, telle que le panneau Son de Windows la montre.</summary>
+    public sealed class AudioOutputState
+    {
+        /// <summary>Identifiant Windows de la sortie : « {0.0.0.00000000}.{…} ».</summary>
+        public string Id { get; init; } = string.Empty;
+
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary>Lecture (haut-parleurs, casque, HDMI) ou enregistrement (micro).</summary>
+        public bool IsCapture { get; init; }
+
+        /// <summary>« active », « désactivée », « débranchée », « absente ».</summary>
+        public string State { get; init; } = string.Empty;
+
+        /// <summary>Périphérique par défaut pour le son ordinaire.</summary>
+        public bool IsDefault { get; init; }
+
+        /// <summary>Périphérique par défaut pour les communications (Teams, Zoom…).</summary>
+        public bool IsDefaultCommunications { get; init; }
+
+        /// <summary>Volume principal en pourcentage ; null quand la sortie n'est pas active.</summary>
+        public int? VolumePercent { get; init; }
+
+        public bool? Muted { get; init; }
+    }
+
     /// <summary>
     /// Les gestes sur le système que les opérations de réparation demandent, en appels natifs.
     /// </summary>
@@ -124,6 +150,18 @@ namespace LDI12.Core.Execution
 
         ControlResult ActivatePowerScheme(Guid scheme);
 
+        /// <summary>Les sorties et entrées audio, avec la sortie par défaut, le volume et la coupure. Lecture seule.</summary>
+        IReadOnlyList<AudioOutputState> AudioEndpoints();
+
+        /// <summary>Fait d'une sortie audio la sortie par défaut, pour tous les usages.</summary>
+        ControlResult SetDefaultAudioEndpoint(string endpointId);
+
+        /// <summary>Rétablit le son d'une sortie (la sortie par défaut si null) : coupure levée, volume remonté s'il était presque nul.</summary>
+        ControlResult RestoreAudioVolume(string? endpointId);
+
+        /// <summary>Joue un son de test d'une seconde et demie sur la sortie par défaut.</summary>
+        ControlResult PlayTestSound();
+
         /// <summary>Les pilotes que Windows Update propose pour ce PC. Lecture seule.</summary>
         Task<DriverUpdateSearch> SearchDriverUpdatesAsync(CancellationToken cancellationToken);
 
@@ -159,6 +197,11 @@ namespace LDI12.Core.Execution
         public Guid? ActivePowerScheme() => null;
         public bool PowerSchemeExists(Guid scheme) => false;
         public ControlResult ActivatePowerScheme(Guid scheme) => No();
+
+        public IReadOnlyList<AudioOutputState> AudioEndpoints() => Array.Empty<AudioOutputState>();
+        public ControlResult SetDefaultAudioEndpoint(string endpointId) => No();
+        public ControlResult RestoreAudioVolume(string? endpointId) => No();
+        public ControlResult PlayTestSound() => No();
 
         public Task<DriverUpdateSearch> SearchDriverUpdatesAsync(CancellationToken cancellationToken)
             => Task.FromResult(new DriverUpdateSearch { Error = "Windows Update indisponible dans ce contexte." });

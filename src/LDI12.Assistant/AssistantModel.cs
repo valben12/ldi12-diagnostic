@@ -24,8 +24,61 @@ namespace LDI12.Assistant
         /// <summary>Les précisions cochées : « Depuis une mise à jour », « Au démarrage »…</summary>
         public IReadOnlyList<string> Details { get; init; } = Array.Empty<string>();
 
-        /// <summary>Ce que le client en dit, s'il y a lieu.</summary>
+        /// <summary>Ce que dit le client, ou ce que le technicien a observé.</summary>
         public string? Notes { get; init; }
+
+        /// <summary>Un relevé fait à l'instant, joint d'emblée (les sorties audio pour un problème de son…).</summary>
+        public string? LiveContext { get; init; }
+    }
+
+    /// <summary>Une cause envisagée, avec sa vraisemblance et ce que les étapes en ont établi.</summary>
+    public sealed class Hypothesis
+    {
+        public string Cause { get; init; } = string.Empty;
+
+        /// <summary>De 0 à 100.</summary>
+        public int Likelihood { get; init; }
+
+        /// <summary>« à vérifier », « écartée », « confirmée ».</summary>
+        public string State { get; init; } = "à vérifier";
+    }
+
+    /// <summary>Une vérification que seul le technicien peut faire, et les réponses qu'il peut donner d'un clic.</summary>
+    public sealed class CheckQuestion
+    {
+        public string Question { get; init; } = string.Empty;
+
+        public IReadOnlyList<string> Answers { get; init; } = Array.Empty<string>();
+    }
+
+    /// <summary>Ce qui s'est passé pendant une étape, renvoyé à l'analyse pour la suivante.</summary>
+    public sealed class StepFeedback
+    {
+        /// <summary>Les opérations lancées : titre et compte rendu.</summary>
+        public IReadOnlyList<(string Title, string Outcome)> Operations { get; init; } = Array.Empty<(string, string)>();
+
+        /// <summary>Les vérifications : question et réponse choisie (ou « sans réponse »).</summary>
+        public IReadOnlyList<(string Question, string Answer)> Answers { get; init; } = Array.Empty<(string, string)>();
+
+        /// <summary>Les gestes manuels : titre, fait ou non.</summary>
+        public IReadOnlyList<(string Title, bool Done)> Manual { get; init; } = Array.Empty<(string, bool)>();
+
+        /// <summary>Ce que le technicien a constaté, en ses mots.</summary>
+        public string? Note { get; init; }
+
+        public string Render(int round)
+        {
+            var text = new System.Text.StringBuilder();
+            text.AppendLine("Résultats de l'étape " + round + " :");
+            foreach (var (title, outcome) in Operations) text.AppendLine("- Opération « " + title + " » : " + outcome);
+            foreach (var (question, answer) in Answers) text.AppendLine("- Vérification « " + question + " » : " + answer);
+            foreach (var (title, done) in Manual) text.AppendLine("- Geste « " + title + " » : " + (done ? "fait" : "pas fait"));
+            if (!string.IsNullOrWhiteSpace(Note)) text.AppendLine("- Constat du technicien : « " + Note!.Trim() + " »");
+            if (Operations.Count == 0 && Answers.Count == 0 && Manual.Count == 0 && string.IsNullOrWhiteSpace(Note))
+                text.AppendLine("- Rien n'a été fait ni constaté : le technicien demande une autre piste.");
+            text.AppendLine("Mets à jour tes hypothèses et rends l'étape suivante avec submit_step.");
+            return text.ToString();
+        }
     }
 
     /// <summary>Une opération de LDI12 que le plan peut proposer.</summary>
@@ -73,9 +126,22 @@ namespace LDI12.Assistant
         public bool IsAutomatic => ActionId != null;
     }
 
-    /// <summary>Le résultat d'une analyse : ce que Claude a compris, et ce qu'il propose.</summary>
+    /// <summary>Une étape de l'analyse : ce qui est compris à ce point, et ce qu'il faut faire ou vérifier.</summary>
     public sealed class AssistantPlan
     {
+        /// <summary>Numéro de l'étape, à partir de 1.</summary>
+        public int Round { get; init; } = 1;
+
+        /// <summary>« en_cours », « resolu » (le problème devrait être réglé), « hors_portee » (pièce, atelier, constructeur).</summary>
+        public string Status { get; init; } = "en_cours";
+
+        public IReadOnlyList<Hypothesis> Hypotheses { get; init; } = Array.Empty<Hypothesis>();
+
+        public IReadOnlyList<CheckQuestion> Checks { get; init; } = Array.Empty<CheckQuestion>();
+
+        /// <summary>Ce qui se passera après cette étape, en une phrase.</summary>
+        public string Next { get; init; } = string.Empty;
+
         public string Summary { get; init; } = string.Empty;
 
         /// <summary>« faible », « moyenne », « forte ».</summary>
@@ -85,7 +151,7 @@ namespace LDI12.Assistant
 
         public IReadOnlyList<PlanStep> Steps { get; init; } = Array.Empty<PlanStep>();
 
-        /// <summary>Jetons consommés, entrée et sortie : pour suivre ce que coûte une analyse.</summary>
+        /// <summary>Jetons consommés depuis le début de la session, entrée et sortie.</summary>
         public long InputTokens { get; init; }
 
         public long OutputTokens { get; init; }

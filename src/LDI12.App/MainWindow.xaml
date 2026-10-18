@@ -831,7 +831,8 @@
                                             <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0"
-                                                       TextTrimming="CharacterEllipsis" />
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding Detail, Converter={StaticResource TextToVisibility}}" />
                                         </StackPanel>
                                         <TextBlock Grid.Column="1" Text="{Binding Kind}" Style="{StaticResource Text.Muted}"
                                                    VerticalAlignment="Top" Margin="14,1,0,0" />

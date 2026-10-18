@@ -101,7 +101,7 @@ namespace LDI12.Engine.Recommendations
         static RecommendationCatalog()
         {
             Add(Rec.BackupNow, "Sauvegarder les données sans attendre",
-                "Le disque montre des signes de défaillance : une sauvegarde faite maintenant coûte quelques minutes, une récupération après panne coûte beaucoup plus.",
+                "Les données du client ne sont pas à l'abri : une sauvegarde faite maintenant coûte quelques minutes, une récupération après une panne ou une erreur coûte beaucoup plus, sans garantie.",
                 RecommendationPriority.Immediate, EffortLevel.Extended, ImpactLevel.High, action: "BACKUP-USER-DATA");
 
             Add(Rec.ReplaceDisk, "Remplacer le disque",

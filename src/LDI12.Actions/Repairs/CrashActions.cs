@@ -144,6 +144,10 @@ namespace LDI12.Actions.Repairs
             var folder = context.Parameter(FolderParameter) ?? Path.Combine(windows, "Minidump");
             var memory = context.Parameter(MemoryParameter) ?? Path.Combine(windows, "MEMORY.DMP");
 
+            // L'hôte élevé ne lit que des vidages : un paramètre qui désignerait un autre fichier
+            // protégé est ignoré, pas suivi.
+            if (!memory.EndsWith(".dmp", StringComparison.OrdinalIgnoreCase)) memory = Path.Combine(windows, "MEMORY.DMP");
+
             var dumps = new List<CrashDump>();
             var scan = context.Files.DirectoryExists(folder)
                 ? context.Files.Scan(new DirectoryScanRequest(folder) { TopLevelOnly = true, MaxFiles = 2000 }, cancellationToken)

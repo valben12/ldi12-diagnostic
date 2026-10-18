@@ -117,8 +117,9 @@ namespace LDI12.Collectors.Programs
                     Enabled = false,
                     Key = key + "|" + name,
                     Hive = hiveName,
-                    Detail = "désactivé par Autoruns",
-                    CanToggle = false,
+                    Detail = "rangé à part (Autoruns, ou ce logiciel sous Windows 7)",
+                    // Se rétablit en reprenant sa place dans la clé, quelle que soit la version.
+                    CanToggle = approvedKey != null,
                 });
             }
         }

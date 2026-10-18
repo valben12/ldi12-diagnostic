@@ -1275,6 +1275,7 @@ namespace LDI12.App.ViewModels
         private void ShowDemoTransfer()
         {
             Mode = DataMode.Backup;
+            Status = "Sauvegarde en cours vers E:\\LDI12-Sauvegardes\\PC-CLIENT.";
             IsBackupTransferring = true;
             BeginTransfer("Copie de « Images »");
             TransferPercent = 42.6;
@@ -1483,7 +1484,7 @@ namespace LDI12.App.ViewModels
 
             // Une copie suivie d'une autre (fichiers ouverts, plusieurs comptes) : les chiffres de
             // la précédente sont acquis au bilan quand la suivante repart de zéro.
-            if (_lastFigures != null && figures.BytesTotal != _lastFigures.BytesTotal || figures.FilesTotal != _lastFigures.FilesTotal)
+            if (_lastFigures != null && (figures.BytesTotal != _lastFigures.BytesTotal || figures.FilesTotal != _lastFigures.FilesTotal))
             {
                 _bytesSecured += _lastFigures.BytesDone;
                 _filesSecured += _lastFigures.FilesDone;

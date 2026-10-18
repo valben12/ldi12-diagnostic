@@ -138,10 +138,16 @@ namespace LDI12.Platform.Gateways
         {
             var address = IPAddress.Parse(device.Address);
             if (device.Mac == null && device.IsSelf)
-                device.Mac = NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(n => n.GetIPProperties().UnicastAddresses.Any(u => u.Address.Equals(address)))
-                    .Select(n => string.Join(":", n.GetPhysicalAddress().GetAddressBytes().Select(b => b.ToString("X2"))))
-                    .FirstOrDefault(m => m.Length > 0);
+            {
+                try
+                {
+                    device.Mac = NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(n => n.GetIPProperties().UnicastAddresses.Any(u => u.Address.Equals(address)))
+                        .Select(n => string.Join(":", n.GetPhysicalAddress().GetAddressBytes().Select(b => b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture))))
+                        .FirstOrDefault(m => m.Length > 0);
+                }
+                catch (NetworkInformationException) { }
+            }
             device.Vendor = vendors?.Find(device.Mac);
 
             var dns = Task.Run(() =>
@@ -175,7 +181,13 @@ namespace LDI12.Platform.Gateways
             {
                 var connect = client.ConnectAsync(address, port);
                 var finished = await Task.WhenAny(connect, Task.Delay(timeoutMs)).ConfigureAwait(false);
-                if (finished != connect) return false;
+                if (finished != connect)
+                {
+                    // La connexion abandonnée échouera à la fermeture de la prise : son erreur est
+                    // lue ici, pour ne pas finir en exception non observée.
+                    _ = connect.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                    return false;
+                }
                 await connect.ConfigureAwait(false);
                 return client.Connected;
             }

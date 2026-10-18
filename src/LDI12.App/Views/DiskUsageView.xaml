@@ -126,7 +126,7 @@
                         ToolTip="Relancer l'analyse au même endroit" />
                 <Button Style="{StaticResource ToolButton}" Content="Autre disque" Command="{Binding NewAnalysisCommand}" Margin="0" />
             </WrapPanel>
-            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Treemap}" Content="Analyse du disque"
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Treemap}" Content="Espace disque"
                             local:Motion.Entrance="True" />
         </DockPanel>
 

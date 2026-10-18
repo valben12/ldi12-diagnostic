@@ -134,9 +134,20 @@ namespace LDI12.Actions.Repairs
             if (bar <= 0) return ControlResult.Fail("Entrée mal désignée.");
             var subKey = key.Substring(0, bar);
             var value = key.Substring(bar + 1);
+            // Seules les deux clés Run que la liste propose se basculent : jamais une clé quelconque.
+            if (!string.Equals(subKey, RunKey, StringComparison.OrdinalIgnoreCase) && !string.Equals(subKey, RunKeyWow, StringComparison.OrdinalIgnoreCase))
+                return ControlResult.Fail("Cette clé de démarrage ne se bascule pas d'ici.");
+
+            // Une entrée rangée à part (Autoruns, ou ce logiciel sous Windows 7) reprend d'abord sa place.
+            var parked = enable ? context.Registry.ReadString(hive, subKey + "\\" + DisabledSubKey, value) : null;
 
             if (context.Platform.Profile.Build >= 9200)
             {
+                if (parked != null)
+                {
+                    var moved = Move(context, hive, subKey + "\\" + DisabledSubKey, subKey, value, parked);
+                    if (!moved.Succeeded) return moved;
+                }
                 var approved = string.Equals(subKey, RunKeyWow, StringComparison.OrdinalIgnoreCase) ? "Run32" : "Run";
                 return context.Control.SetRegistryBinary(hive, Approved + approved, value, State(enable));
             }
@@ -145,6 +156,11 @@ namespace LDI12.Actions.Repairs
             var to = enable ? subKey : subKey + "\\" + DisabledSubKey;
             var command = context.Registry.ReadString(hive, from, value);
             if (command == null) return ControlResult.Fail("La valeur n'existe plus à cet endroit.");
+            return Move(context, hive, from, to, value, command);
+        }
+
+        private static ControlResult Move(ActionContext context, RegistryHive hive, string from, string to, string value, string command)
+        {
             var written = context.Control.SetRegistryString(hive, to, value, command);
             return written.Succeeded ? context.Control.DeleteRegistryValue(hive, from, value) : written;
         }
@@ -257,11 +273,17 @@ namespace LDI12.Actions.Repairs
 
         private static (List<int> Ids, List<string> Names) Targets(ActionContext context)
         {
-            var ids = (context.Parameter(IdsParameter) ?? string.Empty)
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => int.TryParse(t, out var id) ? id : -1).Where(id => id > 4).ToList();
-            var names = (context.Parameter(NamesParameter) ?? string.Empty).Split('|').ToList();
-            while (names.Count < ids.Count) names.Add("processus " + ids[names.Count]);
+            // Numéros et noms vont par paires : un numéro écarté emporte son nom, sans décaler les suivants.
+            var tokens = (context.Parameter(IdsParameter) ?? string.Empty).Split(',');
+            var given = (context.Parameter(NamesParameter) ?? string.Empty).Split('|');
+            var ids = new List<int>();
+            var names = new List<string>();
+            for (var index = 0; index < tokens.Length; index++)
+            {
+                if (!int.TryParse(tokens[index].Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id) || id <= 4) continue;
+                ids.Add(id);
+                names.Add(index < given.Length && given[index].Length > 0 ? given[index] : "processus " + id);
+            }
             return (ids, names);
         }
     }

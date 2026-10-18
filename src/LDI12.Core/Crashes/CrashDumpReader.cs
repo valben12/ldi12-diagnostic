@@ -65,6 +65,8 @@ namespace LDI12.Core.Crashes
             if (dumpType == TriageDump)
             {
                 var triage = is64 ? 0x2000 : 0x1000;
+                // Les décalages viennent du fichier : un vidage abîmé peut y porter n'importe quoi,
+                // d'où les calculs en 64 bits ci-dessous, sans débordement possible.
                 if (triage + 0x50 <= data.Length)
                 {
                     var contextOffset = (int)U32(data, triage + 0x0C);
@@ -113,9 +115,9 @@ namespace LDI12.Core.Crashes
 
         private static ulong? ContextAddress(byte[] data, int offset, bool is64)
         {
-            var at = offset + (is64 ? 0xF8 : 0xB8);
+            var at = (long)offset + (is64 ? 0xF8 : 0xB8);
             if (offset <= 0 || at + 8 > data.Length) return null;
-            return is64 ? U64(data, at) : U32(data, at);
+            return is64 ? U64(data, (int)at) : U32(data, (int)at);
         }
 
         /// <summary>
@@ -132,7 +134,7 @@ namespace LDI12.Core.Crashes
             {
                 var entry = offset + index * stride;
                 var nameOffset = (int)U32(data, entry);
-                var name = DumpString(data, nameOffset) ?? (stringPool > 0 ? DumpString(data, stringPool + nameOffset) : null);
+                var name = DumpString(data, nameOffset) ?? (stringPool > 0 && (long)stringPool + nameOffset < data.Length ? DumpString(data, stringPool + nameOffset) : null);
                 if (name == null) return new List<CrashModule>(); // liste incohérente : on n'en garde rien
 
                 var ldr = entry + (is64 ? 8 : 4);
@@ -150,9 +152,9 @@ namespace LDI12.Core.Crashes
         /// <summary>Un nom au format du vidage : sa longueur en caractères, puis l'UTF-16.</summary>
         private static string? DumpString(byte[] data, int offset)
         {
-            if (offset <= 0 || offset + 4 > data.Length) return null;
+            if (offset <= 0 || (long)offset + 4 > data.Length) return null;
             var length = (int)U32(data, offset);
-            if (length <= 0 || length > 260 || offset + 4 + length * 2 > data.Length) return null;
+            if (length <= 0 || length > 260 || (long)offset + 4 + length * 2 > data.Length) return null;
 
             var text = Encoding.Unicode.GetString(data, offset + 4, length * 2).TrimEnd('\0');
             if (text.Length == 0) return null;
@@ -187,7 +189,7 @@ namespace LDI12.Core.Crashes
 
         private static DateTime? FileTime(byte[] data, int offset)
         {
-            if (offset + 8 > data.Length) return null;
+            if ((long)offset + 8 > data.Length) return null;
             var value = (long)U64(data, offset);
             if (value <= 0) return null;
             try
@@ -202,9 +204,9 @@ namespace LDI12.Core.Crashes
         }
 
         private static uint U32(byte[] data, int offset)
-            => offset < 0 || offset + 4 > data.Length ? 0 : BitConverter.ToUInt32(data, offset);
+            => offset < 0 || (long)offset + 4 > data.Length ? 0 : BitConverter.ToUInt32(data, offset);
 
         private static ulong U64(byte[] data, int offset)
-            => offset < 0 || offset + 8 > data.Length ? 0 : BitConverter.ToUInt64(data, offset);
+            => offset < 0 || (long)offset + 8 > data.Length ? 0 : BitConverter.ToUInt64(data, offset);
     }
 }

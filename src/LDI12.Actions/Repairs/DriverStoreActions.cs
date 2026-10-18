@@ -85,12 +85,18 @@ namespace LDI12.Actions.Repairs
         private static (List<string> Packages, List<string> Labels) Targets(ActionContext context)
         {
             // Rien d'autre qu'un nom publié « oemNN.inf » n'est admis : jamais un pilote de Windows.
-            var packages = (context.Parameter(PackagesParameter) ?? string.Empty)
-                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(p => p.Trim()).Where(p => Published.IsMatch(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var labels = (context.Parameter(LabelsParameter) ?? string.Empty).Split('|').ToList();
-            for (var index = 0; index < packages.Count; index++)
-                if (index >= labels.Count || string.IsNullOrWhiteSpace(labels[index])) { if (index >= labels.Count) labels.Add(packages[index]); else labels[index] = packages[index]; }
+            // Noms et libellés vont par paires : un nom écarté emporte son libellé.
+            var given = (context.Parameter(PackagesParameter) ?? string.Empty).Split('|');
+            var texts = (context.Parameter(LabelsParameter) ?? string.Empty).Split('|');
+            var packages = new List<string>();
+            var labels = new List<string>();
+            for (var index = 0; index < given.Length; index++)
+            {
+                var package = given[index].Trim();
+                if (!Published.IsMatch(package) || packages.Contains(package, StringComparer.OrdinalIgnoreCase)) continue;
+                packages.Add(package);
+                labels.Add(index < texts.Length && !string.IsNullOrWhiteSpace(texts[index]) ? texts[index] : package);
+            }
             return (packages, labels);
         }
     }

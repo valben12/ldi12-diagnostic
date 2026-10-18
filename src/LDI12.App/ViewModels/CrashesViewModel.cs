@@ -162,7 +162,9 @@ namespace LDI12.App.ViewModels
         {
             _repairs = repairs ?? throw new ArgumentNullException(nameof(repairs));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            RefreshCommand = new AsyncRelayCommand(() => LoadAsync(readDumps: true), () => !IsLoading);
+            // « Relire » ne relance l'invite d'administration que si les rapports ont déjà été lus
+            // une fois : sinon c'est le bouton « Lire les rapports » qui la propose, explicitement.
+            RefreshCommand = new AsyncRelayCommand(() => LoadAsync(readDumps: !NeedsElevation), () => !IsLoading);
             ReadDumpsCommand = new AsyncRelayCommand(() => LoadAsync(readDumps: true), () => !IsLoading);
             EnableDumpsLink = new ActionLink(ActionIds.CrashDumpsEnable);
             SolveCommand = new RelayCommand(() => ActionNavigator.Solve?.Invoke("Écrans bleus : " + VerdictTitle, VerdictDetail + " " + string.Join(" ", Advice)));
@@ -369,6 +371,9 @@ namespace LDI12.App.ViewModels
                 Settings = new DumpSettings { Mode = 7 },
             };
             _loaded = _demo = true;
+            IsLoading = false;
+            Status = string.Empty;
+            NeedsElevation = false;
             Show(history, CrashAnalyzer.Conclude(history, _files));
         }
     }

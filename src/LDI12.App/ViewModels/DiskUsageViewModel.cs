@@ -181,16 +181,22 @@ namespace LDI12.App.ViewModels
     /// <summary>Un cran du fil d'Ariane de la carte.</summary>
     public sealed class DiskCrumb
     {
-        public DiskCrumb(DiskNode node, bool isLast, ICommand go)
+        public DiskCrumb(DiskNode node, bool isLast, ICommand go, bool isGap = false)
         {
             Node = node;
             IsLast = isLast;
             GoCommand = go;
+            IsGap = isGap;
         }
 
         public DiskNode Node { get; }
 
-        public string Name => Node.Parent == null ? Node.Name.TrimEnd('\\') : Node.Name;
+        /// <summary>« … » à la place des dossiers intermédiaires d'un chemin profond : le fil tient sur une ligne.</summary>
+        public bool IsGap { get; }
+
+        public string Name => IsGap ? "…" : Node.Parent == null ? Node.Name.TrimEnd('\\') : Node.Name;
+
+        public string Path => Node.FullPath;
 
         public bool IsLast { get; }
 
@@ -353,8 +359,14 @@ namespace LDI12.App.ViewModels
                 Crumbs.Clear();
                 var chain = new List<DiskNode>();
                 for (var node = value; node != null; node = node.Parent) chain.Insert(0, node);
+                // Un chemin profond garde sa racine et ses trois derniers dossiers ; le « … » mène au dossier
+                // qu'il remplace, et le chemin complet reste en bulle sur chaque élément.
                 for (var index = 0; index < chain.Count; index++)
-                    Crumbs.Add(new DiskCrumb(chain[index], index == chain.Count - 1, ZoomCommand));
+                {
+                    var hidden = chain.Count > 5 && index > 0 && index < chain.Count - 3;
+                    if (hidden && index > 1) continue;
+                    Crumbs.Add(new DiskCrumb(chain[hidden ? chain.Count - 4 : index], index == chain.Count - 1, ZoomCommand, isGap: hidden));
+                }
                 Raise(nameof(CanZoomOut));
             }
         }
@@ -425,7 +437,7 @@ namespace LDI12.App.ViewModels
             get
             {
                 var node = _hovered ?? _selected;
-                if (node == null) return "Survolez la carte pour voir chaque fichier. Double clic : entrer dans le dossier.";
+                if (node == null) return "Survolez la carte pour voir chaque fichier · molette : zoomer · glisser : se déplacer · double clic : entrer dans le dossier.";
                 return node.FullPath + "  ·  " + ValueFormat.Bytes(node.Size);
             }
         }

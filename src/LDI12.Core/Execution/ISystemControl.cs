@@ -168,7 +168,7 @@ namespace LDI12.Core.Execution
         /// Capture le trafic IPv4 de l'adresse donnée pendant la durée demandée, et l'écrit au
         /// format pcap si un chemin est donné. Réservé aux administrateurs.
         /// </summary>
-        Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken);
+        Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, IProgress<Network.TrafficLive>? live, CancellationToken cancellationToken);
 
         /// <summary>Lance l'autotest intégré d'un disque ATA (court ou long).</summary>
         ControlResult StartDiskSelfTest(int diskIndex, bool extended);
@@ -236,7 +236,7 @@ namespace LDI12.Core.Execution
         public ControlResult SetTaskEnabled(string path, bool enabled) => No();
         public ControlResult EndProcess(int processId) => No();
         public ControlResult DeleteDriverPackage(string publishedName) => No();
-        public Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+        public Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, IProgress<Network.TrafficLive>? live, CancellationToken cancellationToken)
             => Task.FromResult<Network.TrafficSummary?>(null);
         public ControlResult StartDiskSelfTest(int diskIndex, bool extended) => No();
         public Disks.SelfTestState? ReadDiskSelfTest(int diskIndex) => null;

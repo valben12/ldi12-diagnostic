@@ -42,6 +42,7 @@ $screens = @(
     @{ Nav = 18; Name = 'reseau-local';  Scroll = @(); Demo = 'lan-devices' },
     @{ Nav = 18; Name = 'reseau-local-connexions'; Scroll = @(); Demo = 'lan-connections' },
     @{ Nav = 18; Name = 'reseau-local-trafic'; Scroll = @(); Demo = 'lan-traffic' },
+    @{ Nav = 18; Name = 'reseau-local-statistiques'; Scroll = @(); Demo = 'lan-stats' },
     @{ Nav = 19; Name = 'surveillance';  Scroll = @() },
     @{ Nav = 20; Name = 'mesures';       Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },

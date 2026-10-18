@@ -293,9 +293,14 @@ namespace LDI12.Tests
             public ControlResult SetServiceStart(string name, int start) { Calls.Add("start-type " + name + " " + start); return ControlResult.Ok("ok"); }
             public ControlResult SetTaskEnabled(string path, bool enabled) { Calls.Add("task " + path + " " + enabled); return ControlResult.Ok("ok"); }
             public ControlResult EndProcess(int processId) { Calls.Add("end " + processId); return ControlResult.Ok("ok"); }
-            public Task<LDI12.Core.Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+            public Task<LDI12.Core.Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, IProgress<LDI12.Core.Network.TrafficLive>? live, CancellationToken cancellationToken)
             {
                 Calls.Add("capture " + localAddress + " " + duration.TotalSeconds);
+                live?.Report(new LDI12.Core.Network.TrafficLive
+                {
+                    Packets = { new LDI12.Core.Network.PacketRecord { Number = 1, Source = localAddress, Destination = "1.1.1.1", Protocol = "DNS", Length = 74, Info = "Requête exemple.fr" } },
+                    Summary = new LDI12.Core.Network.TrafficSummary { LocalAddress = localAddress, Packets = 1, Bytes = 74 },
+                });
                 return Task.FromResult<LDI12.Core.Network.TrafficSummary?>(new LDI12.Core.Network.TrafficSummary { LocalAddress = localAddress, Duration = duration, Packets = 12, PcapPath = pcapPath });
             }
 

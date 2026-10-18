@@ -95,16 +95,49 @@
                             Margin="2,0,12,0" VerticalAlignment="Center"
                             Visibility="{Binding HasSwatch, Converter={StaticResource BoolToVisibility}}" />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxHeight="40"
-                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource OneLine}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextPrimary}" ToolTip="{Binding Title}" />
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource OneLineMuted}" ToolTip="{Binding Detail}" />
                     </StackPanel>
                     <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
                                Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" Margin="0,0,6,0" />
                 </Grid>
             </Button>
         </DataTemplate>
+
+        <!-- Une seule ligne, coupée par des points de suspension : une ligne de liste ne change jamais de hauteur. -->
+        <Style x:Key="OneLine" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="OneLineMuted" TargetType="TextBlock" BasedOn="{StaticResource Text.Muted}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- Commande posée sur la carte : petite, sur fond de carte, lisible sur toutes les couleurs. -->
+        <Style x:Key="MapButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Face" MinWidth="28" Height="28" Padding="8,0" CornerRadius="7"
+                                Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Face" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Bouton d'action compact, icône et libellé. -->
         <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
@@ -216,7 +249,7 @@
 
             <!-- Les chiffres et le volume : analysé, hors d'atteinte, libre. -->
             <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource OneLineMuted}" />
                 <Grid Height="8" Margin="0,8,0,6" Visibility="{Binding HasVolume, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="{Binding VolumeScannedShare, Converter={StaticResource ShareToStar}}" />
@@ -227,10 +260,10 @@
                     <Border Grid.Column="1" Background="{DynamicResource Brush.StatusUnavailable}" />
                     <Border Grid.Column="2" Background="{DynamicResource Brush.TrackBackground}" CornerRadius="0,4,4,0" />
                 </Grid>
-                <TextBlock Text="{Binding VolumeText}" Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis"
+                <TextBlock Text="{Binding VolumeText}" Style="{StaticResource OneLineMuted}"
                            Visibility="{Binding HasVolume, Converter={StaticResource BoolToVisibility}}" />
-                <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.StatusInfo}"
-                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                <TextBlock Text="{Binding Status}" Style="{StaticResource OneLineMuted}" Foreground="{DynamicResource Brush.StatusInfo}"
+                           Margin="0,4,0,0"
                            Visibility="{Binding Status, Converter={StaticResource TextToVisibility}}" />
             </StackPanel>
 
@@ -303,18 +336,18 @@
                                                     HorizontalAlignment="Left" Margin="2,0,0,0"
                                                     Visibility="{Binding IsDirectory, Converter={StaticResource HiddenWhenTrue}}" />
 
-                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Style="{StaticResource Text.Body}"
-                                                       Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis"
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Style="{StaticResource OneLine}"
+                                                       Foreground="{DynamicResource Brush.TextPrimary}" ToolTip="{Binding Name}"
                                                        VerticalAlignment="Center" Margin="0,0,10,0"
                                                        Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
-                                            <TextBlock Grid.Column="0" Grid.ColumnSpan="5" Text="{Binding MoreText}" Style="{StaticResource Text.Muted}"
-                                                       VerticalAlignment="Center" Margin="42,0,0,0" TextTrimming="CharacterEllipsis"
+                                            <TextBlock Grid.Column="0" Grid.ColumnSpan="5" Text="{Binding MoreText}" Style="{StaticResource OneLineMuted}"
+                                                       VerticalAlignment="Center" Margin="42,0,0,0"
                                                        Visibility="{Binding IsMore, Converter={StaticResource BoolToVisibility}}" />
 
                                             <ProgressBar Grid.Column="3" Style="{StaticResource ShareBar}" Value="{Binding Share, Mode=OneWay}"
                                                          ToolTip="{Binding ShareText}" Margin="0,0,10,0"
                                                          Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
-                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
+                                            <TextBlock Grid.Column="4" Text="{Binding SizeText}" Style="{StaticResource OneLine}"
                                                        Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"
                                                        VerticalAlignment="Center" Margin="0,0,6,0"
                                                        Visibility="{Binding IsMore, Converter={StaticResource HiddenWhenTrue}}" />
@@ -343,15 +376,15 @@
                                             <Border Grid.Column="0" Width="12" Height="12" CornerRadius="3" Background="{Binding Swatch}"
                                                     HorizontalAlignment="Left" />
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
-                                                <TextBlock Text="{Binding Extension}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Style="{StaticResource Text.Muted}" TextTrimming="CharacterEllipsis">
+                                                <TextBlock Text="{Binding Extension}" Style="{StaticResource OneLine}" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Brush.TextPrimary}" />
+                                                <TextBlock Style="{StaticResource OneLineMuted}">
                                                     <Run Text="{Binding Kind, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding FilesText, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
                                             <ProgressBar Grid.Column="2" Style="{StaticResource ShareBar}" local:Motion.Fill="{Binding Share, Mode=OneWay}"
                                                          ToolTip="{Binding ShareText}" Margin="0,0,10,0" />
-                                            <TextBlock Grid.Column="3" Text="{Binding SizeText}" Style="{StaticResource Text.Body}"
+                                            <TextBlock Grid.Column="3" Text="{Binding SizeText}" Style="{StaticResource OneLine}"
                                                        Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"
                                                        VerticalAlignment="Center" Margin="0,0,6,0" />
                                         </Grid>
@@ -398,10 +431,10 @@
                             <Path Style="{StaticResource Icon}" Width="14" Height="14" Data="{StaticResource Icon.ArrowLeft}"
                                   Stroke="{DynamicResource Brush.TextPrimary}" />
                         </Button>
-                        <ItemsControl ItemsSource="{Binding Crumbs}" VerticalAlignment="Center">
+                        <ItemsControl ItemsSource="{Binding Crumbs}" VerticalAlignment="Center" ClipToBounds="True">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel />
+                                    <StackPanel Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
@@ -413,8 +446,8 @@
                                         <Button Command="{Binding GoCommand}" CommandParameter="{Binding Node}" Cursor="Hand">
                                             <Button.Template>
                                                 <ControlTemplate TargetType="Button">
-                                                    <TextBlock x:Name="Label" Text="{Binding Name}" Style="{StaticResource Text.Body}"
-                                                               Foreground="{DynamicResource Brush.TextSecondary}" />
+                                                    <TextBlock x:Name="Label" Text="{Binding Name}" Style="{StaticResource OneLine}" MaxWidth="220"
+                                                               Foreground="{DynamicResource Brush.TextSecondary}" ToolTip="{Binding Path}" />
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
                                                             <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.BrandRed}" />
@@ -433,15 +466,34 @@
                         </ItemsControl>
                     </DockPanel>
 
-                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding HoverText}" Style="{StaticResource Text.Muted}"
-                               Margin="2,8,0,0" TextTrimming="CharacterEllipsis" />
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding HoverText}" Style="{StaticResource OneLineMuted}"
+                               Height="18" Margin="2,8,0,0" />
 
                     <Border CornerRadius="{DynamicResource Radius.Card}" ClipToBounds="True"
                             BorderBrush="{DynamicResource Brush.CardEdge}" BorderThickness="1"
                             Background="{DynamicResource Brush.Ground}">
-                        <controls:TreemapView Root="{Binding MapRoot}" Tree="{Binding Tree}" Revision="{Binding Revision}"
-                                              Selected="{Binding Selected}" Hovered="{Binding Hovered}"
-                                              ZoomCommand="{Binding ZoomCommand}" Margin="1" />
+                        <Grid>
+                            <controls:TreemapView x:Name="Map" Root="{Binding MapRoot}" Tree="{Binding Tree}" Revision="{Binding Revision}"
+                                                  Selected="{Binding Selected}" Hovered="{Binding Hovered}"
+                                                  ZoomCommand="{Binding ZoomCommand}" Margin="1" />
+
+                            <!-- Le zoom de la carte : molette, glisser pour se déplacer, ou ces boutons. -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0">
+                                <Button Style="{StaticResource MapButton}" Click="OnZoomOut" ToolTip="Éloigner (−)"
+                                        IsEnabled="{Binding IsZoomed, ElementName=Map}">
+                                    <Path Style="{StaticResource Icon}" Width="12" Height="12" Data="{StaticResource Icon.ZoomOut}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                                </Button>
+                                <TextBlock Text="{Binding ZoomText, ElementName=Map}" Style="{StaticResource OneLineMuted}" Foreground="{DynamicResource Brush.TextPrimary}"
+                                           VerticalAlignment="Center" MinWidth="52" TextAlignment="Center" />
+                                <Button Style="{StaticResource MapButton}" Click="OnZoomIn" ToolTip="Approcher (+), ou la molette sous la souris">
+                                    <Path Style="{StaticResource Icon}" Width="12" Height="12" Data="{StaticResource Icon.ZoomIn}" Stroke="{DynamicResource Brush.TextPrimary}" />
+                                </Button>
+                                <Button Style="{StaticResource MapButton}" Click="OnZoomReset" Margin="6,0,0,0" ToolTip="Revoir toute la carte (0)"
+                                        Visibility="{Binding IsZoomed, ElementName=Map, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Tout voir" Style="{StaticResource OneLineMuted}" Foreground="{DynamicResource Brush.TextPrimary}" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </DockPanel>
             </Grid>

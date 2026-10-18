@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -20,10 +21,22 @@ namespace LDI12.Platform.Native
     /// </remarks>
     public static class PacketCapture
     {
-        /// <summary>Au-delà, la capture s'arrête d'elle-même : un fichier de travail, pas un enregistreur.</summary>
-        private const long MaxBytes = 200L * 1024 * 1024;
+        /// <summary>Au-delà, le fichier pour Wireshark n'est plus complété ; l'écoute et les statistiques continuent.</summary>
+        private const long MaxBytes = 1024L * 1024 * 1024;
+
+        /// <summary>Paquets listés par envoi à l'écran : au-delà, ils sont comptés sans être détaillés.</summary>
+        private const int MaxPerBatch = 400;
+
+        private static readonly TimeSpan BatchEvery = TimeSpan.FromMilliseconds(500);
 
         public static TrafficSummary Capture(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+            => Capture(localAddress, duration, pcapPath, null, cancellationToken);
+
+        /// <summary>
+        /// Écoute jusqu'à la durée ou l'arrêt, et envoie à <paramref name="live"/>, deux fois par
+        /// seconde, les paquets arrivés depuis l'envoi précédent et le résumé à jour.
+        /// </summary>
+        public static TrafficSummary Capture(string localAddress, TimeSpan duration, string? pcapPath, Action<TrafficLive>? live, CancellationToken cancellationToken)
         {
             if (!IPAddress.TryParse(localAddress, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
                 throw new ArgumentException("Adresse IPv4 attendue.", nameof(localAddress));
@@ -44,19 +57,35 @@ namespace LDI12.Platform.Native
                 socket.Bind(new IPEndPoint(address, 0));
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
                 socket.IOControl(IOControlCode.ReceiveAll, BitConverter.GetBytes(1), new byte[4]);
-                socket.ReceiveTimeout = 500;
+                socket.ReceiveTimeout = 250;
                 socket.ReceiveBufferSize = 4 * 1024 * 1024;
 
                 var buffer = new byte[65535];
                 long written = 0;
+                var batch = new List<PacketRecord>();
+                long skipped = 0;
+                var sent = TimeSpan.Zero;
                 while (clock.Elapsed < duration && !cancellationToken.IsCancellationRequested)
                 {
+                    if (live != null && clock.Elapsed - sent >= BatchEvery)
+                    {
+                        sent = clock.Elapsed;
+                        live(new TrafficLive { Packets = batch, Skipped = skipped, Summary = analyzer.Summarize(clock.Elapsed, top: 10) });
+                        batch = new List<PacketRecord>();
+                        skipped = 0;
+                    }
+
                     int length;
                     try { length = socket.Receive(buffer); }
                     catch (SocketException ex) when (ex.SocketErrorCode == SocketError.TimedOut) { continue; }
                     if (length <= 0) continue;
 
-                    analyzer.Add(buffer, length);
+                    var record = analyzer.Describe(buffer, length, clock.Elapsed.TotalSeconds);
+                    if (record != null && live != null)
+                    {
+                        if (batch.Count < MaxPerBatch) batch.Add(record);
+                        else skipped++;
+                    }
                     if (pcap != null && written < MaxBytes)
                     {
                         pcap.Write(DateTime.UtcNow, buffer, length);

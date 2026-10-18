@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using LDI12.Actions.Repairs;
+using LDI12.Actions;
 using LDI12.Core.Network;
 using Newtonsoft.Json;
 using Xunit;
@@ -142,13 +143,64 @@ namespace LDI12.Tests
         public async Task La_capture_passe_par_l_hote_eleve_et_rend_un_resume_lisible()
         {
             var control = new FakeControl();
-            var context = Context(control, (TrafficCaptureAction.AddressParameter, "192.168.1.24"), (TrafficCaptureAction.SecondsParameter, "999"));
+            var context = Context(control, (TrafficCaptureAction.AddressParameter, "192.168.1.24"), (TrafficCaptureAction.SecondsParameter, "999999"));
             var action = new TrafficCaptureAction();
+            var reports = new List<ActionProgress>();
 
-            var outcome = await action.ExecuteAsync(context, await action.PreviewAsync(context, CancellationToken.None), null, CancellationToken.None);
+            var outcome = await action.ExecuteAsync(context, await action.PreviewAsync(context, CancellationToken.None),
+                new Immediate(reports.Add), CancellationToken.None);
 
-            Assert.Equal(new[] { "capture 192.168.1.24 300" }, control.Calls);   // borné à cinq minutes
+            Assert.Equal(new[] { "capture 192.168.1.24 14400" }, control.Calls);   // quatre heures au plus
             Assert.Equal(12, JsonConvert.DeserializeObject<TrafficSummary>(outcome.RawOutput!)!.Packets);
+
+            // Le lot arrivé pendant l'écoute part aussitôt vers l'écran, paquets et résumé compris.
+            var live = reports.Single(r => r.Detail != null && r.Detail.StartsWith(TrafficCaptureAction.LivePrefix, StringComparison.Ordinal));
+            var batch = JsonConvert.DeserializeObject<TrafficLive>(live.Detail!.Substring(TrafficCaptureAction.LivePrefix.Length))!;
+            Assert.Equal("Requête exemple.fr", Assert.Single(batch.Packets).Info);
+            Assert.Equal(1, batch.Summary.Packets);
+        }
+
+        [Fact]
+        public void Chaque_paquet_se_decrit_en_une_ligne_comme_dans_wireshark()
+        {
+            var analyzer = new TrafficAnalyzer("192.168.1.24");
+            var answer = Dns(0x1234, "www.example.com", response: true);
+            var syn = Tcp(52100, 443, 0);
+            syn[13] = 0x02;
+            var reset = Tcp(8080, 53012, 0);
+            reset[13] = 0x14;
+
+            var query = analyzer.Describe(Ip(17, "192.168.1.24", "192.168.1.1", Udp(53000, 53, Dns(0x1234, "www.example.com", response: false))), 0, 0.5);
+            Assert.Null(query);                                                       // longueur nulle : rien de lisible
+
+            var first = Describe(analyzer, Ip(17, "192.168.1.24", "192.168.1.1", Udp(53000, 53, Dns(0x1234, "www.example.com", response: false))), 0.1);
+            var second = Describe(analyzer, Ip(17, "192.168.1.1", "192.168.1.24", Udp(53, 53000, answer)), 0.2);
+            var open = Describe(analyzer, Ip(6, "192.168.1.24", "93.184.216.34", syn), 0.3);
+            var refused = Describe(analyzer, Ip(6, "185.199.110.153", "192.168.1.24", reset), 0.4);
+
+            Assert.Equal("DNS", first.Protocol);
+            Assert.Equal("53000 → 53  Requête www.example.com", first.Info);
+            Assert.True(first.Outgoing);
+            Assert.Equal("53 → 53000  Réponse www.example.com → 93.184.216.34", second.Info);
+            Assert.False(second.Outgoing);
+
+            // Une fois le nom appris par le DNS, la destination porte ce nom.
+            Assert.Equal("www.example.com", open.Destination);
+            Assert.Equal("HTTPS", open.Protocol);
+            Assert.Equal("52100 → 443  [SYN]", open.Info);
+            Assert.Equal(3, open.Number);
+
+            Assert.Equal("8080 → 53012  [RST, ACK]", refused.Info);
+            Assert.Equal(0.4, refused.Time);
+        }
+
+        private static PacketRecord Describe(TrafficAnalyzer analyzer, byte[] packet, double time) => analyzer.Describe(packet, packet.Length, time)!;
+
+        private sealed class Immediate : IProgress<ActionProgress>
+        {
+            private readonly Action<ActionProgress> _report;
+            public Immediate(Action<ActionProgress> report) => _report = report;
+            public void Report(ActionProgress value) => _report(value);
         }
 
         // ------------------------------------------------------------ fabrication de paquets

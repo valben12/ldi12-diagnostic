@@ -120,14 +120,30 @@ namespace LDI12.App.ViewModels
     public sealed class ConnectionRow : ObservableObject
     {
         private string? _remoteName;
+        private string _state;
+        private bool _isNew, _isClosed;
 
         public ConnectionRow(ConnectionEntry entry, string process)
         {
             Entry = entry;
             Process = process;
+            _state = entry.State;
         }
 
         public ConnectionEntry Entry { get; }
+
+        /// <summary>Quand la connexion a été vue pour la première fois, ou s'est fermée.</summary>
+        internal DateTime Since { get; set; } = DateTime.UtcNow;
+
+        /// <summary>Apparue depuis peu : la ligne est teintée quelques secondes, comme dans TCPView.</summary>
+        public bool IsNew { get => _isNew; set => Set(ref _isNew, value); }
+
+        /// <summary>Fermée depuis le dernier relevé : la ligne reste quelques secondes, grisée, puis s'efface.</summary>
+        public bool IsClosed
+        {
+            get => _isClosed;
+            set { if (Set(ref _isClosed, value)) { Raise(nameof(State)); Raise(nameof(IsEstablished)); } }
+        }
         public string Process { get; }
         public string Key => Entry.Protocol + "|" + Entry.LocalPort + "|" + Entry.RemoteAddress + "|" + Entry.RemotePort + "|" + Entry.ProcessId;
 
@@ -137,8 +153,16 @@ namespace LDI12.App.ViewModels
             ? (Entry.Protocol == "UDP" ? "écoute UDP" : "en attente de connexions")
             : (_remoteName ?? Entry.RemoteAddress) + " : " + Entry.RemotePort + (Service(Entry.RemotePort) is { } service ? " (" + service + ")" : string.Empty);
 
-        public string State => Entry.State;
-        public bool IsEstablished => Entry.State == "établie";
+        public string State => _isClosed ? "fermée" : _state;
+        public bool IsEstablished => !_isClosed && _state == "établie";
+
+        internal void Update(ConnectionEntry entry)
+        {
+            if (_state == entry.State) return;
+            _state = entry.State;
+            Raise(nameof(State));
+            Raise(nameof(IsEstablished));
+        }
 
         public string? RemoteName
         {
@@ -152,22 +176,80 @@ namespace LDI12.App.ViewModels
         };
     }
 
-    /// <summary>Une ligne de statistiques de trafic, avec sa part pour la barre.</summary>
-    public sealed class TrafficRow
+    /// <summary>Une ligne de statistiques de trafic, avec sa part pour la barre ; mise à jour sur place pendant l'écoute.</summary>
+    public sealed class TrafficRow : ObservableObject
     {
+        private string _title, _detail, _amount = string.Empty;
+        private double _share;
+
+        public TrafficRow(string key, string title, string? detail, long bytes, long packets, long total)
+        {
+            Key = key;
+            _title = title;
+            _detail = detail ?? string.Empty;
+            Update(title, detail, bytes, packets, total);
+        }
+
         public TrafficRow(string title, string? detail, long bytes, long packets, long total)
+            : this(title, title, detail, bytes, packets, total)
+        {
+        }
+
+        public string Key { get; }
+        public string Title { get => _title; private set => Set(ref _title, value); }
+        public string Detail { get => _detail; private set { if (Set(ref _detail, value)) Raise(nameof(HasDetail)); } }
+        public bool HasDetail => Detail.Length > 0;
+        public double Share { get => _share; private set => Set(ref _share, value); }
+        public string Amount { get => _amount; private set => Set(ref _amount, value); }
+
+        internal void Update(string title, string? detail, long bytes, long packets, long total)
         {
             Title = title;
             Detail = detail ?? string.Empty;
             Share = total > 0 ? (double)bytes / total : 0;
-            Amount = bytes > 0 ? ValueFormat.Bytes(bytes) + " · " + packets + " paquets" : packets + " requête(s)";
+            Amount = bytes > 0
+                ? ValueFormat.Bytes(bytes) + " · " + packets.ToString("N0", Formats.French) + " paquets"
+                : packets.ToString("N0", Formats.French) + " requête(s)";
+        }
+    }
+
+    /// <summary>Un paquet dans la liste en direct, comme une ligne de Wireshark.</summary>
+    public sealed class PacketRow
+    {
+        public PacketRow(PacketRecord record)
+        {
+            Number = record.Number.ToString(CultureInfo.InvariantCulture);
+            Time = record.Time.ToString("0.000", Formats.French);
+            Source = record.Source;
+            Destination = record.Destination;
+            Protocol = record.Protocol;
+            Length = record.Length.ToString(CultureInfo.InvariantCulture);
+            Info = record.Info;
+            Outgoing = record.Outgoing;
+            Search = (Source + " " + Destination + " " + Protocol + " " + Info).ToLowerInvariant();
+            ProtocolKey = record.Protocol switch
+            {
+                "DNS" or "mDNS" => "Dns",
+                "HTTPS" or "HTTP" or "HTTP (8080)" => "Web",
+                "ICMP" => "Icmp",
+                "UDP" or "SSDP (UPnP)" or "NetBIOS" or "DHCP" or "Heure (NTP)" => "Udp",
+                _ => record.Info.Contains("RST") ? "Reset" : record.Info.Contains("[SYN") ? "Syn" : "Tcp",
+            };
         }
 
-        public string Title { get; }
-        public string Detail { get; }
-        public bool HasDetail => Detail.Length > 0;
-        public double Share { get; }
-        public string Amount { get; }
+        public string Number { get; }
+        public string Time { get; }
+        public string Source { get; }
+        public string Destination { get; }
+        public string Protocol { get; }
+        public string Length { get; }
+        public string Info { get; }
+        public bool Outgoing { get; }
+
+        /// <summary>La famille du paquet, pour sa teinte : Dns, Web, Udp, Icmp, Syn, Reset, Tcp.</summary>
+        public string ProtocolKey { get; }
+
+        internal string Search { get; }
     }
 
     /// <summary>
@@ -191,9 +273,17 @@ namespace LDI12.App.ViewModels
         private string _filter = string.Empty, _connectionSummary = string.Empty, _trafficText = string.Empty, _trafficHeadline = string.Empty;
         private LanSegment? _segment;
         private double _scanProgress;
-        private bool _isScanning, _isCapturing, _establishedOnly = true, _sampling, _demo, _hasTraffic;
-        private int _seconds = 30;
+        private bool _isScanning, _isCapturing, _establishedOnly = true, _sampling, _demo, _hasTraffic, _isLive = true;
+        private bool _followPackets = true, _isStatsView;
+        private int _seconds = 300;
         private string? _pcapPath;
+        private string _packetFilter = string.Empty;
+        private CancellationTokenSource? _capture;
+        private readonly ListCollectionView _packetView;
+        private DateTime _statsShown;
+
+        /// <summary>Paquets gardés dans la liste : au-delà, les plus anciens s'effacent (le fichier pcap, lui, les garde tous).</summary>
+        private const int MaxPacketRows = 5000;
 
         public LanViewModel(RepairsViewModel repairs, ILdiLogger logger)
         {
@@ -201,13 +291,19 @@ namespace LDI12.App.ViewModels
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _connectionView = new ListCollectionView(Connections) { Filter = KeepConnection };
             _connectionView.SortDescriptions.Add(new SortDescription(nameof(ConnectionRow.Process), ListSortDirection.Ascending));
-            _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
+            // Un état qui change (établie, fermée) refiltre la ligne sans attendre un nouveau relevé.
+            _connectionView.IsLiveFiltering = true;
+            _connectionView.LiveFilteringProperties.Add(nameof(ConnectionRow.State));
+            _packetView = new ListCollectionView(Packets) { Filter = KeepPacket };
+            _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
             _timer.Tick += (_, __) => SampleConnections();
 
             ScanCommand = new AsyncRelayCommand(ScanAsync, () => !IsScanning && _segment != null);
             StopCommand = new RelayCommand(() => _scan?.Cancel(), () => IsScanning);
             DownloadVendorsCommand = new AsyncRelayCommand(DownloadVendorsAsync);
             CaptureCommand = new AsyncRelayCommand(CaptureAsync, () => !IsCapturing && _segment != null);
+            StopCaptureCommand = new RelayCommand(() => _capture?.Cancel(), () => IsCapturing);
+            ClearPacketsCommand = new RelayCommand(() => { Packets.Clear(); Raise(nameof(HasPackets)); });
             OpenPcapCommand = new RelayCommand(OpenPcap, () => _pcapPath != null && File.Exists(_pcapPath));
         }
 
@@ -218,13 +314,17 @@ namespace LDI12.App.ViewModels
         public ObservableCollection<TrafficRow> Hosts { get; } = new ObservableCollection<TrafficRow>();
         public ObservableCollection<TrafficRow> Services { get; } = new ObservableCollection<TrafficRow>();
         public ObservableCollection<TrafficRow> DnsQueries { get; } = new ObservableCollection<TrafficRow>();
+        public ObservableCollection<PacketRow> Packets { get; } = new ObservableCollection<PacketRow>();
         public ICollectionView ConnectionView => _connectionView;
+        public ICollectionView PacketView => _packetView;
 
         public AsyncRelayCommand ScanCommand { get; }
         public RelayCommand StopCommand { get; }
         public AsyncRelayCommand DownloadVendorsCommand { get; }
         public AsyncRelayCommand CaptureCommand { get; }
         public RelayCommand OpenPcapCommand { get; }
+        public RelayCommand StopCaptureCommand { get; }
+        public RelayCommand ClearPacketsCommand { get; }
 
         public string Status { get => _status; private set => Set(ref _status, value); }
         public string ScanText { get => _scanText; private set => Set(ref _scanText, value); }
@@ -266,7 +366,7 @@ namespace LDI12.App.ViewModels
             if (_tab == tab) return;
             _tab = tab;
             foreach (var name in new[] { nameof(IsDevicesTab), nameof(IsConnectionsTab), nameof(IsTrafficTab) }) Raise(name);
-            if (tab == "Connections" && !_demo) { SampleConnections(); _timer.Start(); }
+            if (tab == "Connections" && !_demo && _isLive) { SampleConnections(); _timer.Start(); }
             else _timer.Stop();
         }
 
@@ -280,7 +380,7 @@ namespace LDI12.App.ViewModels
                 if (Segment == null) ScanText = "Aucune carte réseau connectée.";
                 LoadVendors();
             }
-            if (_tab == "Connections") { SampleConnections(); _timer.Start(); }
+            if (_tab == "Connections" && _isLive) { SampleConnections(); _timer.Start(); }
         }
 
         public void Deactivated() => _timer.Stop();
@@ -392,10 +492,24 @@ namespace LDI12.App.ViewModels
 
         public string ConnectionSummary { get => _connectionSummary; private set => Set(ref _connectionSummary, value); }
 
+        /// <summary>L'actualisation en direct, chaque seconde ; en pause, la liste reste figée pour être lue.</summary>
+        public bool IsLive
+        {
+            get => _isLive;
+            set
+            {
+                if (!Set(ref _isLive, value)) return;
+                if (value && _tab == "Connections" && !_demo) { SampleConnections(); _timer.Start(); }
+                else _timer.Stop();
+                Count();
+            }
+        }
+
         private bool KeepConnection(object item)
         {
             var row = (ConnectionRow)item;
-            if (_establishedOnly && !row.IsEstablished) return false;
+            // Une connexion qui vient de se fermer reste visible le temps qu'on la voie partir.
+            if (_establishedOnly && !row.IsEstablished && !row.IsClosed) return false;
             var filter = _filter.Trim();
             return filter.Length == 0 || row.Process.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 ||
                    row.RemoteText.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0 || row.LocalText.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
@@ -405,7 +519,8 @@ namespace LDI12.App.ViewModels
         {
             var shown = Connections.Count(c => KeepConnection(c));
             ConnectionSummary = shown + " affichée(s) · " + Connections.Count(c => c.IsEstablished) + " établie(s) · "
-                                + Connections.Select(c => c.Process).Distinct().Count() + " programme(s)";
+                                + Connections.Select(c => c.Process).Distinct().Count() + " programme(s)"
+                                + (_isLive ? " · en direct" : " · en pause");
         }
 
         private async void SampleConnections()
@@ -417,20 +532,42 @@ namespace LDI12.App.ViewModels
                 var (entries, processes) = await Task.Run(() =>
                     (LanNative.Connections(), ProcessNative.Snapshot().GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First().Name))).ConfigureAwait(true);
                 if (_demo) return;
+                var now = DateTime.UtcNow;
+                var first = _connections.Count == 0;
                 var seen = new HashSet<string>();
                 foreach (var entry in entries)
                 {
                     var row = new ConnectionRow(entry, processes.TryGetValue(entry.ProcessId, out var name) ? name : "PID " + entry.ProcessId);
-                    seen.Add(row.Key);
-                    if (_connections.ContainsKey(row.Key)) continue;
+                    if (!seen.Add(row.Key)) continue;
+                    if (_connections.TryGetValue(row.Key, out var known))
+                    {
+                        known.Update(entry);
+                        if (known.IsClosed) { known.IsClosed = false; known.Since = now; }
+                        continue;
+                    }
+                    // Au premier relevé, tout est déjà là : rien n'est « nouveau ».
+                    row.IsNew = !first;
+                    row.Since = now;
                     _connections[row.Key] = row;
                     Connections.Add(row);
                     Resolve(row);
                 }
-                foreach (var gone in _connections.Where(c => !seen.Contains(c.Key)).ToList())
+
+                foreach (var row in _connections.Values.ToList())
                 {
-                    _connections.Remove(gone.Key);
-                    Connections.Remove(gone.Value);
+                    if (row.IsNew && now - row.Since > Highlight) row.IsNew = false;
+                    if (seen.Contains(row.Key)) continue;
+                    if (!row.IsClosed)
+                    {
+                        row.IsNew = false;
+                        row.IsClosed = true;
+                        row.Since = now;
+                    }
+                    else if (now - row.Since > Highlight)
+                    {
+                        _connections.Remove(row.Key);
+                        Connections.Remove(row);
+                    }
                 }
                 Count();
             }
@@ -443,6 +580,9 @@ namespace LDI12.App.ViewModels
                 _sampling = false;
             }
         }
+
+        /// <summary>Le temps pendant lequel une connexion nouvelle reste teintée, et une connexion fermée reste affichée.</summary>
+        private static readonly TimeSpan Highlight = TimeSpan.FromSeconds(3);
 
         /// <summary>Le nom de l'adresse distante, résolu une fois en arrière-plan.</summary>
         private void Resolve(ConnectionRow row)
@@ -464,34 +604,86 @@ namespace LDI12.App.ViewModels
 
         // ------------------------------------------------------------------ trafic
 
-        public bool Is15 { get => _seconds == 15; set { if (value) Duration(15); } }
-        public bool Is30 { get => _seconds == 30; set { if (value) Duration(30); } }
-        public bool Is60 { get => _seconds == 60; set { if (value) Duration(60); } }
+        // Durées proposées : une minute pour un geste précis, jusqu'à l'arrêt pour attendre qu'un problème revienne.
+        public bool Is1Min { get => _seconds == 60; set { if (value) Duration(60); } }
+        public bool Is5Min { get => _seconds == 300; set { if (value) Duration(300); } }
+        public bool Is30Min { get => _seconds == 1800; set { if (value) Duration(1800); } }
+        public bool IsUntilStop { get => _seconds == TrafficCaptureAction.MaxSeconds; set { if (value) Duration(TrafficCaptureAction.MaxSeconds); } }
 
         private void Duration(int seconds)
         {
             _seconds = seconds;
-            foreach (var name in new[] { nameof(Is15), nameof(Is30), nameof(Is60) }) Raise(name);
+            foreach (var name in new[] { nameof(Is1Min), nameof(Is5Min), nameof(Is30Min), nameof(IsUntilStop) }) Raise(name);
         }
 
         public bool IsCapturing
         {
             get => _isCapturing;
-            private set { if (Set(ref _isCapturing, value)) CaptureCommand.RaiseCanExecuteChanged(); }
+            private set
+            {
+                if (!Set(ref _isCapturing, value)) return;
+                CaptureCommand.RaiseCanExecuteChanged();
+                StopCaptureCommand.RaiseCanExecuteChanged();
+            }
         }
 
-        public bool HasTraffic { get => _hasTraffic; private set => Set(ref _hasTraffic, value); }
+        public bool HasTraffic
+        {
+            get => _hasTraffic;
+            private set { if (Set(ref _hasTraffic, value)) { Raise(nameof(ShowPackets)); Raise(nameof(ShowStats)); } }
+        }
+
+        public bool ShowPackets => _hasTraffic && !_isStatsView;
+        public bool ShowStats => _hasTraffic && _isStatsView;
+        public bool HasPackets => Packets.Count > 0;
         public string TrafficText { get => _trafficText; private set => Set(ref _trafficText, value); }
         public string TrafficHeadline { get => _trafficHeadline; private set => Set(ref _trafficHeadline, value); }
+
+        /// <summary>Les paquets un par un, ou les statistiques : deux lectures de la même écoute.</summary>
+        public bool IsPacketsView { get => !_isStatsView; set { if (value && _isStatsView) StatsView(false); } }
+        public bool IsStatsView { get => _isStatsView; set { if (value && !_isStatsView) StatsView(true); } }
+
+        private void StatsView(bool stats)
+        {
+            _isStatsView = stats;
+            foreach (var name in new[] { nameof(IsPacketsView), nameof(IsStatsView), nameof(ShowPackets), nameof(ShowStats) }) Raise(name);
+        }
+
+        /// <summary>La liste suit les derniers paquets ; décoché, elle reste où on la lit.</summary>
+        public bool FollowPackets { get => _followPackets; set => Set(ref _followPackets, value); }
+
+        /// <summary>Filtre de la liste : une adresse, un nom, un protocole, un port.</summary>
+        public string PacketFilter
+        {
+            get => _packetFilter;
+            set { if (Set(ref _packetFilter, value ?? string.Empty)) _packetView.Refresh(); }
+        }
+
+        private bool KeepPacket(object item)
+        {
+            var filter = _packetFilter.Trim().ToLowerInvariant();
+            return filter.Length == 0 || ((PacketRow)item).Search.IndexOf(filter, StringComparison.Ordinal) >= 0;
+        }
 
         private async Task CaptureAsync()
         {
             var segment = _segment;
             if (segment == null) return;
             IsCapturing = true;
+            Packets.Clear();
+            Raise(nameof(HasPackets));
+            foreach (var rows in new[] { Protocols, Hosts, Services, DnsQueries }) rows.Clear();
+            _pcapPath = null;
+            OpenPcapCommand.RaiseCanExecuteChanged();
+            HasTraffic = true;
+            _statsShown = DateTime.MinValue;
+
             var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LDI12 Diagnostic", "Captures");
             var pcap = Path.Combine(folder, "trafic-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".pcap");
-            TrafficText = "Écoute de " + segment.Address + " pendant " + _seconds + " secondes : utilisez le PC normalement (ouvrez une page, lancez la synchronisation qui pose problème)…";
+            TrafficHeadline = "Écoute de " + segment.Address + "…";
+            TrafficText = "Utilisez le PC normalement : ouvrez la page lente, lancez la synchronisation qui pose problème. Les paquets défilent ici au fil de l'eau.";
+            var cancellation = _capture = new CancellationTokenSource();
+            var progress = new Progress<ActionProgress>(OnLive);
             try
             {
                 var outcome = await _repairs.RunQuietAsync(ActionIds.TrafficCapture, new Dictionary<string, string>
@@ -499,15 +691,16 @@ namespace LDI12.App.ViewModels
                     [TrafficCaptureAction.AddressParameter] = segment.Address.ToString(),
                     [TrafficCaptureAction.SecondsParameter] = _seconds.ToString(CultureInfo.InvariantCulture),
                     [TrafficCaptureAction.PcapParameter] = pcap,
-                }, null, CancellationToken.None).ConfigureAwait(true);
+                }, progress, cancellation.Token).ConfigureAwait(true);
 
                 var summary = outcome.Succeeded && outcome.RawOutput != null ? JsonConvert.DeserializeObject<TrafficSummary>(outcome.RawOutput) : null;
                 if (summary == null)
                 {
                     TrafficText = outcome.Summary;
+                    HasTraffic = Packets.Count > 0;
                     return;
                 }
-                ShowTraffic(summary);
+                ShowTraffic(summary, final: true);
             }
             catch (JsonException ex)
             {
@@ -516,32 +709,92 @@ namespace LDI12.App.ViewModels
             finally
             {
                 IsCapturing = false;
+                _capture = null;
             }
         }
 
-        private void ShowTraffic(TrafficSummary summary)
+        /// <summary>Un lot de l'écoute en cours : ses paquets en bas de la liste, et le résumé à jour.</summary>
+        private void OnLive(ActionProgress progress)
         {
-            _pcapPath = summary.PcapPath;
-            OpenPcapCommand.RaiseCanExecuteChanged();
-            var seconds = Math.Max(1, summary.Duration.TotalSeconds);
-            TrafficHeadline = ValueFormat.Bytes(summary.Bytes) + " en " + seconds.ToString("0", Formats.French) + " s · "
-                              + summary.Packets.ToString("N0", Formats.French) + " paquets · "
-                              + ValueFormat.Bytes((long)(summary.Bytes / seconds)) + "/s en moyenne";
-            TrafficText = summary.PcapPath != null
-                ? "Fichier pour Wireshark : " + summary.PcapPath + (summary.Truncated ? " (tronqué à 200 Mo)" : string.Empty)
-                : string.Empty;
+            if (progress.Detail == null || !progress.Detail.StartsWith(TrafficCaptureAction.LivePrefix, StringComparison.Ordinal)) return;
+            TrafficLive? live;
+            try { live = JsonConvert.DeserializeObject<TrafficLive>(progress.Detail.Substring(TrafficCaptureAction.LivePrefix.Length)); }
+            catch (JsonException) { return; }
+            if (live == null) return;
 
-            void Fill(ObservableCollection<TrafficRow> rows, IEnumerable<TrafficRow> source)
+            foreach (var record in live.Packets) Packets.Add(new PacketRow(record));
+            if (Packets.Count > MaxPacketRows)
             {
-                rows.Clear();
-                foreach (var row in source) rows.Add(row);
+                // Les plus anciens s'en vont par paquets de 500 : la liste ne se réorganise pas à chaque lot.
+                for (var index = 0; index < 500 && Packets.Count > 0; index++) Packets.RemoveAt(0);
+            }
+            Raise(nameof(HasPackets));
+
+            var elapsed = progress.Elapsed ?? live.Summary.Duration;
+            var summary = live.Summary;
+            var seconds = Math.Max(1, elapsed.TotalSeconds);
+            TrafficHeadline = "Écoute en cours · " + summary.Packets.ToString("N0", Formats.French) + " paquets · "
+                              + ValueFormat.Bytes(summary.Bytes) + " · " + ValueFormat.Bytes((long)(summary.Bytes / seconds)) + "/s · "
+                              + (int)elapsed.TotalMinutes + " min " + elapsed.Seconds.ToString("00", CultureInfo.InvariantCulture) + " s";
+            if (live.Skipped > 0)
+                TrafficText = "Trafic intense : " + live.Skipped.ToString("N0", Formats.French) + " paquet(s) de la dernière demi-seconde comptés sans être listés ; le fichier pour Wireshark les garde tous.";
+
+            // Les statistiques bougent une fois par seconde : assez pour suivre, sans faire danser les barres.
+            if (DateTime.UtcNow - _statsShown >= TimeSpan.FromSeconds(1))
+            {
+                _statsShown = DateTime.UtcNow;
+                ShowTraffic(summary, final: false);
+            }
+        }
+
+        private void ShowTraffic(TrafficSummary summary, bool final)
+        {
+            if (final)
+            {
+                _pcapPath = summary.PcapPath;
+                OpenPcapCommand.RaiseCanExecuteChanged();
+                var seconds = Math.Max(1, summary.Duration.TotalSeconds);
+                TrafficHeadline = ValueFormat.Bytes(summary.Bytes) + " en " + Elapsed(summary.Duration) + " · "
+                                  + summary.Packets.ToString("N0", Formats.French) + " paquets · "
+                                  + ValueFormat.Bytes((long)(summary.Bytes / seconds)) + "/s en moyenne";
+                TrafficText = summary.PcapPath != null
+                    ? "Fichier pour Wireshark : " + summary.PcapPath + (summary.Truncated ? " (complété jusqu'à 1 Go)" : string.Empty)
+                    : string.Empty;
             }
 
-            Fill(Protocols, summary.Protocols.Select(p => new TrafficRow(p.Key, null, p.Bytes, p.Packets, summary.Bytes)));
-            Fill(Hosts, summary.Hosts.Select(h => new TrafficRow(h.Label ?? h.Key, h.Label != null ? h.Key : null, h.Bytes, h.Packets, summary.Bytes)));
-            Fill(Services, summary.Services.Select(s => new TrafficRow(s.Label ?? s.Key, s.Label != null ? s.Key : null, s.Bytes, s.Packets, summary.Bytes)));
-            Fill(DnsQueries, summary.DnsQueries.Select(d => new TrafficRow(d.Key, null, 0, d.Packets, 0)));
+            Merge(Protocols, summary.Protocols.Select(p => (p.Key, p.Key, (string?)null, p.Bytes, p.Packets)), summary.Bytes);
+            Merge(Hosts, summary.Hosts.Select(h => (h.Key, h.Label ?? h.Key, h.Label != null ? h.Key : null, h.Bytes, h.Packets)), summary.Bytes);
+            Merge(Services, summary.Services.Select(v => (v.Key, v.Label ?? v.Key, v.Label != null ? v.Key : null, v.Bytes, v.Packets)), summary.Bytes);
+            Merge(DnsQueries, summary.DnsQueries.Select(d => (d.Key, d.Key, (string?)null, 0L, d.Packets)), 0);
             HasTraffic = true;
+        }
+
+        private static string Elapsed(TimeSpan duration)
+            => duration.TotalSeconds < 60
+                ? Math.Max(1, duration.TotalSeconds).ToString("0", Formats.French) + " s"
+                : (int)duration.TotalMinutes + " min " + duration.Seconds.ToString("00", CultureInfo.InvariantCulture) + " s";
+
+        /// <summary>
+        /// Met à jour une liste de statistiques sur place : une ligne qui existe déjà garde sa place
+        /// et sa barre glisse vers la nouvelle valeur ; seul un changement de classement la réordonne.
+        /// </summary>
+        private static void Merge(ObservableCollection<TrafficRow> rows, IEnumerable<(string Key, string Title, string? Detail, long Bytes, long Packets)> lines, long total)
+        {
+            var list = lines.ToList();
+            for (var index = 0; index < list.Count; index++)
+            {
+                var line = list[index];
+                var existing = rows.FirstOrDefault(r => r.Key == line.Key);
+                if (existing == null)
+                {
+                    rows.Insert(Math.Min(index, rows.Count), new TrafficRow(line.Key, line.Title, line.Detail, line.Bytes, line.Packets, total));
+                    continue;
+                }
+                existing.Update(line.Title, line.Detail, line.Bytes, line.Packets, total);
+                var at = rows.IndexOf(existing);
+                if (at != index && index < rows.Count) rows.Move(at, index);
+            }
+            while (rows.Count > list.Count) rows.RemoveAt(rows.Count - 1);
         }
 
         private void OpenPcap()
@@ -626,10 +879,48 @@ namespace LDI12.App.ViewModels
                 Services = new List<TrafficLine> { new TrafficLine { Key = "TCP 443", Label = "HTTPS", Bytes = 19_800_000, Packets = 16_100 }, new TrafficLine { Key = "UDP 53", Label = "DNS", Bytes = 90_000, Packets = 640 } },
                 DnsQueries = new List<TrafficLine> { new TrafficLine { Key = "onedrive.live.com", Packets = 12 }, new TrafficLine { Key = "www.youtube.com", Packets = 8 }, new TrafficLine { Key = "telemetry.updater-cdn.net", Packets = 31 } },
                 PcapPath = @"C:\Users\Marie\Documents\LDI12 Diagnostic\Captures\trafic-20261018-101500.pcap",
-            });
+            }, final: true);
+
+            // Une connexion qui vient d'apparaître, une autre qui vient de se fermer : ce que le direct montre.
+            Connections[1].IsNew = true;
+            Connections[4].IsClosed = true;
+            Count();
+
+            // Une poignée de paquets, comme la liste les montre pendant l'écoute.
+            Packets.Clear();
+            var number = 18_380L;
+            var time = 29.412;
+            PacketRecord P(string source, string destination, string protocol, int length, string info, bool outgoing)
+                => new PacketRecord { Number = number++, Time = time += 0.0137, Source = source, Destination = destination, Protocol = protocol, Length = length, Info = info, Outgoing = outgoing };
+            foreach (var record in new[]
+            {
+                P("192.168.1.24", "192.168.1.1", "DNS", 74, "53412 → 53  Requête www.youtube.com", true),
+                P("192.168.1.1", "192.168.1.24", "DNS", 138, "53 → 53412  Réponse www.youtube.com → 142.250.75.238", false),
+                P("192.168.1.24", "www.youtube.com", "HTTPS", 52, "52190 → 443  [SYN]", true),
+                P("www.youtube.com", "192.168.1.24", "HTTPS", 52, "443 → 52190  [SYN, ACK]", false),
+                P("192.168.1.24", "www.youtube.com", "HTTPS", 40, "52190 → 443  [ACK]", true),
+                P("192.168.1.24", "www.youtube.com", "HTTPS", 557, "52190 → 443  [PSH, ACK]", true),
+                P("www.youtube.com", "192.168.1.24", "HTTPS", 1500, "443 → 52190  [ACK]", false),
+                P("www.youtube.com", "192.168.1.24", "HTTPS", 1500, "443 → 52190  [ACK]", false),
+                P("onedrive.live.com", "192.168.1.24", "HTTPS", 1500, "443 → 50877  [ACK]", false),
+                P("onedrive.live.com", "192.168.1.24", "HTTPS", 1500, "443 → 50877  [PSH, ACK]", false),
+                P("192.168.1.24", "onedrive.live.com", "HTTPS", 40, "50877 → 443  [ACK]", true),
+                P("192.168.1.24", "239.255.255.250", "SSDP (UPnP)", 203, "51823 → 1900", true),
+                P("192.168.1.24", "185.199.110.153", "HTTP (8080)", 52, "53012 → 8080  [SYN]", true),
+                P("185.199.110.153", "192.168.1.24", "HTTP (8080)", 40, "8080 → 53012  [RST, ACK]", false),
+                P("192.168.1.24", "192.168.1.1", "ICMP", 60, "Ping (demande)", true),
+                P("192.168.1.1", "192.168.1.24", "ICMP", 60, "Ping (réponse)", false),
+                P("192.168.1.24", "192.168.1.1", "DNS", 83, "61200 → 53  Requête telemetry.updater-cdn.net", true),
+                P("192.168.1.1", "192.168.1.24", "DNS", 99, "53 → 61200  Réponse telemetry.updater-cdn.net → 185.199.110.153", false),
+                P("www.youtube.com", "192.168.1.24", "HTTPS", 1500, "443 → 52190  [ACK]", false),
+                P("192.168.1.24", "www.youtube.com", "HTTPS", 40, "52190 → 443  [ACK]", true),
+            })
+                Packets.Add(new PacketRow(record));
+            Raise(nameof(HasPackets));
 
             if (tab == "connections") IsConnectionsTab = true;
             else if (tab == "traffic") IsTrafficTab = true;
+            else if (tab == "stats") { IsTrafficTab = true; IsStatsView = true; }
         }
     }
 }

@@ -104,6 +104,27 @@ namespace LDI12.Core.DiskUsage
         }
     }
 
+    /// <summary>
+    /// La partie de la carte à montrer quand on zoome : la carte entière est mise en page sur
+    /// <see cref="Zoom"/> fois la taille de l'image, et l'image en montre la fenêtre qui commence
+    /// à (<see cref="X"/>, <see cref="Y"/>), en pixels de cette carte agrandie.
+    /// </summary>
+    public readonly struct TreemapViewport
+    {
+        public TreemapViewport(double zoom, double x, double y)
+        {
+            Zoom = Math.Max(1, zoom);
+            X = Math.Max(0, x);
+            Y = Math.Max(0, y);
+        }
+
+        public double Zoom { get; }
+        public double X { get; }
+        public double Y { get; }
+
+        public static TreemapViewport Whole => new TreemapViewport(1, 0, 0);
+    }
+
     /// <summary>Le réglage du rendu : couleurs du thème et relief des coussins.</summary>
     public sealed class TreemapStyle
     {
@@ -158,11 +179,25 @@ namespace LDI12.Core.DiskUsage
         public static TreemapImage Render(
             DiskNode root, DiskUsageTree? tree, int width, int height, TreemapStyle? style = null,
             CancellationToken cancellationToken = default)
+            => Render(root, tree, width, height, TreemapViewport.Whole, style, cancellationToken);
+
+        /// <summary>
+        /// La carte vue à travers une fenêtre : seuls les dossiers qui la croisent sont parcourus,
+        /// et un fichier trop petit pour figurer sur la carte entière prend sa place en zoomant.
+        /// Les rectangles rendus sont dans le repère de l'image.
+        /// </summary>
+        public static TreemapImage Render(
+            DiskNode root, DiskUsageTree? tree, int width, int height, TreemapViewport viewport, TreemapStyle? style = null,
+            CancellationToken cancellationToken = default)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             style ??= new TreemapStyle();
             width = Math.Max(1, width);
             height = Math.Max(1, height);
+            var fullWidth = width * viewport.Zoom;
+            var fullHeight = height * viewport.Zoom;
+            var originX = Math.Min(viewport.X, fullWidth - width);
+            var originY = Math.Min(viewport.Y, fullHeight - height);
 
             var pixels = new int[width * height];
             var owner = new int[width * height];
@@ -173,9 +208,9 @@ namespace LDI12.Core.DiskUsage
                 owner[index] = -1;
             }
 
-            var renderer = new Pass(tree, width, height, pixels, owner, style, cancellationToken);
+            var renderer = new Pass(tree, width, height, originX, originY, pixels, owner, style, cancellationToken);
             if (root.Size > 0)
-                renderer.Draw(root, new TreemapRect(0, 0, width, height), new double[4], style.Height, 0, -1);
+                renderer.Draw(root, new TreemapRect(0, 0, fullWidth, fullHeight), new double[4], style.Height, 0, -1);
 
             return new TreemapImage(width, height, pixels, owner, renderer.Items);
         }
@@ -271,17 +306,21 @@ namespace LDI12.Core.DiskUsage
             private readonly DiskUsageTree? _tree;
             private readonly int _width;
             private readonly int _height;
+            private readonly double _originX;
+            private readonly double _originY;
             private readonly int[] _pixels;
             private readonly int[] _owner;
             private readonly TreemapStyle _style;
             private readonly CancellationToken _cancellation;
             private int _drawn;
 
-            public Pass(DiskUsageTree? tree, int width, int height, int[] pixels, int[] owner, TreemapStyle style, CancellationToken cancellation)
+            public Pass(DiskUsageTree? tree, int width, int height, double originX, double originY, int[] pixels, int[] owner, TreemapStyle style, CancellationToken cancellation)
             {
                 _tree = tree;
                 _width = width;
                 _height = height;
+                _originX = originX;
+                _originY = originY;
                 _pixels = pixels;
                 _owner = owner;
                 _style = style;
@@ -294,6 +333,9 @@ namespace LDI12.Core.DiskUsage
             {
                 if ((++_drawn & 0xFFF) == 0) _cancellation.ThrowIfCancellationRequested();
 
+                // Hors de la fenêtre : ni ce dossier ni rien de ce qu'il contient ne se voit.
+                if (rect.Right <= _originX || rect.X >= _originX + _width || rect.Bottom <= _originY || rect.Y >= _originY + _height) return;
+
                 // Trop fin pour être visé : il colore quand même son trait de pixel, au compte de son dossier,
                 // sans quoi un dossier de milliers de petits fichiers apparaîtrait vide.
                 if (parent >= 0 && (rect.Width < 0.5 || rect.Height < 0.5))
@@ -303,7 +345,7 @@ namespace LDI12.Core.DiskUsage
                 }
 
                 var item = Items.Count;
-                Items.Add(new TreemapItem(node, rect));
+                Items.Add(new TreemapItem(node, new TreemapRect(rect.X - _originX, rect.Y - _originY, rect.Width, rect.Height)));
 
                 var surface = (double[])parentSurface.Clone();
                 AddRidge(surface, rect, height);
@@ -346,10 +388,11 @@ namespace LDI12.Core.DiskUsage
 
             private void Fill(TreemapRect rect, double[] surface, int rgb, int item)
             {
-                var left = Clamp((int)Math.Round(rect.X), _width);
-                var right = Clamp((int)Math.Round(rect.Right), _width);
-                var top = Clamp((int)Math.Round(rect.Y), _height);
-                var bottom = Clamp((int)Math.Round(rect.Bottom), _height);
+                // La mise en page est dans le repère de la carte entière ; les pixels, dans celui de la fenêtre.
+                var left = Clamp((int)Math.Round(rect.X - _originX), _width);
+                var right = Clamp((int)Math.Round(rect.Right - _originX), _width);
+                var top = Clamp((int)Math.Round(rect.Y - _originY), _height);
+                var bottom = Clamp((int)Math.Round(rect.Bottom - _originY), _height);
 
                 // Un fichier de moins d'un pixel garde au moins le sien : sinon les fichiers minuscules disparaîtraient de la carte.
                 if (right == left && left < _width) right = left + 1;
@@ -361,11 +404,11 @@ namespace LDI12.Core.DiskUsage
 
                 for (var py = top; py < bottom; py++)
                 {
-                    var ny = -(2 * surface[3] * (py + 0.5) + surface[2]);
+                    var ny = -(2 * surface[3] * (py + _originY + 0.5) + surface[2]);
                     var row = py * _width;
                     for (var px = left; px < right; px++)
                     {
-                        var nx = -(2 * surface[1] * (px + 0.5) + surface[0]);
+                        var nx = -(2 * surface[1] * (px + _originX + 0.5) + surface[0]);
                         var cosine = (nx * LightX + ny * LightY + LightZ) / Math.Sqrt(nx * nx + ny * ny + 1);
                         var light = ambient + diffuse * Math.Max(0, cosine);
 

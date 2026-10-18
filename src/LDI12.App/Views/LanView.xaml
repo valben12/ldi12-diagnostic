@@ -188,8 +188,12 @@
                 Visibility="{Binding IsConnectionsTab, Converter={StaticResource BoolToVisibility}}">
             <DockPanel>
                 <DockPanel DockPanel.Dock="Top" Margin="6,0,8,10">
-                    <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Établies seulement" IsChecked="{Binding EstablishedOnly}" VerticalAlignment="Center" />
-                    <TextBox DockPanel.Dock="Left" Style="{StaticResource Field}" Width="260" Tag="Rechercher un programme, une adresse"
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Style="{StaticResource Switch}" Content="En direct" IsChecked="{Binding IsLive}" VerticalAlignment="Center" Margin="0,0,18,0"
+                                  ToolTip="Relevé chaque seconde ; en pause, la liste reste figée pour être lue." />
+                        <CheckBox Style="{StaticResource Switch}" Content="Établies seulement" IsChecked="{Binding EstablishedOnly}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBox DockPanel.Dock="Left" Style="{StaticResource Field}" Width="240" Tag="Rechercher un programme, une adresse"
                              Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,14,0" />
                     <TextBlock Text="{Binding ConnectionSummary}" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 </DockPanel>
@@ -213,18 +217,36 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200" />
-                                    <ColumnDefinition Width="110" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="120" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Process}" Style="{StaticResource Text.Body}" Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
-                                <TextBlock Grid.Column="1" Text="{Binding LocalText}" Style="{StaticResource Text.Muted}" />
-                                <TextBlock Grid.Column="2" Text="{Binding RemoteText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,10,0" />
-                                <TextBlock Grid.Column="3" Text="{Binding State}" Style="{StaticResource Text.Muted}" />
-                            </Grid>
+                            <!-- Nouvelle : teintée en vert ; fermée : grisée, en rouge, avant de s'effacer. -->
+                            <Border CornerRadius="6" Margin="-8,-3" Padding="8,3">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsNew}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsClosed}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StatusProblemSoft}" />
+                                                <Setter Property="Opacity" Value="0.7" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="120" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Process}" Style="{StaticResource Text.Body}" Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                    <TextBlock Grid.Column="1" Text="{Binding LocalText}" Style="{StaticResource Text.Muted}" TextWrapping="NoWrap" />
+                                    <TextBlock Grid.Column="2" Text="{Binding RemoteText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,10,0"
+                                               ToolTip="{Binding RemoteText}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding State}" Style="{StaticResource Text.Muted}" TextWrapping="NoWrap" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -232,20 +254,32 @@
         </Border>
 
         <!-- ===== Trafic ===== -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsTrafficTab, Converter={StaticResource BoolToVisibility}}">
-            <StackPanel>
-                <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,12">
-                    <StackPanel>
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Style="{StaticResource Button.Primary}" Content="Écouter" Command="{Binding CaptureCommand}" VerticalAlignment="Center" />
-                            <Border DockPanel.Dock="Right" Style="{StaticResource SegmentRail}" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal">
-                                    <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="15 s" IsChecked="{Binding Is15}" />
-                                    <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="30 s" IsChecked="{Binding Is30}" />
-                                    <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="1 min" IsChecked="{Binding Is60}" />
-                                </StackPanel>
-                            </Border>
-                            <Border DockPanel.Dock="Left" Style="{StaticResource SegmentRail}" Margin="0,0,16,0" VerticalAlignment="Center">
+        <Grid Grid.Row="2" Visibility="{Binding IsTrafficTab, Converter={StaticResource BoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- L'écoute : la carte, la durée, et les deux boutons. -->
+            <Border Style="{StaticResource Card}" Padding="20,14" Margin="0,0,0,12">
+                <StackPanel>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Button.Ghost}" Content="Arrêter" Command="{Binding StopCaptureCommand}" Margin="0,0,8,0"
+                                    Visibility="{Binding IsCapturing, Converter={StaticResource BoolToVisibility}}" />
+                            <Button Style="{StaticResource Button.Primary}" Content="Écouter" Command="{Binding CaptureCommand}" />
+                        </StackPanel>
+                        <Border DockPanel.Dock="Right" Style="{StaticResource SegmentRail}" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="1 min" IsChecked="{Binding Is1Min}" />
+                                <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="5 min" IsChecked="{Binding Is5Min}" />
+                                <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="30 min" IsChecked="{Binding Is30Min}" />
+                                <RadioButton GroupName="CaptureDuration" Style="{StaticResource Segment}" Content="Jusqu'à l'arrêt" IsChecked="{Binding IsUntilStop}"
+                                             ToolTip="Quatre heures au plus" />
+                            </StackPanel>
+                        </Border>
+                        <Border DockPanel.Dock="Left" Style="{StaticResource SegmentRail}" Margin="0,0,16,0" VerticalAlignment="Center">
                             <ItemsControl ItemsSource="{Binding Segments}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -259,69 +293,171 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Border>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Écoute du trafic" Style="{StaticResource Text.Emphasis}" />
-                                <TextBlock Text="Sans pilote à installer. Windows demandera l'autorisation administrateur." Style="{StaticResource Text.Muted}" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </DockPanel>
-                        <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Height="4" Margin="0,12,0,0"
-                                     Visibility="{Binding IsCapturing, Converter={StaticResource BoolToVisibility}}" />
-                        <TextBlock Text="{Binding TrafficText}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                   Visibility="{Binding TrafficText, Converter={StaticResource TextToVisibility}}" />
+                        <TextBlock Text="Sans pilote à installer. Windows demandera l'autorisation administrateur." Style="{StaticResource Text.Muted}"
+                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Height="4" Margin="0,12,0,0"
+                                 Visibility="{Binding IsCapturing, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="{Binding TrafficText}" Style="{StaticResource Text.Muted}" Margin="0,10,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding TrafficText}"
+                               Visibility="{Binding TrafficText, Converter={StaticResource TextToVisibility}}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Le chiffre qui court, et le choix de lecture. -->
+            <DockPanel Grid.Row="1" Margin="2,0,0,12" Visibility="{Binding HasTraffic, Converter={StaticResource BoolToVisibility}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource Button.Ghost}" Content="Ouvrir dans Wireshark" Command="{Binding OpenPcapCommand}" />
+                <Border DockPanel.Dock="Left" Style="{StaticResource SegmentRail}" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton GroupName="TrafficView" Style="{StaticResource Segment}" Content="Paquets" IsChecked="{Binding IsPacketsView}" />
+                        <RadioButton GroupName="TrafficView" Style="{StaticResource Segment}" Content="Statistiques" IsChecked="{Binding IsStatsView}" />
                     </StackPanel>
                 </Border>
+                <TextBlock Text="{Binding TrafficHeadline}" Style="{StaticResource Text.Emphasis}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
 
-                <StackPanel Visibility="{Binding HasTraffic, Converter={StaticResource BoolToVisibility}}">
-                    <DockPanel Margin="2,0,0,12">
-                        <Button DockPanel.Dock="Right" Style="{StaticResource Button.Ghost}" Content="Ouvrir dans Wireshark" Command="{Binding OpenPcapCommand}" />
-                        <TextBlock Text="{Binding TrafficHeadline}" Style="{StaticResource Text.Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <!-- Les paquets, un par ligne, comme dans Wireshark. -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8,10,6,8"
+                    Visibility="{Binding ShowPackets, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="6,0,8,10">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <CheckBox Style="{StaticResource Switch}" Content="Suivre" IsChecked="{Binding FollowPackets}" VerticalAlignment="Center" Margin="0,0,14,0"
+                                      ToolTip="La liste descend avec les derniers paquets" />
+                            <Button Style="{StaticResource Button.Ghost}" Content="Vider" Command="{Binding ClearPacketsCommand}" />
+                        </StackPanel>
+                        <TextBox Style="{StaticResource Field}" Width="300" HorizontalAlignment="Left" Tag="Filtrer : adresse, nom, protocole, port…"
+                                 Text="{Binding PacketFilter, UpdateSourceTrigger=PropertyChanged}" />
                     </DockPanel>
-                    <Grid>
+                    <Grid DockPanel.Dock="Top" Margin="12,0,14,4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="74" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="104" />
+                            <ColumnDefinition Width="60" />
+                            <ColumnDefinition Width="3*" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <TextBlock Text="CORRESPONDANTS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
-                                    <ItemsControl ItemsSource="{Binding Hosts}" ItemTemplate="{StaticResource TrafficLine}" />
-                                </StackPanel>
-                            </Border>
-                            <Border Style="{StaticResource Card}" Padding="20,16">
-                                <StackPanel>
-                                    <TextBlock Text="NOMS DEMANDÉS AU DNS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
-                                    <ItemsControl ItemsSource="{Binding DnsQueries}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <DockPanel Margin="0,0,0,6">
-                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Amount}" Style="{StaticResource Text.Muted}" Margin="12,0,0,0" />
-                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
-                                                </DockPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <TextBlock Text="SERVICES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
-                                    <ItemsControl ItemsSource="{Binding Services}" ItemTemplate="{StaticResource TrafficLine}" />
-                                </StackPanel>
-                            </Border>
-                            <Border Style="{StaticResource Card}" Padding="20,16">
-                                <StackPanel>
-                                    <TextBlock Text="PROTOCOLES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
-                                    <ItemsControl ItemsSource="{Binding Protocols}" ItemTemplate="{StaticResource TrafficLine}" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
+                        <TextBlock Text="N°" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="1" Text="TEMPS" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="2" Text="SOURCE" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="3" Text="DESTINATION" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="4" Text="PROTOCOLE" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="5" Text="TAILLE" Style="{StaticResource Text.Eyebrow}" />
+                        <TextBlock Grid.Column="6" Text="INFO" Style="{StaticResource Text.Eyebrow}" />
                     </Grid>
-                </StackPanel>
-            </StackPanel>
-        </ScrollViewer>
+                    <ListBox x:Name="PacketList" Style="{StaticResource LanList}" ItemsSource="{Binding PacketView}"
+                             VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource LanItem}">
+                                <Setter Property="Padding" Value="12,2" />
+                                <Setter Property="Height" Value="24" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="74" />
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="104" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="3*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Number}" Style="{StaticResource Text.Muted}" FontFamily="Consolas" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Time}" Style="{StaticResource Text.Muted}" FontFamily="Consolas" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Source}" Style="{StaticResource Text.Body}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="{Binding Source}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Destination}" Style="{StaticResource Text.Body}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="{Binding Destination}" />
+                                    <!-- Le protocole en pastille teintée : on repère d'un coup d'œil le DNS, le web, les refus. -->
+                                    <Border Grid.Column="4" CornerRadius="5" Padding="7,1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ProtocolKey}" Value="Dns">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusInfoSoft}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ProtocolKey}" Value="Web">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ProtocolKey}" Value="Syn">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusWarningSoft}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ProtocolKey}" Value="Reset">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusProblemSoft}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ProtocolKey}" Value="Icmp">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding Protocol}" Style="{StaticResource Text.Muted}" Foreground="{DynamicResource Brush.TextPrimary}"
+                                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                    <TextBlock Grid.Column="5" Text="{Binding Length}" Style="{StaticResource Text.Muted}" FontFamily="Consolas" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="6" Text="{Binding Info}" Style="{StaticResource Text.Body}" FontFamily="Consolas" FontSize="12"
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Info}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Les statistiques, qui se mettent à jour pendant l'écoute. -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding ShowStats, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="CORRESPONDANTS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
+                                <ItemsControl ItemsSource="{Binding Hosts}" ItemTemplate="{StaticResource TrafficLine}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Padding="20,16">
+                            <StackPanel>
+                                <TextBlock Text="NOMS DEMANDÉS AU DNS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
+                                <ItemsControl ItemsSource="{Binding DnsQueries}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Amount}" Style="{StaticResource Text.Muted}" Margin="12,0,0,0" TextWrapping="NoWrap" />
+                                                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="SERVICES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
+                                <ItemsControl ItemsSource="{Binding Services}" ItemTemplate="{StaticResource TrafficLine}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Padding="20,16">
+                            <StackPanel>
+                                <TextBlock Text="PROTOCOLES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10" />
+                                <ItemsControl ItemsSource="{Binding Protocols}" ItemTemplate="{StaticResource TrafficLine}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </UserControl>

@@ -139,6 +139,29 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Le_zoom_fait_apparaitre_ce_que_la_vue_d_ensemble_ne_peut_pas_montrer()
+        {
+            // Cent mille fichiers égaux sur 200 × 100 pixels : un cinquième de pixel chacun,
+            // trop petits pour être visés sur la carte entière.
+            var disk = new FakeDisk();
+            for (var index = 0; index < 100_000; index++) disk.File(@"R\f" + index + ".dat", 1000);
+            var tree = Scan(disk);
+
+            var whole = TreemapRenderer.Render(tree.Root, tree, 200, 100, new TreemapStyle { GapDepth = 0 });
+            Assert.DoesNotContain(whole.Items, i => !i.Node.IsDirectory);
+
+            // Huit fois plus près, sur le coin en haut à gauche : chacun a ses pixels et se vise.
+            var zoomed = TreemapRenderer.Render(tree.Root, tree, 200, 100, new TreemapViewport(8, 0, 0), new TreemapStyle { GapDepth = 0 });
+            var files = zoomed.Items.Where(i => !i.Node.IsDirectory).ToList();
+            Assert.NotEmpty(files);
+            var first = files[0];
+            Assert.Same(first.Node, zoomed.HitTest(first.Bounds.X + first.Bounds.Width / 2, first.Bounds.Y + first.Bounds.Height / 2));
+
+            // Seuls les fichiers de la fenêtre sont parcourus : un soixante-quatrième de la carte, à peu près.
+            Assert.InRange(files.Count, 100, 100_000 / 16);
+        }
+
+        [Fact]
         public void Le_decoupage_respecte_les_proportions()
         {
             var tree = Scan(new FakeDisk().File(@"R\a", 600).File(@"R\b", 300).File(@"R\c", 100));

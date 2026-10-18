@@ -16,6 +16,39 @@ namespace LDI12.Core.Network
         public long Packets { get; set; }
     }
 
+    /// <summary>Un paquet, en une ligne comme dans la liste de Wireshark.</summary>
+    public sealed class PacketRecord
+    {
+        public long Number { get; set; }
+
+        /// <summary>Secondes depuis le début de l'écoute.</summary>
+        public double Time { get; set; }
+
+        public string Source { get; set; } = string.Empty;
+        public string Destination { get; set; } = string.Empty;
+
+        /// <summary>« HTTPS », « DNS », « TCP »… : le service quand il est connu, le transport sinon.</summary>
+        public string Protocol { get; set; } = string.Empty;
+
+        public int Length { get; set; }
+        public string Info { get; set; } = string.Empty;
+
+        /// <summary>Envoyé par ce PC ; sinon reçu.</summary>
+        public bool Outgoing { get; set; }
+    }
+
+    /// <summary>
+    /// Ce que l'écoute envoie à l'écran pendant qu'elle tourne : les paquets arrivés depuis le
+    /// dernier envoi, et le résumé à jour. Au-delà d'un débit qu'un écran peut suivre, les paquets
+    /// en trop ne sont pas listés (ils restent comptés, et écrits dans le fichier pour Wireshark).
+    /// </summary>
+    public sealed class TrafficLive
+    {
+        public List<PacketRecord> Packets { get; set; } = new List<PacketRecord>();
+        public long Skipped { get; set; }
+        public TrafficSummary Summary { get; set; } = new TrafficSummary();
+    }
+
     /// <summary>Ce qu'une capture a vu passer, résumé comme les statistiques de Wireshark.</summary>
     public sealed class TrafficSummary
     {
@@ -64,11 +97,17 @@ namespace LDI12.Core.Network
 
         public string LocalAddress { get; }
 
-        public void Add(byte[] packet, int length)
+        public void Add(byte[] packet, int length) => Describe(packet, length, 0);
+
+        /// <summary>
+        /// Compte le paquet dans les statistiques et le décrit en une ligne ; nul pour ce qui n'est
+        /// pas un paquet IPv4 lisible.
+        /// </summary>
+        public PacketRecord? Describe(byte[] packet, int length, double time)
         {
-            if (length < 20 || (packet[0] >> 4) != 4) return;
+            if (length < 20 || (packet[0] >> 4) != 4) return null;
             var header = (packet[0] & 0x0F) * 4;
-            if (header < 20 || header > length) return;
+            if (header < 20 || header > length) return null;
             var total = Math.Min(length, (packet[2] << 8) | packet[3]);
             var protocol = packet[9];
             var source = ToUInt(packet, 12);
@@ -83,30 +122,69 @@ namespace LDI12.Core.Network
             Count(_hosts, remoteText, total);
 
             int? remotePort = null;
+            int? fromPort = null, toPort = null;
+            string? info = null;
             string name;
             switch (protocol)
             {
                 case 6:
                     name = "TCP";
-                    if (header + 4 <= length) remotePort = Port(packet, header + (outgoing ? 2 : 0));
+                    if (header + 4 <= length)
+                    {
+                        fromPort = Port(packet, header);
+                        toPort = Port(packet, header + 2);
+                        remotePort = outgoing ? toPort : fromPort;
+                    }
+                    if (header + 14 <= length) info = Flags(packet[header + 13]);
                     break;
                 case 17:
                     name = "UDP";
                     if (header + 8 <= length)
                     {
-                        remotePort = Port(packet, header + (outgoing ? 2 : 0));
-                        var sourcePort = Port(packet, header);
-                        var destinationPort = Port(packet, header + 2);
-                        if (destinationPort == 53 && outgoing) Dns(packet, header + 8, length, query: true);
-                        else if (sourcePort == 53 && !outgoing) Dns(packet, header + 8, length, query: false);
+                        fromPort = Port(packet, header);
+                        toPort = Port(packet, header + 2);
+                        remotePort = outgoing ? toPort : fromPort;
+                        if (toPort == 53 && outgoing) info = Dns(packet, header + 8, length, query: true);
+                        else if (fromPort == 53 && !outgoing) info = Dns(packet, header + 8, length, query: false);
                     }
                     break;
-                case 1: name = "ICMP"; break;
+                case 1:
+                    name = "ICMP";
+                    if (header + 1 <= length) info = packet[header] switch { 8 => "Ping (demande)", 0 => "Ping (réponse)", 3 => "Destination injoignable", 11 => "Durée de vie dépassée", _ => "Type " + packet[header] };
+                    break;
                 case 2: name = "IGMP"; break;
                 default: name = "IP " + protocol; break;
             }
             Count(_protocols, name, total);
             if (remotePort.HasValue) Count(_services, name + " " + remotePort.Value, total);
+
+            var service = remotePort.HasValue ? ServiceName(name + " " + remotePort.Value) : null;
+            var ports = fromPort.HasValue ? fromPort + " → " + toPort : null;
+            var sourceText = ToText(source);
+            var destinationText = ToText(destination);
+            return new PacketRecord
+            {
+                Number = _packets,
+                Time = time,
+                Source = _names.TryGetValue(sourceText, out var sourceName) ? sourceName : sourceText,
+                Destination = _names.TryGetValue(destinationText, out var destinationName) ? destinationName : destinationText,
+                Protocol = service ?? name,
+                Length = total,
+                Info = ports == null ? info ?? string.Empty : info == null ? ports : ports + "  " + info,
+                Outgoing = outgoing,
+            };
+        }
+
+        /// <summary>Les drapeaux TCP, comme Wireshark les écrit : [SYN], [ACK], [FIN, ACK]…</summary>
+        private static string Flags(byte flags)
+        {
+            var names = new List<string>(4);
+            if ((flags & 0x02) != 0) names.Add("SYN");
+            if ((flags & 0x01) != 0) names.Add("FIN");
+            if ((flags & 0x04) != 0) names.Add("RST");
+            if ((flags & 0x08) != 0) names.Add("PSH");
+            if ((flags & 0x10) != 0) names.Add("ACK");
+            return names.Count == 0 ? string.Empty : "[" + string.Join(", ", names) + "]";
         }
 
         public TrafficSummary Summarize(TimeSpan duration, int top = 15)
@@ -135,32 +213,39 @@ namespace LDI12.Core.Network
         /// Une requête DNS : le nom demandé. Une réponse : les adresses obtenues, pour nommer les
         /// correspondants (« 142.250.75.238 » devient « www.google.com »).
         /// </summary>
-        private void Dns(byte[] packet, int start, int length, bool query)
+        private string? Dns(byte[] packet, int start, int length, bool query)
         {
-            if (start + 12 > length) return;
+            if (start + 12 > length) return null;
             var questions = (packet[start + 4] << 8) | packet[start + 5];
             var answers = (packet[start + 6] << 8) | packet[start + 7];
-            if (questions < 1) return;
+            if (questions < 1) return null;
             var at = start + 12;
             var name = ReadName(packet, start, ref at, length);
-            if (name == null || at + 4 > length) return;
+            if (name == null || at + 4 > length) return null;
             at += 4;
             if (query)
             {
                 Count(_dns, name, 0);
-                return;
+                return "Requête " + name;
             }
 
+            string? first = null;
             for (var index = 0; index < answers && at + 12 <= length; index++)
             {
-                if (ReadName(packet, start, ref at, length) == null || at + 10 > length) return;
+                if (ReadName(packet, start, ref at, length) == null || at + 10 > length) break;
                 var type = (packet[at] << 8) | packet[at + 1];
                 var size = (packet[at + 8] << 8) | packet[at + 9];
                 at += 10;
-                if (at + size > length) return;
-                if (type == 1 && size == 4) _names[ToText(ToUInt(packet, at))] = name;
+                if (at + size > length) break;
+                if (type == 1 && size == 4)
+                {
+                    var address = ToText(ToUInt(packet, at));
+                    _names[address] = name;
+                    first ??= address;
+                }
                 at += size;
             }
+            return "Réponse " + name + (first != null ? " → " + first : string.Empty);
         }
 
         private static string? ReadName(byte[] packet, int message, ref int at, int length)

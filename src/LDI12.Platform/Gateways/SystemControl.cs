@@ -260,11 +260,11 @@ namespace LDI12.Platform.Gateways
                 return Log("Paquet " + publishedName, ControlResult.Fail(reason, error));
             });
 
-        public async Task<LDI12.Core.Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+        public async Task<LDI12.Core.Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, IProgress<LDI12.Core.Network.TrafficLive>? live, CancellationToken cancellationToken)
         {
             try
             {
-                var summary = await Task.Run(() => PacketCapture.Capture(localAddress, duration, pcapPath, cancellationToken), cancellationToken).ConfigureAwait(false);
+                var summary = await Task.Run(() => PacketCapture.Capture(localAddress, duration, pcapPath, live == null ? null : (Action<LDI12.Core.Network.TrafficLive>)live.Report, cancellationToken), cancellationToken).ConfigureAwait(false);
                 _logger.Info(Category, "Capture de " + localAddress + " : " + summary.Packets + " paquets en " + summary.Duration.TotalSeconds.ToString("0") + " s.");
                 return summary;
             }

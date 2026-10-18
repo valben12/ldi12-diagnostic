@@ -57,6 +57,7 @@
     <Geometry x:Key="Icon.ExternalLink">M15,3 H21 V9 M10,14 L21,3 M18,13 V19 A2,2 0 0 1 16,21 H5 A2,2 0 0 1 3,19 V8 A2,2 0 0 1 5,6 H11</Geometry>
     <Geometry x:Key="Icon.ArrowLeft">M19,12 H5 M12,19 L5,12 L12,5</Geometry>
     <Geometry x:Key="Icon.ZoomIn">M11,3 A8,8 0 1 0 11,19 A8,8 0 1 0 11,3 Z M21,21 L16.65,16.65 M11,8 V14 M8,11 H14</Geometry>
+    <Geometry x:Key="Icon.ZoomOut">M11,3 A8,8 0 1 0 11,19 A8,8 0 1 0 11,3 Z M21,21 L16.65,16.65 M8,11 H14</Geometry>
     <Geometry x:Key="Icon.Copy">M10,8 H20 A2,2 0 0 1 22,10 V20 A2,2 0 0 1 20,22 H10 A2,2 0 0 1 8,20 V10 A2,2 0 0 1 10,8 Z M4,16 A2,2 0 0 1 2,14 V4 A2,2 0 0 1 4,2 H14 A2,2 0 0 1 16,4</Geometry>
 
 </ResourceDictionary>

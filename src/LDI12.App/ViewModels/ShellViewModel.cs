@@ -160,6 +160,7 @@ namespace LDI12.App.ViewModels
         private readonly RepairsViewModel _repairs;
         private readonly CleanupViewModel _cleanup;
         private readonly DiskUsageViewModel _diskUsage;
+        private readonly DisksViewModel _disks;
         private readonly CrashesViewModel _crashes;
         private readonly ProgramsViewModel _programs;
         private readonly DriverStoreViewModel _driverStore;
@@ -220,6 +221,7 @@ namespace LDI12.App.ViewModels
             _repairs = new RepairsViewModel(_actions, logger);
             _cleanup = new CleanupViewModel(_actions, logger, () => _repairs.GetRunnerAsync());
             _diskUsage = new DiskUsageViewModel(logger);
+            _disks = new DisksViewModel(_repairs, logger);
             _crashes = new CrashesViewModel(_repairs, logger);
             _programs = new ProgramsViewModel(_repairs, logger);
             _driverStore = new DriverStoreViewModel(_repairs, logger);
@@ -287,7 +289,8 @@ namespace LDI12.App.ViewModels
                 new NavigationItem("Espace disque", "Icon.Treemap", _diskUsage),
                 new NavigationItem("Données", "Icon.Archive", _userData),
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
-                new NavigationItem("Plantages", "Icon.MonitorX", _crashes) { StartsGroup = true },
+                new NavigationItem("Disques", "Icon.Disc", _disks) { StartsGroup = true },
+                new NavigationItem("Plantages", "Icon.MonitorX", _crashes),
                 new NavigationItem("Programmes", "Icon.Layers", _programs),
                 new NavigationItem("Magasin de pilotes", "Icon.Package", _driverStore),
                 new NavigationItem("Réseau local", "Icon.Network", _lan),
@@ -316,7 +319,7 @@ namespace LDI12.App.ViewModels
             var software = new NavigationGroup("Logiciel", false);
             Assign(diagnostic, "Matériel", "Stockage", "Windows", "Réseau", "Sécurité", "Performances");
             Assign(act, "Réparations", "Nettoyage", "Espace disque", "Données", "Outils");
-            Assign(deep, "Plantages", "Programmes", "Magasin de pilotes", "Réseau local");
+            Assign(deep, "Disques", "Plantages", "Programmes", "Magasin de pilotes", "Réseau local");
             Assign(measure, "Surveillance", "Mesures");
             Assign(report, "Rapports", "Historique");
             Assign(software, "Réglages", "À propos");
@@ -382,6 +385,9 @@ namespace LDI12.App.ViewModels
         /// <summary>Le magasin de pilotes, que les captures d'écran montrent sur un exemple.</summary>
         public DriverStoreViewModel DriverStore => _driverStore;
 
+        /// <summary>Les disques, que les captures d'écran montrent sur un exemple.</summary>
+        public DisksViewModel Disks => _disks;
+
         /// <summary>Le réseau local, que les captures d'écran montrent sur un exemple.</summary>
         public LanViewModel Lan => _lan;
 
@@ -429,6 +435,14 @@ namespace LDI12.App.ViewModels
                 () => { _programs.IsAutorunsTab = true; Show(_programs); }, "autoruns demarrage startup msconfig taches planifiees services pilotes extensions lancement automatique"));
             entries.Add(new SearchEntry("Anciens pilotes du magasin", "Magasin de pilotes", "Les versions remplacées, ce qu'elles pèsent, les retirer",
                 () => Show(_driverStore), "driver store explorer rapr magasin pilotes driverstore filerepository oem inf anciennes versions nettoyer pnputil"));
+            entries.Add(new SearchEntry("Santé SMART des disques", "Disques", "Chaque attribut SMART expliqué, l'usure, la température",
+                () => Show(_disks), "smart gsmartcontrol crystaldiskinfo sante disque attributs secteurs realloues temperature usure ssd"));
+            entries.Add(new SearchEntry("Autotest du disque", "Disques", "Le test court ou long que le disque mène lui-même",
+                () => Show(_disks), "autotest self test smart court long gsmartcontrol"));
+            entries.Add(new SearchEntry("Test de surface", "Disques", "Chaque bloc lu et chronométré, la carte des zones lentes",
+                () => Show(_disks), "hddscan surface secteurs defectueux badblocks lent mhdd victoria lecture"));
+            entries.Add(new SearchEntry("Optimiser un volume", "Disques", "TRIM d'un SSD, défragmentation d'un disque dur",
+                () => Show(_disks), "defrag defragmenter jkdefrag trim optimiser ssd consolidation"));
             entries.Add(new SearchEntry("Appareils du réseau", "Réseau local", "Chaque appareil branché : nom, fabricant, services, partages",
                 () => { _lan.IsDevicesTab = true; Show(_lan); }, "advanced ip scanner angry ip scan reseau appareils imprimante nas box mac fabricant partages wake on lan bureau a distance"));
             entries.Add(new SearchEntry("Connexions de ce PC", "Réseau local", "Qui parle à qui, programme par programme",
@@ -741,6 +755,7 @@ namespace LDI12.App.ViewModels
             _repairs.Update(snapshot);
             _history.Apply(snapshot);
             _measures.Update(snapshot);
+            _disks.Update(snapshot);
             _userData.Update(snapshot);
             _intervention.OnScanCompleted(snapshot);
 

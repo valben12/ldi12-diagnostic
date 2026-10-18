@@ -170,6 +170,15 @@ namespace LDI12.Core.Execution
         /// </summary>
         Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken);
 
+        /// <summary>Lance l'autotest intégré d'un disque ATA (court ou long).</summary>
+        ControlResult StartDiskSelfTest(int diskIndex, bool extended);
+
+        /// <summary>L'état de l'autotest et son journal ; nul si le disque ne répond pas aux commandes SMART.</summary>
+        Disks.SelfTestState? ReadDiskSelfTest(int diskIndex);
+
+        /// <summary>Lit la surface d'un disque, en entier ou par échantillons, sans rien y écrire.</summary>
+        Task<Disks.SurfaceScan?> ScanDiskSurfaceAsync(int diskIndex, bool full, IProgress<(double Fraction, Disks.SurfaceScan Partial)>? progress, CancellationToken cancellationToken);
+
         /// <summary>Le mode d'alimentation actif, ou null s'il ne se lit pas.</summary>
         Guid? ActivePowerScheme();
 
@@ -229,6 +238,10 @@ namespace LDI12.Core.Execution
         public ControlResult DeleteDriverPackage(string publishedName) => No();
         public Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
             => Task.FromResult<Network.TrafficSummary?>(null);
+        public ControlResult StartDiskSelfTest(int diskIndex, bool extended) => No();
+        public Disks.SelfTestState? ReadDiskSelfTest(int diskIndex) => null;
+        public Task<Disks.SurfaceScan?> ScanDiskSurfaceAsync(int diskIndex, bool full, IProgress<(double Fraction, Disks.SurfaceScan Partial)>? progress, CancellationToken cancellationToken)
+            => Task.FromResult<Disks.SurfaceScan?>(null);
         public Guid? ActivePowerScheme() => null;
         public bool PowerSchemeExists(Guid scheme) => false;
         public ControlResult ActivatePowerScheme(Guid scheme) => No();

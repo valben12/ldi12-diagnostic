@@ -299,6 +299,18 @@ namespace LDI12.Tests
                 return Task.FromResult<LDI12.Core.Network.TrafficSummary?>(new LDI12.Core.Network.TrafficSummary { LocalAddress = localAddress, Duration = duration, Packets = 12, PcapPath = pcapPath });
             }
 
+            public LDI12.Core.Disks.SelfTestState? SelfTest { get; set; }
+            public ControlResult StartDiskSelfTest(int diskIndex, bool extended) { Calls.Add("self-test " + diskIndex + " " + (extended ? "long" : "court")); return ControlResult.Ok("ok"); }
+            public LDI12.Core.Disks.SelfTestState? ReadDiskSelfTest(int diskIndex) => SelfTest;
+            public Task<LDI12.Core.Disks.SurfaceScan?> ScanDiskSurfaceAsync(int diskIndex, bool full, IProgress<(double Fraction, LDI12.Core.Disks.SurfaceScan Partial)>? progress, CancellationToken cancellationToken)
+            {
+                Calls.Add("surface " + diskIndex + " " + (full ? "complète" : "rapide"));
+                var scan = new LDI12.Core.Disks.SurfaceScan(10) { Full = full, DiskBytes = 1000 };
+                scan.Add(0.5, 700, false, 500);
+                progress?.Report((1, scan));
+                return Task.FromResult<LDI12.Core.Disks.SurfaceScan?>(scan);
+            }
+
             public HashSet<string> PackagesInUse { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             public ControlResult DeleteDriverPackage(string publishedName)
             {

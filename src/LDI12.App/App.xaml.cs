@@ -136,6 +136,7 @@ namespace LDI12.App
             _programsDemo = ReadArgument(e.Args, "--programs-demo");
             _driversDemo = Array.IndexOf(e.Args, "--drivers-demo") >= 0;
             _lanDemo = ReadArgument(e.Args, "--lan-demo");
+            _disksDemo = Array.IndexOf(e.Args, "--disks-demo") >= 0;
 
             if (_screenshotPath != null)
             {
@@ -318,6 +319,9 @@ namespace LDI12.App
         /// <summary>Montrer le réseau local sur un exemple (<c>--lan-demo devices|connections|traffic</c>).</summary>
         private string? _lanDemo;
 
+        /// <summary>Montrer les disques sur un exemple (<c>--disks-demo</c>).</summary>
+        private bool _disksDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -411,6 +415,7 @@ namespace LDI12.App
             if (_programsDemo != null) _shell.Programs.ShowDemo(_programsDemo);
             if (_driversDemo) _shell.DriverStore.ShowDemo();
             if (_lanDemo != null) _shell.Lan.ShowDemo(_lanDemo);
+            if (_disksDemo) _shell.Disks.ShowDemo();
 
             if (_diskScanPath != null)
             {

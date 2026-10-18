@@ -34,20 +34,21 @@ $screens = @(
     @{ Nav = 12; Name = 'donnees-transfert'; Scroll = @(); Mode = 'transfert' },
     @{ Nav = 12; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
     @{ Nav = 13; Name = 'outils';        Scroll = @() },
-    @{ Nav = 14; Name = 'plantages';     Scroll = @(700); Demo = 'crash' },
-    @{ Nav = 15; Name = 'programmes';    Scroll = @(); Demo = 'processes' },
-    @{ Nav = 15; Name = 'programmes-demarrage'; Scroll = @(); Demo = 'autoruns' },
-    @{ Nav = 16; Name = 'magasin-pilotes'; Scroll = @(); Demo = 'drivers' },
-    @{ Nav = 17; Name = 'reseau-local';  Scroll = @(); Demo = 'lan-devices' },
-    @{ Nav = 17; Name = 'reseau-local-connexions'; Scroll = @(); Demo = 'lan-connections' },
-    @{ Nav = 17; Name = 'reseau-local-trafic'; Scroll = @(); Demo = 'lan-traffic' },
-    @{ Nav = 18; Name = 'surveillance';  Scroll = @() },
-    @{ Nav = 19; Name = 'mesures';       Scroll = @() },
+    @{ Nav = 14; Name = 'disques';       Scroll = @(700, 1400); Demo = 'disks' },
+    @{ Nav = 15; Name = 'plantages';     Scroll = @(700); Demo = 'crash' },
+    @{ Nav = 16; Name = 'programmes';    Scroll = @(); Demo = 'processes' },
+    @{ Nav = 16; Name = 'programmes-demarrage'; Scroll = @(); Demo = 'autoruns' },
+    @{ Nav = 17; Name = 'magasin-pilotes'; Scroll = @(); Demo = 'drivers' },
+    @{ Nav = 18; Name = 'reseau-local';  Scroll = @(); Demo = 'lan-devices' },
+    @{ Nav = 18; Name = 'reseau-local-connexions'; Scroll = @(); Demo = 'lan-connections' },
+    @{ Nav = 18; Name = 'reseau-local-trafic'; Scroll = @(); Demo = 'lan-traffic' },
+    @{ Nav = 19; Name = 'surveillance';  Scroll = @() },
+    @{ Nav = 20; Name = 'mesures';       Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
-    @{ Nav = 20; Name = 'rapports';      Scroll = @() },
-    @{ Nav = 21; Name = 'historique';    Scroll = @() },
-    @{ Nav = 22; Name = 'reglages';      Scroll = @() },
-    @{ Nav = 23; Name = 'a-propos';      Scroll = @() }
+    @{ Nav = 21; Name = 'rapports';      Scroll = @() },
+    @{ Nav = 22; Name = 'historique';    Scroll = @() },
+    @{ Nav = 23; Name = 'reglages';      Scroll = @() },
+    @{ Nav = 24; Name = 'a-propos';      Scroll = @() }
 )
 
 function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant, [string]$demo) {
@@ -60,6 +61,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
     if ($demo -eq 'crash') { $arguments += @('--crash-demo') }
     if ($demo -eq 'processes' -or $demo -eq 'autoruns') { $arguments += @('--programs-demo', $demo) }
     if ($demo -eq 'drivers') { $arguments += @('--drivers-demo') }
+    if ($demo -eq 'disks') { $arguments += @('--disks-demo') }
     if ($demo -like 'lan-*') { $arguments += @('--lan-demo', $demo.Substring(4)) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 

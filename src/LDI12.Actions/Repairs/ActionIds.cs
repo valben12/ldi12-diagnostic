@@ -134,6 +134,15 @@
         /// <summary>Capturer le trafic réseau quelques secondes (écran Réseau local).</summary>
         public const string TrafficCapture = "TRAFFIC-CAPTURE";
 
+        /// <summary>Lancer ou relire l'autotest SMART d'un disque (écran Disques).</summary>
+        public const string DiskSelfTest = "DISK-SELF-TEST";
+
+        /// <summary>Lire la surface d'un disque en chronométrant chaque bloc (écran Disques).</summary>
+        public const string DiskSurfaceTest = "DISK-SURFACE-TEST";
+
+        /// <summary>Optimiser un volume : TRIM pour un SSD, défragmentation pour un disque dur.</summary>
+        public const string DiskOptimize = "DISK-OPTIMIZE";
+
         /// <summary>
         /// Les opérations qui appartiennent à un écran dédié : elles n'ont de sens qu'avec ce qu'il
         /// montre, et ne figurent pas dans la liste des Réparations.
@@ -148,6 +157,9 @@
                 ProcessEndAdmin,
                 DriverPackagesDelete,
                 TrafficCapture,
+                DiskSelfTest,
+                DiskSurfaceTest,
+                DiskOptimize,
             };
 
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>

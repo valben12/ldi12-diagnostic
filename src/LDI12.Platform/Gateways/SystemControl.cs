@@ -243,6 +243,37 @@ namespace LDI12.Platform.Gateways
             }
         }
 
+        public ControlResult StartDiskSelfTest(int diskIndex, bool extended)
+            => Guard(() =>
+            {
+                var error = DiskTestNative.StartSelfTest(diskIndex, extended);
+                return Log("Autotest " + (extended ? "long" : "court") + " du disque " + diskIndex, error == 0
+                    ? ControlResult.Ok("Autotest lancé : le disque le mène seul, même si l'écran est fermé.")
+                    : ControlResult.Fail(error == 5 ? "Refusé : privilèges administrateur nécessaires." : "Le disque a refusé la commande : " + new Win32Exception(error).Message, error));
+            });
+
+        public LDI12.Core.Disks.SelfTestState? ReadDiskSelfTest(int diskIndex)
+        {
+            try { return DiskTestNative.ReadSelfTest(diskIndex); }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException) { return null; }
+        }
+
+        public async Task<LDI12.Core.Disks.SurfaceScan?> ScanDiskSurfaceAsync(
+            int diskIndex, bool full, IProgress<(double Fraction, LDI12.Core.Disks.SurfaceScan Partial)>? progress, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var scan = await Task.Run(() => DiskTestNative.ScanSurface(diskIndex, full, (fraction, partial) => progress?.Report((fraction, partial)), cancellationToken), cancellationToken).ConfigureAwait(false);
+                _logger.Info(Category, "Surface du disque " + diskIndex + " : " + scan.Verdict());
+                return scan;
+            }
+            catch (Exception ex) when (ex is Win32Exception || ex is IOException || ex is UnauthorizedAccessException)
+            {
+                _logger.Warn(Category, "Test de surface impossible sur le disque " + diskIndex, ex);
+                return null;
+            }
+        }
+
         private RegistryView NativeView()
             => _platform.Profile.NativeArchitecture == ProcessorArchitecture.X64 || Environment.Is64BitOperatingSystem
                 ? RegistryView.Registry64

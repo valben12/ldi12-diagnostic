@@ -70,6 +70,9 @@ namespace LDI12.Actions
                 () => new ProcessEndAction(elevated: true),
                 () => new DriverPackagesDeleteAction(),
                 () => new TrafficCaptureAction(),
+                () => new DiskSelfTestAction(),
+                () => new DiskSurfaceTestAction(),
+                () => new DiskOptimizeAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

@@ -251,6 +251,9 @@ namespace LDI12.App.ViewModels
         }
 
         public bool HasEntries => Entries.Count > 0;
+
+        /// <summary>Aucune archive : l'écran montre ce qui apparaîtra, au lieu d'un grand vide.</summary>
+        public bool IsEmpty => Entries.Count == 0;
         public bool CanArchive => _current != null;
 
         // ---------- résultat de la comparaison
@@ -314,6 +317,7 @@ namespace LDI12.App.ViewModels
                   (unreadable > 0 ? ", dont " + unreadable + " illisible(s)." : ".");
 
             Raise(nameof(HasEntries));
+            Raise(nameof(IsEmpty));
             RaiseStates();
         }
 
@@ -340,6 +344,8 @@ namespace LDI12.App.ViewModels
             get
             {
                 if (_current == null) return "Lancez une analyse : la comparaison se fait entre une archive et le diagnostic affiché.";
+                // Sans archive, l'état vide dit déjà quoi faire : pas de renvoi vers une liste absente.
+                if (Entries.Count == 0) return string.Empty;
                 if (_selected == null) return "Choisissez un diagnostic archivé dans la liste pour le comparer à celui affiché.";
                 if (!_selected.Readable) return "Ce fichier n'est pas lisible : il ne peut pas servir de point de comparaison.";
                 if (_selected.Entry.SnapshotId == _current.Metadata.SnapshotId)

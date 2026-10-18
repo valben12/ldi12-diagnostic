@@ -70,6 +70,25 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== Avant la première archive ===== -->
+            <Grid Margin="0,14,0,0" MinHeight="190"
+                  Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                <Rectangle RadiusX="14" RadiusY="14" StrokeThickness="1.2" StrokeDashArray="4 4"
+                           Stroke="{DynamicResource Brush.BorderStrong}" />
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                    <Border Width="44" Height="44" CornerRadius="22" HorizontalAlignment="Center"
+                            Background="{DynamicResource Brush.SurfaceHover}">
+                        <Path Style="{StaticResource Icon}" Width="20" Height="20" Data="{StaticResource Icon.History}"
+                              Stroke="{DynamicResource Brush.TextTertiary}" />
+                    </Border>
+                    <TextBlock Text="Aucun diagnostic archivé" Style="{StaticResource Text.Emphasis}"
+                               HorizontalAlignment="Center" Margin="0,12,0,0" />
+                    <TextBlock Style="{StaticResource Text.Muted}" HorizontalAlignment="Center" TextAlignment="Center"
+                               MaxWidth="520" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Archivez le diagnostic avant d'intervenir : après, la comparaison montrera ce qui a été réglé." />
+                </StackPanel>
+            </Grid>
+
             <!-- ===== Diagnostics archivés ===== -->
             <TextBlock Text="DIAGNOSTICS ARCHIVÉS" Style="{StaticResource Text.Eyebrow}" Margin="2,24,0,10"
                        Visibility="{Binding HasEntries, Converter={StaticResource BoolToVisibility}}" />

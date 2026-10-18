@@ -191,14 +191,15 @@ namespace LDI12.App.ViewModels
 
                 var letter = volume.DriveLetter.Value;
                 var system = volume.IsSystemVolume.Or(false);
-                var label = volume.Label.HasValue && !string.IsNullOrWhiteSpace(volume.Label.Value)
-                    ? " (" + volume.Label.Value + ")"
-                    : string.Empty;
+                // « C: · Windows », comme sur l'écran Données ; un volume nommé « Windows » ne le dit qu'une fois.
+                var name = volume.Label.HasValue && !string.IsNullOrWhiteSpace(volume.Label.Value) ? volume.Label.Value.Trim() : null;
+                var label = name != null ? " · " + name : string.Empty;
+                if (system && !string.Equals(name, "Windows", StringComparison.OrdinalIgnoreCase)) label += " · Windows";
 
                 Volumes.Add(new VolumeChoice
                 {
                     Root = letter.EndsWith("\\", StringComparison.Ordinal) ? letter : letter + "\\",
-                    Display = letter + label + (system ? " (Windows)" : string.Empty),
+                    Display = letter + label,
                     IsSystem = system,
                     Media = Media(snapshot, volume),
                 });

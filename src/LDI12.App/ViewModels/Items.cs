@@ -129,12 +129,19 @@ namespace LDI12.App.ViewModels
             EffortLabel = Labels.Describe(recommendation.Effort);
             RequiresHardware = recommendation.RequiresHardwarePurchase;
             Link = ActionLink.For(recommendation.LinkedAction);
+            SolveCommand = new LDI12.App.Mvvm.RelayCommand(
+                () => ActionNavigator.Solve?.Invoke(recommendation.Title, recommendation.Rationale));
         }
 
         /// <summary>Le bouton qui mène à l'opération recommandée, quand le logiciel la porte.</summary>
         public ActionLink? Link { get; }
 
         public bool HasLink => Link != null;
+
+        /// <summary>Sans opération toute prête, l'assistant prend la recommandation et propose le plan.</summary>
+        public System.Windows.Input.ICommand SolveCommand { get; }
+
+        public bool CanSolve => Link == null;
 
         public string Rank { get; }
         public string Title { get; }

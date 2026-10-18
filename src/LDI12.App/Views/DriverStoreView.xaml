@@ -56,9 +56,13 @@
 
         <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8,8,6,8">
             <Grid>
-                <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Height="4" VerticalAlignment="Top" Margin="6,2,6,0"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Height="4" Margin="6,2,6,8"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
-                <ListBox ItemsSource="{Binding View}" Background="Transparent" BorderThickness="0" Padding="0"
+                <ListBox Grid.Row="1" ItemsSource="{Binding View}" Background="Transparent" BorderThickness="0" Padding="0"
                          ItemContainerStyle="{StaticResource PackageItem}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">

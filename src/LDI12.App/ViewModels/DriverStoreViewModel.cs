@@ -252,6 +252,9 @@ namespace LDI12.App.ViewModels
         public void ShowDemo()
         {
             _demo = _loaded = true;
+            // Une vraie lecture peut être en cours : l'exemple la remplace, sans son état d'attente.
+            IsBusy = false;
+            Status = string.Empty;
             DriverPackage P(int oem, string original, string provider, string @class, string version, int year, int month, long size, string? device, params string[] usedBy)
                 => new DriverPackage
                 {

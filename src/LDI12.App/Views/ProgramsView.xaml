@@ -83,8 +83,14 @@
                     <RadioButton GroupName="ProgramsTab" Style="{StaticResource Segment}" Content="Au démarrage" IsChecked="{Binding IsAutorunsTab}" />
                 </StackPanel>
             </Border>
-            <TextBox DockPanel.Dock="Right" Style="{StaticResource Field}" Width="260" Tag="Rechercher un nom, un éditeur, un chemin"
+            <TextBox DockPanel.Dock="Right" Style="{StaticResource Field}" Width="230" Tag="Rechercher un nom, un éditeur, un chemin"
                      Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" />
+            <!-- Les réglages de la liste de démarrage tiennent ici : la barre des catégories garde toute la largeur de la carte. -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0"
+                        Visibility="{Binding IsAutorunsTab, Converter={StaticResource BoolToVisibility}}">
+                <CheckBox Style="{StaticResource Switch}" Content="Masquer Microsoft" IsChecked="{Binding HideMicrosoft}" VerticalAlignment="Center" />
+                <Button Style="{StaticResource Button.Ghost}" Content="Relire" Command="{Binding RefreshAutorunsCommand}" Margin="12,0,0,0" />
+            </StackPanel>
             <Grid />
         </DockPanel>
 
@@ -194,10 +200,6 @@
                 Visibility="{Binding IsAutorunsTab, Converter={StaticResource BoolToVisibility}}">
             <DockPanel>
                 <DockPanel DockPanel.Dock="Top" Margin="4,0,8,10">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox Style="{StaticResource Switch}" Content="Masquer Microsoft" IsChecked="{Binding HideMicrosoft}" VerticalAlignment="Center" />
-                        <Button Style="{StaticResource Button.Ghost}" Content="Relire" Command="{Binding RefreshAutorunsCommand}" Margin="12,0,0,0" />
-                    </StackPanel>
                     <Border Style="{StaticResource SegmentRail}" HorizontalAlignment="Left">
                         <WrapPanel>
                             <RadioButton GroupName="AutorunCategory" Style="{StaticResource Segment}" Content="{Binding AllLabel}" IsChecked="{Binding IsAllCategory}" />

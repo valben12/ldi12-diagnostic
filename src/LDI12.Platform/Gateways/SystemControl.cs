@@ -113,6 +113,7 @@ namespace LDI12.Platform.Gateways
         public ControlResult ClearFolder(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return ControlResult.Ok("Dossier absent : rien à vider.");
+            if (IsProtectedFolder(path)) return Log("Vidage refusé de " + path, ControlResult.Fail("Ce dossier ne se vide jamais : il porte Windows, les programmes ou les comptes."));
 
             int removed = 0, locked = 0;
             long bytes = 0;
@@ -141,6 +142,37 @@ namespace LDI12.Platform.Gateways
             var message = removed + " fichier(s) retiré(s), " + Core.Diagnostics.ValueFormat.Bytes(bytes)
                           + (locked > 0 ? " ; " + locked + " élément(s) encore utilisé(s), laissé(s) en place" : string.Empty) + ".";
             return Log("Vidage de " + path, ControlResult.Ok(message));
+        }
+
+        /// <summary>
+        /// Les dossiers qu'aucun nettoyage ne vide, quel que soit l'appelant : la racine d'un disque,
+        /// Windows et System32, les programmes, les profils. Une défense en profondeur : les
+        /// opérations ne visent que des caches précis, mais une erreur de chemin ne doit rien coûter.
+        /// </summary>
+        internal static bool IsProtectedFolder(string path)
+        {
+            string full;
+            try { full = Path.GetFullPath(path).TrimEnd('\\', '/'); }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException) { return true; }
+
+            var root = Path.GetPathRoot(full)?.TrimEnd('\\', '/');
+            if (string.IsNullOrEmpty(root) || string.Equals(full, root, StringComparison.OrdinalIgnoreCase)) return true;
+
+            var users = Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            foreach (var folder in new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                users,
+            })
+            {
+                if (!string.IsNullOrEmpty(folder) && string.Equals(full, folder!.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         public ControlResult SetRegistryDword(RegistryHive hive, string subKey, string name, int value)

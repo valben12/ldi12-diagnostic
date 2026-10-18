@@ -141,6 +141,7 @@ namespace LDI12.App.ViewModels
         private CancellationTokenSource? _scanning;
         private WriteableBitmap? _map;
         private bool _fullScan, _isScanning, _isBusy, _demo;
+        private int _scanningIndex = -1;
         private double _scanProgress;
         private string _status = string.Empty, _scanText = string.Empty, _selfTestText = string.Empty, _optimizeText = string.Empty;
 
@@ -205,6 +206,8 @@ namespace LDI12.App.ViewModels
 
         private void ShowDisk()
         {
+            // Une lecture de surface appartient au disque qu'elle lit : changer de disque l'arrête.
+            if (_isScanning && _selected?.Disk.Index != _scanningIndex) _scanning?.Cancel();
             var disk = _selected?.Disk;
             Attributes.Clear();
             Metrics.Clear();
@@ -244,7 +247,7 @@ namespace LDI12.App.ViewModels
                 : IsSolid(disk) ? "SSD : Windows lance un TRIM, qui lui rend sa vitesse d'écriture. Un SSD ne se défragmente jamais."
                 : "Disque dur : Windows défragmente les fichiers et regroupe l'espace libre.";
 
-            ResetScan();
+            if (!_isScanning || _selected?.Disk.Index != _scanningIndex) ResetScan();
             foreach (var name in new[] { nameof(HealthTitle), nameof(HealthTone), nameof(HasAttributes), nameof(CanSelfTest), nameof(SelfTestRunning), nameof(SelfTestResult), nameof(HasVolumes) }) Raise(name);
             ShortTestCommand.RaiseCanExecuteChanged();
             LongTestCommand.RaiseCanExecuteChanged();
@@ -301,6 +304,7 @@ namespace LDI12.App.ViewModels
                     [DiskSelfTestAction.ModeParameter] = mode,
                 }, null, CancellationToken.None).ConfigureAwait(true);
 
+                if (_selected?.Disk.Index != disk.Index) return; // un autre disque est affiché entre-temps
                 _selfTest = outcome.Succeeded && outcome.RawOutput != null ? JsonConvert.DeserializeObject<SelfTestState>(outcome.RawOutput) : null;
                 SelfTestLog.Clear();
                 if (_selfTest != null) foreach (var entry in _selfTest.Log) SelfTestLog.Add(new SelfTestRow(entry));
@@ -354,12 +358,14 @@ namespace LDI12.App.ViewModels
         {
             var disk = _selected?.Disk;
             if (disk == null) return;
-            IsScanning = true;
             ResetScan();
+            _scanningIndex = disk.Index;
+            IsScanning = true;
             Raise(nameof(HasScan));
             var cancellation = _scanning = new CancellationTokenSource();
             var progress = new Progress<ActionProgress>(p =>
             {
+                if (_selected?.Disk.Index != disk.Index) return;
                 ScanProgress = p.Fraction ?? 0;
                 ScanText = p.Text + (p.Elapsed.HasValue ? " · " + (int)p.Elapsed.Value.TotalMinutes + " min " + p.Elapsed.Value.Seconds + " s" : string.Empty);
                 if (p.Detail != null && p.Detail.StartsWith(DiskSurfaceTestAction.MapPrefix, StringComparison.Ordinal))
@@ -378,8 +384,9 @@ namespace LDI12.App.ViewModels
                 }, progress, cancellation.Token).ConfigureAwait(true);
 
                 var scan = outcome.RawOutput != null ? JsonConvert.DeserializeObject<SurfaceScan>(outcome.RawOutput) : null;
-                if (scan != null) ShowScan(scan);
-                else ScanText = outcome.Summary;
+                var current = _selected?.Disk.Index == disk.Index;
+                if (current && scan != null) ShowScan(scan);
+                else if (current) ScanText = outcome.Summary;
                 _logger.Info(Category, "Surface du disque " + disk.Index + " : " + outcome.Summary);
             }
             catch (JsonException ex)

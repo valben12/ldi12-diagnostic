@@ -202,7 +202,7 @@ namespace LDI12.App.ViewModels
             RunQuickScanCommand = new AsyncRelayCommand(() => RunAsync(RunMode.Quick), () => !IsScanning);
             CancelCommand = new RelayCommand(Cancel, () => IsScanning);
             ToggleThemeCommand = new RelayCommand(ToggleTheme);
-            OpenOverviewCommand = new RelayCommand(() => SelectedNavigation = Navigation[0]);
+            OpenOverviewCommand = new RelayCommand(() => SelectedNavigation = Navigation![0]);
 
             // Le barème est relu avant la première analyse : un seuil ajusté doit s'appliquer
             // dès l'analyse rapide du démarrage, sans quoi le premier score afficherait autre
@@ -215,7 +215,7 @@ namespace LDI12.App.ViewModels
                 _settings, logger, ApplyAdvancedSensors,
                 _diagnostics.DescribeCatalogue(),
                 selection => _ = RunAsync(RunMode.Custom, selection),
-                () => _repairs.GetRunnerAsync());
+                () => _repairs!.GetRunnerAsync());
             _actions = new ActionService(_diagnostics, logger);
             _reports = new ReportsViewModel(logger, _actions.Journal, new KlarviPublisher(logger));
             _repairs = new RepairsViewModel(_actions, logger);

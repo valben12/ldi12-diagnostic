@@ -224,7 +224,7 @@ namespace LDI12.App.ViewModels
 
                 var smart = disk.Smart;
                 if (smart.TemperatureCelsius.HasValue) Metrics.Add(new DiskMetric(smart.TemperatureCelsius.Value + " °C", "température"));
-                if (smart.PowerOnHours.HasValue) Metrics.Add(new DiskMetric(smart.PowerOnHours.Value.ToString("N0", Formats.French) + " h", "de fonctionnement (" + (smart.PowerOnHours.Value / 24 / 365.0).ToString("0.0", Formats.French) + " ans)"));
+                if (smart.PowerOnHours.HasValue) Metrics.Add(new DiskMetric(smart.PowerOnHours.Value.ToString("N0", Formats.French) + " h", "en service · " + (smart.PowerOnHours.Value / 24 / 365.0).ToString("0.0", Formats.French) + " ans"));
                 if (smart.PowerCycles.HasValue) Metrics.Add(new DiskMetric(smart.PowerCycles.Value.ToString("N0", Formats.French), "démarrages"));
                 if (smart.WearPercent.HasValue) Metrics.Add(new DiskMetric(smart.WearPercent.Value.ToString("0", Formats.French) + " %", "d'usure de la mémoire"));
                 if (smart.TotalBytesWritten.HasValue) Metrics.Add(new DiskMetric(ValueFormat.Bytes(smart.TotalBytesWritten.Value), "écrits depuis la mise en service"));
@@ -525,7 +525,7 @@ namespace LDI12.App.ViewModels
             var scan = new SurfaceScan(4000) { DiskBytes = 1_000_204_886_016L, BytesRead = 4_194_304_000L, Duration = TimeSpan.FromSeconds(84) };
             for (var index = 0; index < 4000; index++)
             {
-                var position = index / 4000.0;
+                var position = (index + 0.5) / 4000.0;
                 var latency = position > 0.62 && position < 0.64 ? 180 + random.Next(600) : 6 + random.Next(30) + (random.Next(60) == 0 ? 90 : 0);
                 scan.Add(position, latency, position > 0.631 && position < 0.6325, (long)(position * scan.DiskBytes));
             }

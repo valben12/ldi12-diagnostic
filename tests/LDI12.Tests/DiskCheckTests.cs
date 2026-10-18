@@ -110,6 +110,22 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Un_test_rapide_remplit_chaque_case_de_la_carte()
+        {
+            // Le calcul de la lecture rapide sur un disque de 1 To : 4 000 échantillons répartis.
+            const long Blocks = 953_869;
+            const int Total = 4000;
+            var scan = new SurfaceScan(4000);
+            for (var step = 0; step < Total; step++)
+            {
+                var block = step * Blocks / Total;
+                scan.Add((step + 0.5) / Total, 4, false, block);
+            }
+
+            Assert.DoesNotContain((byte)0, scan.Cells);
+        }
+
+        [Fact]
         public void Une_surface_sans_bloc_lent_est_saine()
         {
             var scan = new SurfaceScan(10);

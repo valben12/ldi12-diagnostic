@@ -116,7 +116,10 @@ namespace LDI12.Platform.Native
                          DiskIoNative.ReadFile(handle, buffer.Address, Block, out var read, IntPtr.Zero) && read > 0;
                 timer.Stop();
 
-                scan.Add((double)block / blocks, timer.Elapsed.TotalMilliseconds, !ok, offset);
+                // L'échantillon est placé au milieu de la zone qu'il représente : à sa frontière, un
+                // arrondi le ferait tomber dans la case précédente et laisserait la sienne vide.
+                var position = full ? (block + 0.5) / blocks : (step + 0.5) / total;
+                scan.Add(position, timer.Elapsed.TotalMilliseconds, !ok, offset);
                 if (ok) scan.BytesRead += Block;
 
                 if (reported.ElapsedMilliseconds >= 300)

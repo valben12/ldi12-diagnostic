@@ -131,6 +131,9 @@
         /// <summary>Retirer des paquets du magasin de pilotes (écran Magasin de pilotes).</summary>
         public const string DriverPackagesDelete = "DRIVER-PACKAGES-DELETE";
 
+        /// <summary>Capturer le trafic réseau quelques secondes (écran Réseau local).</summary>
+        public const string TrafficCapture = "TRAFFIC-CAPTURE";
+
         /// <summary>
         /// Les opérations qui appartiennent à un écran dédié : elles n'ont de sens qu'avec ce qu'il
         /// montre, et ne figurent pas dans la liste des Réparations.
@@ -144,6 +147,7 @@
                 ProcessEnd,
                 ProcessEndAdmin,
                 DriverPackagesDelete,
+                TrafficCapture,
             };
 
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>

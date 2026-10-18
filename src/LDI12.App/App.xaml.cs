@@ -135,6 +135,7 @@ namespace LDI12.App
             _crashDemo = Array.IndexOf(e.Args, "--crash-demo") >= 0;
             _programsDemo = ReadArgument(e.Args, "--programs-demo");
             _driversDemo = Array.IndexOf(e.Args, "--drivers-demo") >= 0;
+            _lanDemo = ReadArgument(e.Args, "--lan-demo");
 
             if (_screenshotPath != null)
             {
@@ -314,6 +315,9 @@ namespace LDI12.App
         /// <summary>Montrer le magasin de pilotes sur un exemple (<c>--drivers-demo</c>).</summary>
         private bool _driversDemo;
 
+        /// <summary>Montrer le réseau local sur un exemple (<c>--lan-demo devices|connections|traffic</c>).</summary>
+        private string? _lanDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -406,6 +410,7 @@ namespace LDI12.App
             if (_crashDemo) _shell.Crashes.ShowDemo();
             if (_programsDemo != null) _shell.Programs.ShowDemo(_programsDemo);
             if (_driversDemo) _shell.DriverStore.ShowDemo();
+            if (_lanDemo != null) _shell.Lan.ShowDemo(_lanDemo);
 
             if (_diskScanPath != null)
             {

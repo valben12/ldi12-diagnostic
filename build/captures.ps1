@@ -38,13 +38,16 @@ $screens = @(
     @{ Nav = 15; Name = 'programmes';    Scroll = @(); Demo = 'processes' },
     @{ Nav = 15; Name = 'programmes-demarrage'; Scroll = @(); Demo = 'autoruns' },
     @{ Nav = 16; Name = 'magasin-pilotes'; Scroll = @(); Demo = 'drivers' },
-    @{ Nav = 17; Name = 'surveillance';  Scroll = @() },
-    @{ Nav = 18; Name = 'mesures';       Scroll = @() },
+    @{ Nav = 17; Name = 'reseau-local';  Scroll = @(); Demo = 'lan-devices' },
+    @{ Nav = 17; Name = 'reseau-local-connexions'; Scroll = @(); Demo = 'lan-connections' },
+    @{ Nav = 17; Name = 'reseau-local-trafic'; Scroll = @(); Demo = 'lan-traffic' },
+    @{ Nav = 18; Name = 'surveillance';  Scroll = @() },
+    @{ Nav = 19; Name = 'mesures';       Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
-    @{ Nav = 19; Name = 'rapports';      Scroll = @() },
-    @{ Nav = 20; Name = 'historique';    Scroll = @() },
-    @{ Nav = 21; Name = 'reglages';      Scroll = @() },
-    @{ Nav = 22; Name = 'a-propos';      Scroll = @() }
+    @{ Nav = 20; Name = 'rapports';      Scroll = @() },
+    @{ Nav = 21; Name = 'historique';    Scroll = @() },
+    @{ Nav = 22; Name = 'reglages';      Scroll = @() },
+    @{ Nav = 23; Name = 'a-propos';      Scroll = @() }
 )
 
 function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant, [string]$demo) {
@@ -57,6 +60,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
     if ($demo -eq 'crash') { $arguments += @('--crash-demo') }
     if ($demo -eq 'processes' -or $demo -eq 'autoruns') { $arguments += @('--programs-demo', $demo) }
     if ($demo -eq 'drivers') { $arguments += @('--drivers-demo') }
+    if ($demo -like 'lan-*') { $arguments += @('--lan-demo', $demo.Substring(4)) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru

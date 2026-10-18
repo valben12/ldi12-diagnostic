@@ -228,6 +228,21 @@ namespace LDI12.Platform.Gateways
                 return Log("Paquet " + publishedName, ControlResult.Fail(reason, error));
             });
 
+        public async Task<LDI12.Core.Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var summary = await Task.Run(() => PacketCapture.Capture(localAddress, duration, pcapPath, cancellationToken), cancellationToken).ConfigureAwait(false);
+                _logger.Info(Category, "Capture de " + localAddress + " : " + summary.Packets + " paquets en " + summary.Duration.TotalSeconds.ToString("0") + " s.");
+                return summary;
+            }
+            catch (Exception ex) when (ex is System.Net.Sockets.SocketException || ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+            {
+                _logger.Warn(Category, "Capture impossible sur " + localAddress, ex);
+                return null;
+            }
+        }
+
         private RegistryView NativeView()
             => _platform.Profile.NativeArchitecture == ProcessorArchitecture.X64 || Environment.Is64BitOperatingSystem
                 ? RegistryView.Registry64

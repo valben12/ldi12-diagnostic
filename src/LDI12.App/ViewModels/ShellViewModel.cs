@@ -163,6 +163,7 @@ namespace LDI12.App.ViewModels
         private readonly CrashesViewModel _crashes;
         private readonly ProgramsViewModel _programs;
         private readonly DriverStoreViewModel _driverStore;
+        private readonly LanViewModel _lan;
         private readonly ToolsViewModel _tools;
         private readonly HistoryViewModel _history;
         private readonly MonitoringViewModel _monitoring;
@@ -222,6 +223,7 @@ namespace LDI12.App.ViewModels
             _crashes = new CrashesViewModel(_repairs, logger);
             _programs = new ProgramsViewModel(_repairs, logger);
             _driverStore = new DriverStoreViewModel(_repairs, logger);
+            _lan = new LanViewModel(_repairs, logger);
             _tools = new ToolsViewModel(logger, () => _repairs.GetRunnerAsync());
             _about = new AboutViewModel(logger);
 
@@ -288,6 +290,7 @@ namespace LDI12.App.ViewModels
                 new NavigationItem("Plantages", "Icon.MonitorX", _crashes) { StartsGroup = true },
                 new NavigationItem("Programmes", "Icon.Layers", _programs),
                 new NavigationItem("Magasin de pilotes", "Icon.Package", _driverStore),
+                new NavigationItem("Réseau local", "Icon.Network", _lan),
                 new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
                 new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
@@ -313,7 +316,7 @@ namespace LDI12.App.ViewModels
             var software = new NavigationGroup("Logiciel", false);
             Assign(diagnostic, "Matériel", "Stockage", "Windows", "Réseau", "Sécurité", "Performances");
             Assign(act, "Réparations", "Nettoyage", "Espace disque", "Données", "Outils");
-            Assign(deep, "Plantages", "Programmes", "Magasin de pilotes");
+            Assign(deep, "Plantages", "Programmes", "Magasin de pilotes", "Réseau local");
             Assign(measure, "Surveillance", "Mesures");
             Assign(report, "Rapports", "Historique");
             Assign(software, "Réglages", "À propos");
@@ -379,6 +382,9 @@ namespace LDI12.App.ViewModels
         /// <summary>Le magasin de pilotes, que les captures d'écran montrent sur un exemple.</summary>
         public DriverStoreViewModel DriverStore => _driverStore;
 
+        /// <summary>Le réseau local, que les captures d'écran montrent sur un exemple.</summary>
+        public LanViewModel Lan => _lan;
+
         /// <summary>La recherche universelle, Ctrl+K.</summary>
         public SearchViewModel Search { get; }
 
@@ -423,6 +429,12 @@ namespace LDI12.App.ViewModels
                 () => { _programs.IsAutorunsTab = true; Show(_programs); }, "autoruns demarrage startup msconfig taches planifiees services pilotes extensions lancement automatique"));
             entries.Add(new SearchEntry("Anciens pilotes du magasin", "Magasin de pilotes", "Les versions remplacées, ce qu'elles pèsent, les retirer",
                 () => Show(_driverStore), "driver store explorer rapr magasin pilotes driverstore filerepository oem inf anciennes versions nettoyer pnputil"));
+            entries.Add(new SearchEntry("Appareils du réseau", "Réseau local", "Chaque appareil branché : nom, fabricant, services, partages",
+                () => { _lan.IsDevicesTab = true; Show(_lan); }, "advanced ip scanner angry ip scan reseau appareils imprimante nas box mac fabricant partages wake on lan bureau a distance"));
+            entries.Add(new SearchEntry("Connexions de ce PC", "Réseau local", "Qui parle à qui, programme par programme",
+                () => { _lan.IsConnectionsTab = true; Show(_lan); }, "tcpview netstat connexions ports programme adresse distante"));
+            entries.Add(new SearchEntry("Écouter le trafic", "Réseau local", "Ce qui passe sur le fil, fichier pour Wireshark",
+                () => { _lan.IsTrafficTab = true; Show(_lan); }, "wireshark capture trafic paquets pcap dns bande passante lent"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 

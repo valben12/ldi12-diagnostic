@@ -164,6 +164,12 @@ namespace LDI12.Core.Execution
         /// </summary>
         ControlResult DeleteDriverPackage(string publishedName);
 
+        /// <summary>
+        /// Capture le trafic IPv4 de l'adresse donnée pendant la durée demandée, et l'écrit au
+        /// format pcap si un chemin est donné. Réservé aux administrateurs.
+        /// </summary>
+        Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken);
+
         /// <summary>Le mode d'alimentation actif, ou null s'il ne se lit pas.</summary>
         Guid? ActivePowerScheme();
 
@@ -221,6 +227,8 @@ namespace LDI12.Core.Execution
         public ControlResult SetTaskEnabled(string path, bool enabled) => No();
         public ControlResult EndProcess(int processId) => No();
         public ControlResult DeleteDriverPackage(string publishedName) => No();
+        public Task<Network.TrafficSummary?> CaptureTrafficAsync(string localAddress, TimeSpan duration, string? pcapPath, CancellationToken cancellationToken)
+            => Task.FromResult<Network.TrafficSummary?>(null);
         public Guid? ActivePowerScheme() => null;
         public bool PowerSchemeExists(Guid scheme) => false;
         public ControlResult ActivatePowerScheme(Guid scheme) => No();

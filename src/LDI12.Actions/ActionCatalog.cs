@@ -69,6 +69,7 @@ namespace LDI12.Actions
                 () => new ProcessEndAction(elevated: false),
                 () => new ProcessEndAction(elevated: true),
                 () => new DriverPackagesDeleteAction(),
+                () => new TrafficCaptureAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

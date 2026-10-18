@@ -159,7 +159,7 @@ namespace LDI12.App.ViewModels
         public ObservableCollection<SmartRow> Attributes { get; } = new ObservableCollection<SmartRow>();
         public ObservableCollection<DiskMetric> Metrics { get; } = new ObservableCollection<DiskMetric>();
         public ObservableCollection<string> HealthReasons { get; } = new ObservableCollection<string>();
-        public ObservableCollection<SelfTestRow> SelfTestLog { get; } = new ObservableCollection<SelfTestEntry>();
+        public ObservableCollection<SelfTestRow> SelfTestLog { get; } = new ObservableCollection<SelfTestRow>();
         public ObservableCollection<DiskVolumeRow> Volumes { get; } = new ObservableCollection<DiskVolumeRow>();
         public ObservableCollection<DiskMetric> Histogram { get; } = new ObservableCollection<DiskMetric>();
 

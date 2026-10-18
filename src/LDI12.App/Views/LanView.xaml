@@ -156,12 +156,9 @@
                                     <Path Style="{StaticResource Icon}" Width="17" Height="17" Data="{StaticResource Icon.Network}" Stroke="{DynamicResource Brush.TextSecondary}" />
                                 </Border>
                                 <StackPanel Grid.Column="1">
-                                    <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right" Text="{Binding LatencyText}" Style="{StaticResource Text.Muted}" Margin="12,0,0,0" />
-                                        <TextBlock Style="{StaticResource Text.Emphasis}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
-                                            <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding KindText, Mode=OneWay}" Foreground="{DynamicResource Brush.TextSecondary}" FontWeight="Normal" />
-                                        </TextBlock>
-                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Text.Emphasis}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
+                                        <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding KindText, Mode=OneWay}" Foreground="{DynamicResource Brush.TextSecondary}" FontWeight="Normal" />
+                                    </TextBlock>
                                     <TextBlock Text="{Binding AddressText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding HardwareText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding PortsText}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
@@ -194,7 +191,7 @@
                     <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Établies seulement" IsChecked="{Binding EstablishedOnly}" VerticalAlignment="Center" />
                     <TextBox DockPanel.Dock="Left" Style="{StaticResource Field}" Width="260" Tag="Rechercher un programme, une adresse"
                              Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,14,0" />
-                    <TextBlock Text="{Binding ConnectionSummary}" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding ConnectionSummary}" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 </DockPanel>
                 <Grid DockPanel.Dock="Top" Margin="12,0,14,4">
                     <Grid.ColumnDefinitions>

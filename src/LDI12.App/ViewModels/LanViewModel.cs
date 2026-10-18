@@ -52,7 +52,8 @@ namespace LDI12.App.ViewModels
         public string KindText => LanClassifier.Describe(Device.Kind) + (Device.Workgroup != null ? " · groupe " + Device.Workgroup : string.Empty);
         public string KindKey => Device.Kind.ToString();
 
-        public string AddressText => Device.Address + (Device.HostName != null && Device.NetBiosName != null && !Device.HostName.StartsWith(Device.NetBiosName, StringComparison.OrdinalIgnoreCase) ? " · " + Device.HostName : string.Empty);
+        public string AddressText => Device.Address + (Device.HostName != null && Device.NetBiosName != null && !Device.HostName.StartsWith(Device.NetBiosName, StringComparison.OrdinalIgnoreCase) ? " · " + Device.HostName : string.Empty)
+                                     + (Device.RoundTripMs.HasValue ? " · répond en " + Device.RoundTripMs.Value + " ms" : string.Empty);
 
         public string HardwareText => Device.Mac == null
             ? "adresse matérielle inconnue"
@@ -403,7 +404,7 @@ namespace LDI12.App.ViewModels
         private void Count()
         {
             var shown = Connections.Count(c => KeepConnection(c));
-            ConnectionSummary = shown + " connexion(s) affichée(s) · " + Connections.Count(c => c.IsEstablished) + " établie(s) · "
+            ConnectionSummary = shown + " affichée(s) · " + Connections.Count(c => c.IsEstablished) + " établie(s) · "
                                 + Connections.Select(c => c.Process).Distinct().Count() + " programme(s)";
         }
 

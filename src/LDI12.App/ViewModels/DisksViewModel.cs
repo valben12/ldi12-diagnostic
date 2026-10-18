@@ -345,7 +345,7 @@ namespace LDI12.App.ViewModels
             _scan = null;
             _map = null;
             Histogram.Clear();
-            ScanText = "Rapide : 2 400 échantillons répartis sur tout le disque, une à deux minutes. Complet : chaque bloc, plusieurs heures sur un grand disque dur.";
+            ScanText = "Rapide : 4 000 échantillons répartis sur tout le disque, une à deux minutes. Complet : chaque bloc, plusieurs heures sur un grand disque dur.";
             Raise(nameof(Map));
             Raise(nameof(HasScan));
         }
@@ -515,10 +515,10 @@ namespace LDI12.App.ViewModels
             foreach (var name in new[] { nameof(SelfTestRunning), nameof(SelfTestProgress), nameof(SelfTestResult), nameof(HasSelfTestLog) }) Raise(name);
 
             var random = new Random(12);
-            var scan = new SurfaceScan(4000) { DiskBytes = 1_000_204_886_016L, BytesRead = 2_516_582_400L, Duration = TimeSpan.FromSeconds(84) };
-            for (var index = 0; index < 2400; index++)
+            var scan = new SurfaceScan(4000) { DiskBytes = 1_000_204_886_016L, BytesRead = 4_194_304_000L, Duration = TimeSpan.FromSeconds(84) };
+            for (var index = 0; index < 4000; index++)
             {
-                var position = index / 2400.0;
+                var position = index / 4000.0;
                 var latency = position > 0.62 && position < 0.64 ? 180 + random.Next(600) : 6 + random.Next(30) + (random.Next(60) == 0 ? 90 : 0);
                 scan.Add(position, latency, position > 0.631 && position < 0.6325, (long)(position * scan.DiskBytes));
             }

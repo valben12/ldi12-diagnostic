@@ -7,7 +7,6 @@
         <Style x:Key="StatTile" TargetType="Border" BasedOn="{StaticResource Card}">
             <Setter Property="Padding" Value="18,14" />
             <Setter Property="Margin" Value="0,0,10,10" />
-            <Setter Property="MinWidth" Value="190" />
         </Style>
 
         <!-- La pastille d'état d'un attribut, d'un autotest : vert, orange ou rouge. -->
@@ -126,7 +125,7 @@
                 <ItemsControl ItemsSource="{Binding Metrics}" Margin="0,0,-10,4">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel />
+                            <UniformGrid Rows="1" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -134,7 +133,7 @@
                             <Border Style="{StaticResource StatTile}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Value}" Style="{StaticResource Text.Metric}" />
-                                    <TextBlock Text="{Binding Label}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" />
+                                    <TextBlock Text="{Binding Label}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

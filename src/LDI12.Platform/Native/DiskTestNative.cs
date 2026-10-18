@@ -87,7 +87,8 @@ namespace LDI12.Platform.Native
         public static SurfaceScan ScanSurface(int index, bool full, Action<double, SurfaceScan> progress, CancellationToken cancellationToken)
         {
             const int Block = 1024 * 1024;
-            const int Samples = 2400;
+            // Autant d'échantillons que de cases sur la carte : chaque zone du disque est lue une fois.
+            const int Samples = 4000;
             var scan = new SurfaceScan(4000) { Full = full };
             using var handle = Open(index, write: false, unbuffered: true);
             if (handle.IsInvalid) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());

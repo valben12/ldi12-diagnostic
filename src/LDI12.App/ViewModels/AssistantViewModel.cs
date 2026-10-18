@@ -119,7 +119,7 @@ namespace LDI12.App.ViewModels
         {
             Step = step;
             Number = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            KindText = step.IsAutomatic ? "LDI12 : " + (actionTitle ?? step.ActionId) : "À faire à la main";
+            KindText = step.IsAutomatic ? "Automatique · " + (actionTitle ?? step.ActionId) : "À faire à la main";
             RunCommand = new AsyncRelayCommand(() => run(this), () => IsAutomatic && _statusKey != "Running" && _statusKey != "Good");
         }
 

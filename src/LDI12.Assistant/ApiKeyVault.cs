@@ -77,6 +77,8 @@ namespace LDI12.Assistant
         /// <summary>La clé, ou null si aucune n'est rangée ou si le fichier ne se déchiffre pas ici.</summary>
         public string? Read()
         {
+            // Deux lectures séparées : un fichier portable abîmé ou venu d'un autre support ne doit
+            // pas empêcher de retrouver la clé rangée dans le profil.
             try
             {
                 if (File.Exists(_portablePath))
@@ -84,6 +86,13 @@ namespace LDI12.Assistant
                     var key = DecryptPortable(File.ReadAllBytes(_portablePath), _volumeIdentity(_portablePath));
                     if (key != null) return key;
                 }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is CryptographicException)
+            {
+            }
+
+            try
+            {
                 if (File.Exists(_profilePath))
                 {
                     var data = ProtectedData.Unprotect(File.ReadAllBytes(_profilePath), AppSecret, DataProtectionScope.CurrentUser);

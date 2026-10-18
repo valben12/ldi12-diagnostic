@@ -141,7 +141,7 @@ namespace LDI12.App.ViewModels
     /// L'écran Plantages : les écrans bleus lus dans leurs vidages, le pilote en cause, et une
     /// conclusion qui dit quoi faire ; puis les programmes qui plantent.
     /// </summary>
-    public sealed class CrashesViewModel : ObservableObject
+    public sealed class CrashesViewModel : ObservableObject, IScreenActivation
     {
         private const string Category = "Plantages";
         private const int Days = 60;
@@ -218,6 +218,12 @@ namespace LDI12.App.ViewModels
         /// À la première ouverture : les journaux tout de suite, les vidages aussi si aucune invite
         /// n'est nécessaire. Sinon, un bouton les propose, l'invite UAC venant de ce clic.
         /// </summary>
+        public void Activated() => _ = EnsureLoadedAsync();
+
+        public void Deactivated()
+        {
+        }
+
         public async Task EnsureLoadedAsync()
         {
             if (_loaded) return;

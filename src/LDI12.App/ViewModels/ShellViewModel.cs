@@ -161,6 +161,7 @@ namespace LDI12.App.ViewModels
         private readonly CleanupViewModel _cleanup;
         private readonly DiskUsageViewModel _diskUsage;
         private readonly CrashesViewModel _crashes;
+        private readonly ProgramsViewModel _programs;
         private readonly ToolsViewModel _tools;
         private readonly HistoryViewModel _history;
         private readonly MonitoringViewModel _monitoring;
@@ -218,6 +219,7 @@ namespace LDI12.App.ViewModels
             _cleanup = new CleanupViewModel(_actions, logger, () => _repairs.GetRunnerAsync());
             _diskUsage = new DiskUsageViewModel(logger);
             _crashes = new CrashesViewModel(_repairs, logger);
+            _programs = new ProgramsViewModel(_repairs, logger);
             _tools = new ToolsViewModel(logger, () => _repairs.GetRunnerAsync());
             _about = new AboutViewModel(logger);
 
@@ -282,6 +284,7 @@ namespace LDI12.App.ViewModels
                 new NavigationItem("Données", "Icon.Archive", _userData),
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
                 new NavigationItem("Plantages", "Icon.MonitorX", _crashes) { StartsGroup = true },
+                new NavigationItem("Programmes", "Icon.Layers", _programs),
                 new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
                 new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
@@ -307,7 +310,7 @@ namespace LDI12.App.ViewModels
             var software = new NavigationGroup("Logiciel", false);
             Assign(diagnostic, "Matériel", "Stockage", "Windows", "Réseau", "Sécurité", "Performances");
             Assign(act, "Réparations", "Nettoyage", "Espace disque", "Données", "Outils");
-            Assign(deep, "Plantages");
+            Assign(deep, "Plantages", "Programmes");
             Assign(measure, "Surveillance", "Mesures");
             Assign(report, "Rapports", "Historique");
             Assign(software, "Réglages", "À propos");
@@ -367,6 +370,9 @@ namespace LDI12.App.ViewModels
         /// <summary>Les plantages, que les captures d'écran montrent sur un historique d'exemple.</summary>
         public CrashesViewModel Crashes => _crashes;
 
+        /// <summary>Les programmes, que les captures d'écran montrent sur une liste d'exemple.</summary>
+        public ProgramsViewModel Programs => _programs;
+
         /// <summary>La recherche universelle, Ctrl+K.</summary>
         public SearchViewModel Search { get; }
 
@@ -405,6 +411,10 @@ namespace LDI12.App.ViewModels
                 () => Show(_assistant), "ia panne probleme cause depannage"));
             entries.Add(new SearchEntry("Écrans bleus et plantages", "Plantages", "Le pilote en cause, les programmes qui plantent",
                 () => Show(_crashes), "bsod ecran bleu bluescreen bluescreenview whocrashed minidump dump crash plantage pilote driver redemarrage arret brutal"));
+            entries.Add(new SearchEntry("Processus en cours", "Programmes", "Ce qui tourne, qui l'a signé, terminer un programme bloqué",
+                () => { _programs.IsProcessesTab = true; Show(_programs); }, "process explorer gestionnaire des taches processus tuer terminer bloque cpu memoire signature"));
+            entries.Add(new SearchEntry("Programmes au démarrage", "Programmes", "Tout ce qui se lance seul : session, tâches, services, pilotes",
+                () => { _programs.IsAutorunsTab = true; Show(_programs); }, "autoruns demarrage startup msconfig taches planifiees services pilotes extensions lancement automatique"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 
@@ -519,8 +529,9 @@ namespace LDI12.App.ViewModels
                 var previous = _selectedNavigation;
                 if (!Set(ref _selectedNavigation, value)) return;
                 CurrentContent = value?.Content;
-                // Les écrans qui lisent la machine à la demande le font à leur première ouverture.
-                if (ReferenceEquals(value?.Content, _crashes)) _ = _crashes.EnsureLoadedAsync();
+                // Les écrans qui lisent la machine à la demande ne travaillent que regardés.
+                (previous?.Content as IScreenActivation)?.Deactivated();
+                (value?.Content as IScreenActivation)?.Activated();
                 if (previous != null) previous.Group.HoldsCurrent = false;
                 if (value != null) value.Group.HoldsCurrent = true;
                 // Un écran ouvert par raccourci, recherche ou lien : sa catégorie s'ouvre, l'entrée active reste visible.

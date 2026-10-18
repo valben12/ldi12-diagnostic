@@ -133,6 +133,7 @@ namespace LDI12.App
             _diskScanPath = ReadArgument(e.Args, "--disk-scan");
             _assistantDemo = ReadArgument(e.Args, "--assistant-demo");
             _crashDemo = Array.IndexOf(e.Args, "--crash-demo") >= 0;
+            _programsDemo = ReadArgument(e.Args, "--programs-demo");
 
             if (_screenshotPath != null)
             {
@@ -306,6 +307,9 @@ namespace LDI12.App
         /// <summary>Montrer l'écran Plantages sur un historique d'exemple (<c>--crash-demo</c>).</summary>
         private bool _crashDemo;
 
+        /// <summary>Montrer l'écran Programmes sur une liste d'exemple (<c>--programs-demo processes|autoruns</c>).</summary>
+        private string? _programsDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -396,6 +400,7 @@ namespace LDI12.App
 
             if (_assistantDemo != null) _shell.Assistant.ShowDemo(_assistantDemo);
             if (_crashDemo) _shell.Crashes.ShowDemo();
+            if (_programsDemo != null) _shell.Programs.ShowDemo(_programsDemo);
 
             if (_diskScanPath != null)
             {

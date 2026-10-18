@@ -116,6 +116,18 @@
         /// <summary>Régler Windows pour qu'un écran bleu laisse un minividage.</summary>
         public const string CrashDumpsEnable = "CRASH-DUMPS-ENABLE";
 
+        /// <summary>Désactiver ou réactiver une entrée de démarrage (écran Programmes), sans privilèges.</summary>
+        public const string AutorunToggle = "AUTORUN-TOGGLE";
+
+        /// <summary>La même, pour ce qui demande d'être administrateur.</summary>
+        public const string AutorunToggleAdmin = "AUTORUN-TOGGLE-ADMIN";
+
+        /// <summary>Terminer un processus (écran Programmes), sans privilèges.</summary>
+        public const string ProcessEnd = "PROCESS-END";
+
+        /// <summary>Le même, pour un processus du système ou d'un autre compte.</summary>
+        public const string ProcessEndAdmin = "PROCESS-END-ADMIN";
+
         /// <summary>
         /// Les opérations qui appartiennent à un écran dédié : elles n'ont de sens qu'avec ce qu'il
         /// montre, et ne figurent pas dans la liste des Réparations.
@@ -124,6 +136,10 @@
             new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             {
                 CrashDumpsRead,
+                AutorunToggle,
+                AutorunToggleAdmin,
+                ProcessEnd,
+                ProcessEndAdmin,
             };
 
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>

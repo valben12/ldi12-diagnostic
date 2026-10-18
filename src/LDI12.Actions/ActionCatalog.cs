@@ -64,6 +64,10 @@ namespace LDI12.Actions
                 () => new AudioServicesRestartAction(),
                 () => new CrashDumpsReadAction(),
                 () => new CrashDumpsEnableAction(),
+                () => new AutorunToggleAction(elevated: false),
+                () => new AutorunToggleAction(elevated: true),
+                () => new ProcessEndAction(elevated: false),
+                () => new ProcessEndAction(elevated: true),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

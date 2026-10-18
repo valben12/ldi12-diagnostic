@@ -15,7 +15,7 @@ using Xunit;
 namespace LDI12.Tests
 {
     /// <summary>Les opérations natives : ce qu'elles vérifient avant d'agir, et ce qu'elles demandent à Windows.</summary>
-    public class NativeRepairTests
+    public partial class NativeRepairTests
     {
         private const string Wifi = @"PCI\VEN_10EC&DEV_C821&SUBSYS_C82110EC\4&2F0E3F0&0&00E1";
         private const string Disk = @"SCSI\DISK&VEN_NVME&PROD_SAMSUNG\5&1A2B3C&0&000000";
@@ -287,6 +287,12 @@ namespace LDI12.Tests
                 Binary.Add((hive, subKey, name, value));
                 return ControlResult.Ok("ok");
             }
+
+            public ControlResult SetRegistryString(RegistryHive hive, string subKey, string name, string value) { Calls.Add("string " + name); return ControlResult.Ok("ok"); }
+            public ControlResult DeleteRegistryValue(RegistryHive hive, string subKey, string name) { Calls.Add("delete " + name); return ControlResult.Ok("ok"); }
+            public ControlResult SetServiceStart(string name, int start) { Calls.Add("start-type " + name + " " + start); return ControlResult.Ok("ok"); }
+            public ControlResult SetTaskEnabled(string path, bool enabled) { Calls.Add("task " + path + " " + enabled); return ControlResult.Ok("ok"); }
+            public ControlResult EndProcess(int processId) { Calls.Add("end " + processId); return ControlResult.Ok("ok"); }
 
             public List<AudioOutputState> Audio { get; } = new List<AudioOutputState>();
             public IReadOnlyList<AudioOutputState> AudioEndpoints() => Audio;

@@ -149,6 +149,74 @@ namespace LDI12.Platform.Gateways
         public ControlResult SetRegistryBinary(RegistryHive hive, string subKey, string name, byte[] value)
             => WriteRegistry(hive, subKey, name, value, RegistryValueKind.Binary);
 
+        public ControlResult SetRegistryString(RegistryHive hive, string subKey, string name, string value)
+            => WriteRegistry(hive, subKey, name, value ?? string.Empty,
+                (value ?? string.Empty).IndexOf('%') >= 0 ? RegistryValueKind.ExpandString : RegistryValueKind.String);
+
+        public ControlResult DeleteRegistryValue(RegistryHive hive, string subKey, string name)
+        {
+            try
+            {
+                using var root = RegistryKey.OpenBaseKey(hive, NativeView());
+                using var key = root.OpenSubKey(subKey, writable: true);
+                key?.DeleteValue(name, throwOnMissingValue: false);
+                return Log("Registre " + subKey + "\\" + name + " supprimé", ControlResult.Ok("Valeur supprimée."));
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is System.Security.SecurityException || ex is IOException)
+            {
+                return Log("Registre " + subKey + "\\" + name, ControlResult.Fail("Suppression refusée : privilèges administrateur nécessaires."));
+            }
+        }
+
+        public ControlResult SetServiceStart(string name, int start)
+            => Guard(() =>
+            {
+                var error = ServiceNative.ChangeStart(name, start);
+                return Log("Démarrage du service " + name + " → " + start, error == 0
+                    ? ControlResult.Ok("Type de démarrage changé.")
+                    : ControlResult.Fail(error == 5 ? "Refusé : privilèges administrateur nécessaires." : "Windows a refusé : " + new Win32Exception(error).Message + ".", error));
+            });
+
+        public ControlResult SetTaskEnabled(string path, bool enabled)
+        {
+            var type = Type.GetTypeFromProgID("Schedule.Service");
+            if (type == null) return ControlResult.Fail("Le planificateur de tâches n'est pas disponible.");
+            object? service = null;
+            try
+            {
+                service = Activator.CreateInstance(type)!;
+                type.InvokeMember("Connect", System.Reflection.BindingFlags.InvokeMethod, null, service, Array.Empty<object>());
+                var root = type.InvokeMember("GetFolder", System.Reflection.BindingFlags.InvokeMethod, null, service, new object[] { "\\" })!;
+                var task = root.GetType().InvokeMember("GetTask", System.Reflection.BindingFlags.InvokeMethod, null, root, new object[] { path })!;
+                task.GetType().InvokeMember("Enabled", System.Reflection.BindingFlags.SetProperty, null, task, new object[] { enabled });
+                return Log("Tâche " + path + (enabled ? " activée" : " désactivée"), ControlResult.Ok(enabled ? "Tâche réactivée." : "Tâche désactivée."));
+            }
+            catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is UnauthorizedAccessException || ex.InnerException is System.Runtime.InteropServices.COMException)
+            {
+                return Log("Tâche " + path, ControlResult.Fail(ex.InnerException is UnauthorizedAccessException
+                    ? "Refusé : cette tâche appartient au système ou à un autre compte."
+                    : "Le planificateur a refusé : " + ex.InnerException!.Message));
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException || ex is UnauthorizedAccessException)
+            {
+                return Log("Tâche " + path, ControlResult.Fail("Le planificateur a refusé : " + ex.Message));
+            }
+            finally
+            {
+                if (service != null && System.Runtime.InteropServices.Marshal.IsComObject(service)) System.Runtime.InteropServices.Marshal.ReleaseComObject(service);
+            }
+        }
+
+        public ControlResult EndProcess(int processId)
+            => Guard(() => Log("Fin du processus " + processId, ProcessNative.Terminate(processId, out var reason)
+                ? ControlResult.Ok("Processus terminé.")
+                : ControlResult.Fail("Windows a refusé : " + reason + ".", reason != null && reason.StartsWith("accès refusé", StringComparison.Ordinal) ? 5 : 0)));
+
+        private RegistryView NativeView()
+            => _platform.Profile.NativeArchitecture == ProcessorArchitecture.X64 || Environment.Is64BitOperatingSystem
+                ? RegistryView.Registry64
+                : RegistryView.Registry32;
+
         public Guid? ActivePowerScheme()
         {
             try { return PowerSchemeNative.Active(); }

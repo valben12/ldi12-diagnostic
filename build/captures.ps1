@@ -35,13 +35,15 @@ $screens = @(
     @{ Nav = 12; Name = 'donnees-bilan';     Scroll = @(); Mode = 'bilan' },
     @{ Nav = 13; Name = 'outils';        Scroll = @() },
     @{ Nav = 14; Name = 'plantages';     Scroll = @(700); Demo = 'crash' },
-    @{ Nav = 15; Name = 'surveillance';  Scroll = @() },
-    @{ Nav = 16; Name = 'mesures';       Scroll = @() },
+    @{ Nav = 15; Name = 'programmes';    Scroll = @(); Demo = 'processes' },
+    @{ Nav = 15; Name = 'programmes-demarrage'; Scroll = @(); Demo = 'autoruns' },
+    @{ Nav = 16; Name = 'surveillance';  Scroll = @() },
+    @{ Nav = 17; Name = 'mesures';       Scroll = @() },
     @{ Nav = 0;  Name = 'recherche';     Scroll = @(); Search = 'reseau' },
-    @{ Nav = 17; Name = 'rapports';      Scroll = @() },
-    @{ Nav = 18; Name = 'historique';    Scroll = @() },
-    @{ Nav = 19; Name = 'reglages';      Scroll = @() },
-    @{ Nav = 20; Name = 'a-propos';      Scroll = @() }
+    @{ Nav = 18; Name = 'rapports';      Scroll = @() },
+    @{ Nav = 19; Name = 'historique';    Scroll = @() },
+    @{ Nav = 20; Name = 'reglages';      Scroll = @() },
+    @{ Nav = 21; Name = 'a-propos';      Scroll = @() }
 )
 
 function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string]$mode, [string]$search, [string]$disk, [string]$assistant, [string]$demo) {
@@ -52,6 +54,7 @@ function Capture([string]$theme, [int]$nav, [string]$name, [int]$scroll, [string
     if ($disk) { $arguments += @('--disk-scan', ('"{0}"' -f $disk)) }
     if ($assistant) { $arguments += @('--assistant-demo', $assistant) }
     if ($demo -eq 'crash') { $arguments += @('--crash-demo') }
+    if ($demo -eq 'processes' -or $demo -eq 'autoruns') { $arguments += @('--programs-demo', $demo) }
     if ($scroll -gt 0) { $arguments += @('--scroll', $scroll) }
 
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru

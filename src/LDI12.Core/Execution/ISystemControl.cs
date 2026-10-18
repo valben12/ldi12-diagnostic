@@ -143,6 +143,21 @@ namespace LDI12.Core.Execution
 
         ControlResult SetRegistryBinary(RegistryHive hive, string subKey, string name, byte[] value);
 
+        /// <summary>Écrit une chaîne (extensible si elle contient une variable d'environnement).</summary>
+        ControlResult SetRegistryString(RegistryHive hive, string subKey, string name, string value);
+
+        /// <summary>Supprime une valeur ; réussit aussi si elle n'existait déjà plus.</summary>
+        ControlResult DeleteRegistryValue(RegistryHive hive, string subKey, string name);
+
+        /// <summary>Change le type de démarrage d'un service ou d'un pilote (0 à 4), par le gestionnaire de services.</summary>
+        ControlResult SetServiceStart(string name, int start);
+
+        /// <summary>Active ou désactive une tâche planifiée, désignée par son chemin complet.</summary>
+        ControlResult SetTaskEnabled(string path, bool enabled);
+
+        /// <summary>Met fin à un processus.</summary>
+        ControlResult EndProcess(int processId);
+
         /// <summary>Le mode d'alimentation actif, ou null s'il ne se lit pas.</summary>
         Guid? ActivePowerScheme();
 
@@ -194,6 +209,11 @@ namespace LDI12.Core.Execution
         public ControlResult ClearFolder(string path) => No();
         public ControlResult SetRegistryDword(RegistryHive hive, string subKey, string name, int value) => No();
         public ControlResult SetRegistryBinary(RegistryHive hive, string subKey, string name, byte[] value) => No();
+        public ControlResult SetRegistryString(RegistryHive hive, string subKey, string name, string value) => No();
+        public ControlResult DeleteRegistryValue(RegistryHive hive, string subKey, string name) => No();
+        public ControlResult SetServiceStart(string name, int start) => No();
+        public ControlResult SetTaskEnabled(string path, bool enabled) => No();
+        public ControlResult EndProcess(int processId) => No();
         public Guid? ActivePowerScheme() => null;
         public bool PowerSchemeExists(Guid scheme) => false;
         public ControlResult ActivatePowerScheme(Guid scheme) => No();

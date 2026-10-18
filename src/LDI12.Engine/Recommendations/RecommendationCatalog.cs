@@ -101,8 +101,8 @@ namespace LDI12.Engine.Recommendations
         static RecommendationCatalog()
         {
             Add(Rec.BackupNow, "Sauvegarder les données sans attendre",
-                "Le disque montre des signes de défaillance : une sauvegarde faite maintenant coûte quelques minutes, une récupération après panne coûte beaucoup plus.",
-                RecommendationPriority.Immediate, EffortLevel.Extended, ImpactLevel.High);
+                "Les données du client ne sont pas à l'abri : une sauvegarde faite maintenant coûte quelques minutes, une récupération après une panne ou une erreur coûte beaucoup plus, sans garantie.",
+                RecommendationPriority.Immediate, EffortLevel.Extended, ImpactLevel.High, action: "BACKUP-USER-DATA");
 
             Add(Rec.ReplaceDisk, "Remplacer le disque",
                 "Le disque annonce lui-même sa défaillance. Le remplacer avant la panne évite une perte de données et une immobilisation.",
@@ -155,15 +155,15 @@ namespace LDI12.Engine.Recommendations
 
             Add(Rec.InstallGpuDriver, "Installer le pilote de la carte graphique",
                 "L'affichage fonctionne en mode dégradé avec le pilote générique de Windows : résolutions limitées, animations saccadées, pas d'accélération.",
-                RecommendationPriority.High, EffortLevel.Minutes, ImpactLevel.High);
+                RecommendationPriority.High, EffortLevel.Minutes, ImpactLevel.High, action: "DRIVERS-WINDOWS-UPDATE");
 
             Add(Rec.UpdateGpuDriver, "Mettre à jour le pilote graphique",
                 "Le pilote installé est ancien : les mises à jour corrigent des blocages d'affichage et améliorent la compatibilité.",
-                RecommendationPriority.Normal, EffortLevel.Minutes, ImpactLevel.Moderate);
+                RecommendationPriority.Normal, EffortLevel.Minutes, ImpactLevel.Moderate, action: "DRIVERS-WINDOWS-UPDATE");
 
             Add(Rec.InstallMissingDrivers, "Installer les pilotes manquants",
                 "Certains matériels ne sont pas reconnus par Windows et restent donc inutilisables.",
-                RecommendationPriority.High, EffortLevel.Extended, ImpactLevel.High);
+                RecommendationPriority.High, EffortLevel.Extended, ImpactLevel.High, action: "DRIVERS-WINDOWS-UPDATE");
 
             Add(Rec.InspectDeviceError, "Examiner les périphériques en erreur",
                 "Un ou plusieurs matériels signalent une erreur : chacun a une cause distincte, à traiter individuellement.",
@@ -223,7 +223,7 @@ namespace LDI12.Engine.Recommendations
 
             Add(Rec.DisableFastStartup, "Désactiver le démarrage rapide",
                 "Avec cette option, « éteindre puis rallumer » ne redémarre pas réellement Windows, ce qui laisse persister des problèmes qu'un vrai redémarrage réglerait.",
-                RecommendationPriority.Optional, EffortLevel.Minutes, ImpactLevel.Low);
+                RecommendationPriority.Optional, EffortLevel.Minutes, ImpactLevel.Low, action: "FAST-STARTUP-OFF");
 
             Add(Rec.MigrateSupportedWindows, "Passer à une version de Windows encore suivie",
                 "Cette version ne reçoit plus de correctifs de sécurité : les failles découvertes depuis la fin du support ne seront jamais corrigées.",
@@ -241,7 +241,7 @@ namespace LDI12.Engine.Recommendations
             Add(Rec.RestorePowerPlan, "Rendre au processeur toute sa fréquence",
                 "Le plan d'alimentation retient la machine : rétablir le mode équilibré lui rend sa vitesse sans rien changer d'autre.",
                 RecommendationPriority.High, EffortLevel.Minutes, ImpactLevel.High,
-                action: "TOOL-POWER-OPTIONS");
+                action: "POWER-PLAN");
 
             Add(Rec.RestorePageFile, "Rétablir le fichier d'échange",
                 "Sans lui, les logiciels se ferment sans prévenir dès que la mémoire vive est pleine. Le laisser géré par Windows suffit.",
@@ -262,7 +262,7 @@ namespace LDI12.Engine.Recommendations
 
             Add(Rec.FixSystemClock, "Remettre l'horloge à l'heure et la maintenir",
                 "Une horloge fausse fait échouer toutes les connexions sécurisées à la fois, bloque les mises à jour et peut empêcher l'ouverture de session sur un domaine. Sur un poste fixe, penser à la pile de la carte mère.",
-                RecommendationPriority.High, EffortLevel.Minutes, ImpactLevel.High);
+                RecommendationPriority.High, EffortLevel.Minutes, ImpactLevel.High, action: "TIME-RESYNC");
 
             Add(Rec.SetNativeResolution, "Remettre l'écran à sa définition d'origine",
                 "Une dalle est nette à sa définition et à aucune autre : en dessous, elle étire chaque point sur plusieurs et le texte perd ses contours.",
@@ -278,7 +278,7 @@ namespace LDI12.Engine.Recommendations
 
             Add(Rec.UpdateNetworkDriver, "Mettre à jour le pilote de la carte réseau",
                 "Des données valides sont écartées faute d'être traitées à temps, ce qui relève du pilote plutôt que du câble.",
-                RecommendationPriority.Normal, EffortLevel.Minutes, ImpactLevel.Moderate);
+                RecommendationPriority.Normal, EffortLevel.Minutes, ImpactLevel.Moderate, action: "DRIVERS-WINDOWS-UPDATE");
 
             Add(Rec.ReviewProxySettings, "Vérifier la configuration du serveur mandataire",
                 "Un mandataire injoignable coupe le web sans couper le réseau, et Windows en garde deux configurations distinctes : celle de la session et celle de la machine.",

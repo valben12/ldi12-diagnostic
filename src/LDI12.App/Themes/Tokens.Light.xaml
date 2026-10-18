@@ -27,6 +27,11 @@
 
     <!-- Sur fond clair, la lumière vient toujours du haut elle aussi : la bordure est donc plus
          marquée en haut, pas plus claire. -->
+    <LinearGradientBrush x:Key="Brush.CardFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFFFFFFF" Offset="0" />
+        <GradientStop Color="#FFFAF9FB" Offset="1" />
+    </LinearGradientBrush>
+
     <LinearGradientBrush x:Key="Brush.CardEdge" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#2A100D14" Offset="0" />
         <GradientStop Color="#18100D14" Offset="0.42" />

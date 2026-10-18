@@ -6,13 +6,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Gauge}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Mesures" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Gauge}" Content="Mesures"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
                        TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
 
@@ -24,7 +19,7 @@
                     <TextBlock Text="CE QUE LA MESURE VA FAIRE" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Contrairement au reste du logiciel, cet écran ne se contente pas de regarder : il charge le processeur à fond et écrit un fichier sur le disque pour mesurer ce qu'il encaisse réellement. La machine répondra moins bien pendant ce temps, et c'est normal. Le chiffre qui compte est le temps d'un accès isolé : il sépare un disque mécanique d'une mémoire flash par un facteur cent." />
+                               Text="Charge réellement le processeur, la mémoire et le disque : la machine ralentit le temps de la mesure." />
 
                     <!-- Les volumes se choisissent à plat plutôt que dans une liste déroulante :
                          une machine en a deux ou trois, et ce qui est mesuré doit rester lisible

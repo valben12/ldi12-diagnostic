@@ -23,6 +23,8 @@ namespace LDI12.App.ViewModels
         private bool _hasFindings;
         private bool _hasModules;
         private bool _hasGroups;
+        private string _emptyTitle = "Pas encore analysé";
+        private bool _isClean;
         private string _emptyMessage = "Aucune analyse effectuée pour l'instant.";
 
         public SectionViewModel(string title, string iconKey, DiagnosticCategory category)
@@ -41,6 +43,11 @@ namespace LDI12.App.ViewModels
         public bool HasModules { get => _hasModules; private set => Set(ref _hasModules, value); }
         public bool HasGroups { get => _hasGroups; private set => Set(ref _hasGroups, value); }
         public string EmptyMessage { get => _emptyMessage; private set => Set(ref _emptyMessage, value); }
+
+        public string EmptyTitle { get => _emptyTitle; private set => Set(ref _emptyTitle, value); }
+
+        /// <summary>Domaine analysé et sans constat : la carte vide le dit en vert.</summary>
+        public bool IsClean { get => _isClean; private set => Set(ref _isClean, value); }
 
         public ObservableCollection<FindingItem> Findings { get; } = new ObservableCollection<FindingItem>();
         public ObservableCollection<ModuleItem> Modules { get; } = new ObservableCollection<ModuleItem>();
@@ -74,12 +81,14 @@ namespace LDI12.App.ViewModels
             HasGroups = Groups.Count > 0;
 
             Summary = Findings.Count == 0
-                ? "Aucun constat dans ce domaine : les contrôles évalués sont conformes."
+                ? "Aucun constat dans ce domaine."
                 : Findings.Count + " constat" + (Findings.Count > 1 ? "s" : "") + " dans ce domaine.";
 
+            EmptyTitle = HasModules ? "Rien à signaler" : "Pas encore analysé";
             EmptyMessage = HasModules
-                ? "Aucun constat dans ce domaine."
+                ? "Les contrôles évalués dans ce domaine sont conformes."
                 : "Aucun module de collecte n'a encore été exécuté pour ce domaine.";
+            IsClean = HasModules;
         }
     }
 }

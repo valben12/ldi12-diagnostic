@@ -356,7 +356,8 @@ namespace LDI12.ProbeHost
             private ActionContext CreateContext(Dictionary<string, string>? parameters)
                 => new ActionContext(
                     _services.Platform, _services.Processes, _services.Launcher, _services.Files,
-                    _services.Registry, _services.Restore, _logger, null, parameters, new DpapiSecretProtector());
+                    _services.Registry, _services.Restore, _logger, null, parameters, new DpapiSecretProtector(),
+                    _services.Control);
 
             private static ElevatedMessage Error(string message)
                 => new ElevatedMessage { Type = ElevatedMessage.TypeError, Message = message };

@@ -8,13 +8,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Wrench}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Réparations" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Wrench}" Content="Réparations"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
                        MaxWidth="1100" HorizontalAlignment="Left" />
 
@@ -24,7 +19,7 @@
                     <TextBlock Text="AVANT D'INTERVENIR" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Body}" Margin="0,7,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Un point de restauration permet à Windows de revenir à son état actuel. Il n'est demandé nulle part automatiquement : sur un vidage de cache DNS il ferait perdre plusieurs minutes pour rien, et une protection qu'on contourne à chaque fois finit par ne plus protéger." />
+                               Text="Permet de revenir en arrière. À créer avant une réparation importante." />
                     <TextBlock Text="{Binding RestoreStatus}" Style="{StaticResource Text.Muted}"
                                Margin="0,10,0,0" MaxWidth="980" HorizontalAlignment="Left" />
                     <Button Style="{StaticResource Button.Ghost}" Content="Créer un point de restauration"
@@ -34,13 +29,24 @@
             </Border>
 
             <!-- ===== Les actions ===== -->
-            <TextBlock Text="OPÉRATIONS DISPONIBLES" Style="{StaticResource Text.Eyebrow}" Margin="2,22,0,10" />
+            <TextBlock Text="{Binding RecommendedText}" Style="{StaticResource Text.Eyebrow}" Margin="2,22,0,10" />
 
             <ItemsControl ItemsSource="{Binding Items}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="0"
-                                local:Motion.Entrance="True">
+                        <!-- Désignée depuis la vue d'ensemble ou un constat : encadrée, et amenée à l'écran. -->
+                        <Border Margin="0,0,0,10" Padding="0" local:Motion.Entrance="True"
+                                local:Reveal.When="{Binding IsHighlighted}">
+                            <Border.Style>
+                                <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -66,6 +72,21 @@
                                             <TextBlock Text="{Binding CategoryLabel}" Style="{StaticResource Text.Muted}"
                                                        Margin="10,0,0,0" />
                                         </StackPanel>
+                                    </Grid>
+
+                                    <!-- Recommandée par le diagnostic de cette machine : on dit pourquoi. -->
+                                    <Grid Margin="0,8,0,0" Visibility="{Binding IsRecommended, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Background="{DynamicResource Brush.BrandRedSoft}" CornerRadius="{DynamicResource Radius.Badge}"
+                                                Padding="8,2" VerticalAlignment="Top">
+                                            <TextBlock Text="Recommandé par le diagnostic" Style="{StaticResource Text.Muted}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Brush.BrandRed}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding RecommendationNote}" Style="{StaticResource Text.Muted}"
+                                                   Margin="10,2,0,0" TextWrapping="Wrap" />
                                     </Grid>
 
                                     <TextBlock Text="{Binding Purpose}" Style="{StaticResource Text.Body}"

@@ -15,6 +15,12 @@ namespace LDI12.Actions.Backup
 
         public string? Version { get; init; }
 
+        /// <summary>La date du pilote (« DriverVer »), quand elle est lisible.</summary>
+        public DateTime? Date { get; init; }
+
+        /// <summary>Le catalogue de signature déclaré : sert à reconnaître un même paquet sous deux noms.</summary>
+        public string? CatalogFile { get; init; }
+
         /// <summary>Le premier périphérique qu'il déclare : « NVIDIA GeForce RTX 3060 ».</summary>
         public string? Device { get; init; }
 
@@ -122,7 +128,8 @@ namespace LDI12.Actions.Backup
                 return value.Length == 0 ? null : value;
             }
 
-            string? deviceClass = null, provider = null, version = null, device = null;
+            string? deviceClass = null, provider = null, version = null, device = null, catalog = null;
+            DateTime? date = null;
             if (sections.TryGetValue("Version", out var versionLines))
                 foreach (var line in versionLines)
                 {
@@ -134,7 +141,15 @@ namespace LDI12.Actions.Backup
                     {
                         var comma = value.IndexOf(',');
                         version = comma >= 0 ? value.Substring(comma + 1).Trim() : null;
+                        // « mm/jj/aaaa », toujours dans cet ordre, quelle que soit la langue.
+                        if (DateTime.TryParseExact((comma >= 0 ? value.Substring(0, comma) : value).Trim(),
+                                new[] { "MM/dd/yyyy", "M/d/yyyy" }, System.Globalization.CultureInfo.InvariantCulture,
+                                System.Globalization.DateTimeStyles.None, out var parsed))
+                            date = parsed;
                     }
+                    else if (key.Equals("CatalogFile", StringComparison.OrdinalIgnoreCase) ||
+                             (catalog == null && key.StartsWith("CatalogFile.", StringComparison.OrdinalIgnoreCase)))
+                        catalog = Resolve(value);
                 }
 
             // [Manufacturer] : « %Fab% = Section, NTamd64 » ; le premier modèle de « Section.NTamd64 »
@@ -183,7 +198,7 @@ namespace LDI12.Actions.Backup
                     }
                 }
 
-            return new InfSummary { DeviceClass = deviceClass, Provider = provider, Version = version, Device = device, Buses = buses };
+            return new InfSummary { DeviceClass = deviceClass, Provider = provider, Version = version, Date = date, CatalogFile = catalog, Device = device, Buses = buses };
         }
 
         /// <summary>

@@ -26,6 +26,8 @@
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />
+    <!-- La corbeille de Windows, pour l'analyse du disque : fait partie du framework. -->
+    <Reference Include="Microsoft.VisualBasic" />
   </ItemGroup>
 
   <ItemGroup>
@@ -56,11 +58,15 @@
     <ProjectReference Include="..\LDI12.Reports\LDI12.Reports.csproj" />
     <ProjectReference Include="..\LDI12.Actions\LDI12.Actions.csproj" />
 
-    <!-- Seule référence réseau de la solution, et elle s'arrête ici : l'application connaît
+    <!-- Première référence réseau de la solution, et elle s'arrête ici : l'application connaît
          l'implémentation Klarvi pour la construire, le reste ne connaît que IReportPublisher. -->
     <ProjectReference Include="..\LDI12.Publishing.Klarvi\LDI12.Publishing.Klarvi.csproj" />
-    <!-- La vérification de mise à jour : le second et dernier projet qui parle HTTP. -->
+    <!-- La vérification de mise à jour : le second projet qui parle HTTP. -->
     <ProjectReference Include="..\LDI12.Updates\LDI12.Updates.csproj" />
+    <!-- L'assistant : le troisième et dernier, vers Claude, et seulement avec la clé du
+         technicien. Il lit le diagnostic, il ne touche à rien : les opérations de son plan
+         passent par les réparations, que l'application lui présente. -->
+    <ProjectReference Include="..\LDI12.Assistant\LDI12.Assistant.csproj" />
   </ItemGroup>
 
 </Project>

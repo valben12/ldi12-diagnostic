@@ -180,6 +180,40 @@ namespace LDI12.Tests
         }
 
         [Fact]
+        public void Seule_l_application_connait_l_assistant()
+        {
+            // Le troisième projet qui sort sur le réseau, vers Claude. Même règle que les deux
+            // autres : hors du cœur, la collecte, les actions et les rapports n'ont aucun chemin
+            // pour envoyer quoi que ce soit à un service d'IA.
+            var offenders = new List<string>();
+
+            foreach (var project in OfflineProjects)
+            {
+                var path = Path.Combine(SourceRoot(), project, project + ".csproj");
+                if (!File.Exists(path)) continue;
+
+                if (File.ReadAllText(path).IndexOf("LDI12.Assistant", StringComparison.OrdinalIgnoreCase) >= 0)
+                    offenders.Add(project);
+            }
+
+            Assert.True(offenders.Count == 0,
+                "L'assistant reste hors du cœur. Projets fautifs : " + string.Join(", ", offenders));
+        }
+
+        [Fact]
+        public void L_assistant_ne_connait_ni_les_actions_ni_la_plateforme()
+        {
+            // Claude propose, l'application exécute : l'assistant ne doit pas pouvoir lancer une
+            // opération ni toucher au système par lui-même.
+            var references = File.ReadAllLines(Path.Combine(SourceRoot(), "LDI12.Assistant", "LDI12.Assistant.csproj"))
+                .Where(line => line.Contains("<ProjectReference")).ToList();
+
+            Assert.NotEmpty(references);
+            Assert.All(references, line =>
+                Assert.True(line.Contains("LDI12.Core.csproj") || line.Contains("LDI12.Reports.csproj"), line));
+        }
+
+        [Fact]
         public void Seule_l_application_connait_l_implementation_de_publication()
         {
             var offenders = new List<string>();

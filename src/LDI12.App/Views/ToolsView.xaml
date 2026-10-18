@@ -7,16 +7,11 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Toolbox}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Outils" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Toolbox}" Content="Outils"
+                            local:Motion.Entrance="True" />
             <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,4" MaxWidth="1100"
                        HorizontalAlignment="Left"
-                       Text="Les consoles de Windows, ouvertes depuis le diagnostic. Elles s'exécutent telles quelles : LDI12 ne fait que les lancer, et consigne leur ouverture dans le journal d'intervention." />
+                       Text="Les consoles de Windows, à un clic. Chaque ouverture est notée au journal." />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,18"
                        MaxWidth="1100" HorizontalAlignment="Left" />
 
@@ -30,8 +25,18 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource ToolCard}" Padding="18,15" Margin="0,0,0,10"
-                                local:Motion.Entrance="True">
+                        <Border Padding="18,15" Margin="0,0,0,10" local:Motion.Entrance="True" local:Motion.Lift="True"
+                                local:Reveal.When="{Binding IsHighlighted}">
+                            <Border.Style>
+                                <Style TargetType="Border" BasedOn="{StaticResource ToolCard}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <!-- Le bouton en pied : d'une carte à sa voisine de rangée, les deux
                                  « Ouvrir » sont alignés. -->
                             <DockPanel LastChildFill="True">

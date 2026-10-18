@@ -25,6 +25,8 @@ namespace LDI12.App.ViewModels
             TechnicalDetail = finding.TechnicalDetail;
             PlainExplanation = finding.PlainExplanation;
             Subject = finding.Subject;
+            SolveCommand = new LDI12.App.Mvvm.RelayCommand(
+                () => ActionNavigator.Solve?.Invoke(finding.Title, finding.TechnicalDetail));
 
             var lines = new List<string>();
             foreach (var evidence in finding.Evidence)
@@ -36,7 +38,26 @@ namespace LDI12.App.ViewModels
             }
             Evidence = lines;
             HasEvidence = lines.Count > 0;
+
+            // La première recommandation de ce constat qui mène à une opération du logiciel.
+            foreach (var id in finding.Recommendations)
+                if (LDI12.Engine.Recommendations.RecommendationCatalog.TryGet(id, out var recommendation) &&
+                    recommendation.LinkedAction != null)
+                {
+                    Link = ActionLink.For(recommendation.LinkedAction);
+                    break;
+                }
         }
+
+        /// <summary>L'opération qui corrige ce constat, quand le logiciel la porte.</summary>
+        public ActionLink? Link { get; }
+
+        public bool HasLink => Link != null;
+
+        /// <summary>« Analyser avec l'assistant » : la cause et le plan, à partir de ce seul constat.</summary>
+        public System.Windows.Input.ICommand SolveCommand { get; }
+
+        public bool CanSolve => Severity >= Severity.Warning;
 
         public Severity Severity { get; }
         public string RuleId { get; }
@@ -107,7 +128,20 @@ namespace LDI12.App.ViewModels
             PriorityLabel = Labels.Describe(recommendation.Priority);
             EffortLabel = Labels.Describe(recommendation.Effort);
             RequiresHardware = recommendation.RequiresHardwarePurchase;
+            Link = ActionLink.For(recommendation.LinkedAction);
+            SolveCommand = new LDI12.App.Mvvm.RelayCommand(
+                () => ActionNavigator.Solve?.Invoke(recommendation.Title, recommendation.Rationale));
         }
+
+        /// <summary>Le bouton qui mène à l'opération recommandée, quand le logiciel la porte.</summary>
+        public ActionLink? Link { get; }
+
+        public bool HasLink => Link != null;
+
+        /// <summary>Sans opération toute prête, l'assistant prend la recommandation et propose le plan.</summary>
+        public System.Windows.Input.ICommand SolveCommand { get; }
+
+        public bool CanSolve => Link == null;
 
         public string Rank { get; }
         public string Title { get; }

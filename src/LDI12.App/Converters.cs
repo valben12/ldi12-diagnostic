@@ -22,6 +22,16 @@ namespace LDI12.App
             => throw new NotSupportedException();
     }
 
+    /// <summary>Une part (0 à 1) en largeur de colonne proportionnelle : barres empilées sans calcul de pixels.</summary>
+    public sealed class ShareToStarConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            => new GridLength(value is double share && share > 0 && !double.IsNaN(share) ? share : 0, GridUnitType.Star);
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotSupportedException();
+    }
+
     /// <summary>Masque une section vide : un intertitre sans contenu est du bruit.</summary>
     public sealed class CountToVisibilityConverter : IValueConverter
     {

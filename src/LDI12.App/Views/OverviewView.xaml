@@ -136,7 +136,7 @@
                                         Background="{DynamicResource Brush.SurfaceHover}"
                                         BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding Count}" Style="{StaticResource SeverityCountText}" />
+                                        <TextBlock local:Motion.Count="{Binding Count}" Text="0" Style="{StaticResource SeverityCountText}" />
                                         <Grid Margin="0,2,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -241,7 +241,7 @@
                                                Style="{StaticResource BandMetric}" />
                                 </Grid>
                                 <ProgressBar Style="{StaticResource BandBar}"
-                                             Value="{Binding Score, Mode=OneWay}"
+                                             local:Motion.Fill="{Binding Score, Mode=OneWay}"
                                              Margin="0,10,0,0" />
                                 <TextBlock Text="{Binding Coverage}" Style="{StaticResource Text.Muted}"
                                            Margin="0,9,0,0" />
@@ -303,6 +303,20 @@
                                                FontWeight="SemiBold" />
                                     <TextBlock Text="{Binding Rationale}" Style="{StaticResource Text.Muted}"
                                                Margin="0,5,0,0" MaxWidth="900" HorizontalAlignment="Left" />
+                                    <!-- La recommandation mène à l'opération : on ne cherche plus la bonne carte. -->
+                                    <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
+                                            Command="{Binding Link.OpenCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                            Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+                                    <!-- Rien de tout prêt : l'assistant cherche la cause et propose les gestes. -->
+                                    <Button Style="{StaticResource Button.Ghost}" Command="{Binding SolveCommand}"
+                                            HorizontalAlignment="Left" Margin="0,10,0,0"
+                                            Visibility="{Binding CanSolve, Converter={StaticResource BoolToVisibility}}">
+                                        <DockPanel>
+                                            <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="13" Height="13" Margin="0,0,6,0"
+                                                  Data="{StaticResource Icon.Sparkles}" Stroke="{DynamicResource Brush.BrandRed}" />
+                                            <TextBlock Text="Analyser avec l'assistant" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Top">
                                     <TextBlock Text="{Binding PriorityLabel}" Style="{StaticResource Text.Muted}"
@@ -322,7 +336,7 @@
                 <StackPanel>
                     <TextBlock Text="Aucune analyse pour l'instant" Style="{StaticResource Text.Emphasis}" />
                     <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
-                               Text="Une analyse rapide démarre automatiquement à l'ouverture pour donner l'état de la machine en quelques secondes. Le bouton « Diagnostic complet » lance ensuite l'analyse approfondie, qui ajoute les journaux d'événements, les périphériques et les tests réseau." />
+                               Text="Une analyse rapide démarre à l'ouverture. « Diagnostic complet » ajoute les journaux, les périphériques et les tests réseau." />
                 </StackPanel>
             </Border>
 

@@ -54,8 +54,123 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
-    <Style x:Key="Card" TargetType="Border">
+    <!-- En-tête d'écran : l'icône dans une pastille teintée, puis le titre en grand. Le même
+         sur tous les écrans : Tag porte le tracé de l'icône, Content le titre. -->
+    <Style x:Key="PageHeader" TargetType="ContentControl">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="44" Height="44" CornerRadius="13" VerticalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#40ED2E36" Offset="0" />
+                                    <GradientStop Color="#14ED2E36" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Path Style="{StaticResource Icon}" Width="21" Height="21"
+                                  Data="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stroke="{DynamicResource Brush.BrandRed}" />
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{TemplateBinding Content}" Style="{StaticResource Text.PageTitle}"
+                                   Margin="16,0,0,2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Pastille à cocher : un motif, une phrase toute faite. Cochée, elle prend le rouge pâle
+         de la marque ; la coche dessinée dit l'état sans compter sur la couleur. -->
+    <Style x:Key="Chip" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="0,0,8,8" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Pill" CornerRadius="16" Padding="12,6" BorderThickness="1"
+                            Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.BorderStrong}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path x:Name="Tick" Data="M 0,4 L 3.5,7.5 L 10,0.5" Width="10" Height="8" Stretch="Uniform"
+                                  Stroke="{DynamicResource Brush.BrandRed}" StrokeThickness="2" Margin="0,0,7,0"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  VerticalAlignment="Center" Visibility="Collapsed" />
+                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                            <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Brush.BrandRed}" />
+                            <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Commutateur à segments : plusieurs vues d'une même chose, une seule à la fois. Le
+         segment retenu se détache en surface pleine sur un rail plus sombre, comme sous
+         Windows 11. À poser dans un Border de style SegmentRail. -->
+    <Style x:Key="SegmentRail" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="3" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <Style x:Key="Segment" TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Ring}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Pill" CornerRadius="7" Padding="12,5" BorderThickness="1"
+                            Background="Transparent" BorderBrush="Transparent">
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.Surface}" />
+                            <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.CardFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardEdge}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
@@ -236,11 +351,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
-                    <!-- 30 points et non 40 : la barre porte dix-sept entrées, et la fenêtre
+                    <!-- 28 points et non 40 : la barre porte dix-huit entrées, et la fenêtre
                          s'ouvre désormais à sa plus petite taille. Au pas précédent, les quatre
                          dernières (dont les réglages et cette page) passaient sous le bord.
                          Une entrée qu'il faut deviner en faisant défiler n'existe qu'à moitié. -->
-                    <Grid Height="30" Margin="10,1" Background="Transparent">
+                    <StackPanel>
+                    <Grid Height="32" Margin="10,1" Background="Transparent">
                         <Border x:Name="Hover" Opacity="0" CornerRadius="9"
                                 Background="{DynamicResource Brush.SurfaceHover}" />
                         <Border x:Name="Fill" Opacity="0" CornerRadius="9"
@@ -255,6 +371,7 @@
                         </Border>
                         <ContentPresenter Margin="16,0,12,0" VerticalAlignment="Center" />
                     </Grid>
+                    </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Trigger.EnterActions>
@@ -541,11 +658,40 @@
                     <!-- PART_Track est indispensable : c'est sur sa largeur que WPF calcule celle de
                          l'indicateur. Sans lui, la barre restait vide à 32 %, relevé sur la barre de
                          copie ; la barre d'analyse, trois pixels de haut, cachait le même défaut. -->
-                    <Grid>
+                    <Grid ClipToBounds="True">
                         <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2" />
                         <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
                                 Background="{TemplateBinding Foreground}" CornerRadius="2" />
+                        <!-- Sans fin connue : un trait qui court d'un bord à l'autre, plutôt qu'une
+                             barre pleine qui ferait croire la tâche finie. -->
+                        <Border x:Name="Runner" Background="{TemplateBinding Foreground}" CornerRadius="2"
+                                HorizontalAlignment="Left" Width="90" Visibility="Collapsed">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="RunnerShift" X="-90" />
+                            </Border.RenderTransform>
+                        </Border>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsIndeterminate" Value="True">
+                            <Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Runner" Property="Visibility" Value="Visible" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="Run">
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="RunnerShift" Storyboard.TargetProperty="X"
+                                                         From="-90" To="620" Duration="0:0:1.6">
+                                            <DoubleAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="Run" />
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

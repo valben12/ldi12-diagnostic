@@ -2526,7 +2526,7 @@ namespace LDI12.Reports.Facts
                 Of("Fréquence maximale sur batterie", power.ProcessorMaximumOnBattery, v => v + " %"),
                 Of("Fichier d'échange", power.PageFile, DescribePageFile,
                     v => v == PageFileMode.Disabled ? FactTone.Bad : FactTone.Good),
-                Str("Réglage du fichier d'échange", power.PageFileSetting),
+                Of("Réglage du fichier d'échange", power.PageFileSetting, DescribePageFileSetting),
             });
 
             Add(groups, "Programmes les plus gourmands",
@@ -2554,6 +2554,34 @@ namespace LDI12.Reports.Facts
             PageFileMode.Disabled => "Aucun",
             _ => "Indéterminé",
         };
+
+        /// <summary>
+        /// « D:\pagefile.sys 0 0 » tel que Windows l'écrit devient « D:\pagefile.sys, taille automatique ».
+        /// </summary>
+        internal static string DescribePageFileSetting(string setting)
+        {
+            var described = new List<string>();
+            foreach (var entry in setting.Split(new[] { " · " }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = entry.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0) continue;
+                var path = parts[0].StartsWith("?:", StringComparison.Ordinal) ? "Chaque disque" : parts[0];
+                if (parts.Length >= 3
+                    && int.TryParse(parts[parts.Length - 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var minimum)
+                    && int.TryParse(parts[parts.Length - 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var maximum))
+                {
+                    described.Add(maximum == 0
+                        ? path + ", taille automatique"
+                        : path + ", " + minimum.ToString("N0", CultureInfo.GetCultureInfo("fr-FR")) + " à "
+                          + maximum.ToString("N0", CultureInfo.GetCultureInfo("fr-FR")) + " Mo");
+                }
+                else
+                {
+                    described.Add(parts.Length == 1 ? path + ", taille automatique" : entry);
+                }
+            }
+            return described.Count == 0 ? setting : string.Join(" · ", described);
+        }
 
         private static FactTable? Processes(PerformanceSnapshot performance)
         {

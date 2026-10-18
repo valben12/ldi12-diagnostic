@@ -62,6 +62,20 @@ namespace LDI12.App.Mvvm
         public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Commande qui reçoit son paramètre : l'élément d'une liste sur lequel on a cliqué.</summary>
+    public sealed class RelayCommand<T> : ICommand
+    {
+        private readonly Action<T?> _execute;
+
+        public RelayCommand(Action<T?> execute) => _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+        public bool CanExecute(object parameter) => true;
+
+        public void Execute(object parameter) => _execute(parameter is T value ? value : default);
+    }
+
     /// <summary>
     /// Commande asynchrone qui se désactive pendant son exécution.
     /// </summary>

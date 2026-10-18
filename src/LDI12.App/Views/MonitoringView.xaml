@@ -47,13 +47,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Pulse}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Surveillance" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Pulse}" Content="Surveillance"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
                        TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
 
@@ -65,7 +60,7 @@
                     <TextBlock Text="REGARDER LA MACHINE VIVRE" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Le diagnostic décrit la machine à un instant ; la surveillance la regarde dans la durée. C'est ce qui attrape la charge qui monte à l'ouverture d'un logiciel, la température qui grimpe au bout de dix minutes, le programme qui se réveille toutes les trente secondes. Elle ne voit rien de ce qui ne se produit pas pendant qu'elle regarde : faites travailler la machine comme le client la fait travailler." />
+                               Text="La machine en direct : charge, températures, réseau, et les programmes qui consomment le plus." />
 
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button Style="{StaticResource Button.Primary}" Content="Démarrer la surveillance"
@@ -95,7 +90,7 @@
                                HorizontalAlignment="Center" Margin="0,12,0,0" />
                     <TextBlock Style="{StaticResource Text.Muted}" HorizontalAlignment="Center" TextAlignment="Center"
                                MaxWidth="520" Margin="0,6,0,0"
-                               Text="Processeur, mémoire, température, fréquence et réseau, relevés chaque seconde, avec les programmes qui consomment le plus. Démarrez la surveillance, puis faites travailler la machine." />
+                               Text="Démarrez la surveillance, puis faites travailler la machine." />
                 </StackPanel>
             </Grid>
 

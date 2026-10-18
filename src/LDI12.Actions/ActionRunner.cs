@@ -54,7 +54,7 @@ namespace LDI12.Actions
         /// </summary>
         public ActionReadiness Readiness(IRepairAction action, IReadOnlyDictionary<string, string>? parameters = null)
         {
-            var readiness = action.CheckReadiness(Scoped(parameters));
+            var readiness = BuildReadiness(action) ?? action.CheckReadiness(Scoped(parameters));
             if (readiness.Availability != ActionAvailability.NeedsElevation) return readiness;
 
             return CanElevate
@@ -64,13 +64,26 @@ namespace LDI12.Actions
                     "Relancer LDI12 Diagnostic en tant qu'administrateur.");
         }
 
+        /// <summary>
+        /// Le build minimal déclaré, imposé ici une fois pour toutes : une action ne doit pas avoir
+        /// à le revérifier pour ne jamais tourner sur un Windows trop ancien.
+        /// </summary>
+        private ActionReadiness? BuildReadiness(IRepairAction action)
+        {
+            var requirements = action.Descriptor.Requirements;
+            var build = _context.Platform.Profile.Build;
+            // Un build illisible (0) ne bloque rien : l'action garde ses propres contrôles.
+            if (!requirements.MinimumBuild.HasValue || build <= 0 || build >= requirements.MinimumBuild.Value) return null;
+            return ActionReadiness.No("Indisponible sur cette version de Windows.", requirements.Workaround);
+        }
+
         public async Task<ActionPreview> PreviewAsync(
             IRepairAction action, IReadOnlyDictionary<string, string>? parameters, CancellationToken cancellationToken)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
 
             var context = Scoped(parameters);
-            var readiness = action.CheckReadiness(context);
+            var readiness = BuildReadiness(action) ?? action.CheckReadiness(context);
 
             if (readiness.Availability == ActionAvailability.Unavailable)
                 return Blocked(readiness.Reason ?? "Action indisponible sur cette machine.", readiness.Workaround);

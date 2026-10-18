@@ -16,13 +16,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{Binding IconKey, Converter={StaticResource IconKey}}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{Binding IconKey, Converter={StaticResource IconKey}}" Content="{Binding Title}"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Body}" Margin="0,8,0,18" />
 
             <!-- ===== Constats ===== -->
@@ -71,6 +66,22 @@
                                     <TextBlock Text="{Binding TechnicalDetail}" Style="{StaticResource Text.Body}"
                                                Margin="19,8,0,0" MaxWidth="1100" HorizontalAlignment="Left" />
 
+                                    <!-- Ce que le logiciel sait faire contre ce constat, à un clic. -->
+                                    <WrapPanel Margin="19,10,0,0">
+                                        <Button Style="{StaticResource Button.Ghost}" Content="{Binding Link.Label}"
+                                                Command="{Binding Link.OpenCommand}" Margin="0,0,8,0"
+                                                Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}" />
+                                        <!-- La cause et le plan, en un clic, quand le constat ne suffit pas à lui seul. -->
+                                        <Button Style="{StaticResource Button.Ghost}" Command="{Binding SolveCommand}"
+                                                Visibility="{Binding CanSolve, Converter={StaticResource BoolToVisibility}}">
+                                            <DockPanel>
+                                                <Path DockPanel.Dock="Left" Style="{StaticResource Icon}" Width="13" Height="13" Margin="0,0,6,0"
+                                                      Data="{StaticResource Icon.Sparkles}" Stroke="{DynamicResource Brush.BrandRed}" />
+                                                <TextBlock Text="Analyser avec l'assistant" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </Button>
+                                    </WrapPanel>
+
                                     <!-- Niveau 3 : explication client et mesures à l'appui -->
                                     <Expander Style="{StaticResource Detail}" Margin="19,10,0,0"
                                               Header="Explication client et mesures">
@@ -98,7 +109,37 @@
 
             <Border Style="{StaticResource Card}" Padding="20,16"
                     Visibility="{Binding HasFindings, Converter={StaticResource HiddenWhenTrue}}">
-                <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.Body}" />
+                <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="18" Margin="0,0,14,0"
+                            VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsClean}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Path Width="17" Height="17" Data="{StaticResource Icon.CheckCircle}">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Stroke" Value="{DynamicResource Brush.TextTertiary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsClean}" Value="True">
+                                            <Setter Property="Stroke" Value="{DynamicResource Brush.StatusGood}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding EmptyTitle}" Style="{StaticResource Text.Emphasis}" />
+                        <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <!-- ===== Caractéristiques relevées =====

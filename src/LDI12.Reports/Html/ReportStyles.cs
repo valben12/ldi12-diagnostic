@@ -107,6 +107,8 @@ a{color:#BE2129}
 .log{margin:10px 0 0;padding:0;list-style:none}
 .log li{padding:6px 0;border-top:1px solid #EFEDF2}
 .log li:first-child{border-top:none}
+.signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px}
+.signatures div{border-top:1px solid #D9D6DE;padding-top:6px;min-height:72px}
 
 .actions{counter-reset:step}
 .action{display:flex;gap:14px;background:#fff;border:1px solid #E4E1E9;border-radius:12px;

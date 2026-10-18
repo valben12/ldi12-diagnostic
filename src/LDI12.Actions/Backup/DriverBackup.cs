@@ -211,7 +211,7 @@ namespace LDI12.Actions.Backup
             return choices;
         }
 
-        internal static bool IsThirdParty(string? inf)
+        public static bool IsThirdParty(string? inf)
             => inf != null &&
                inf.StartsWith("oem", StringComparison.OrdinalIgnoreCase) &&
                inf.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) &&

@@ -857,6 +857,7 @@ namespace LDI12.App.ViewModels
                 EndCancellable();
                 BackupResult = Conclude("Sauvegarde", outcomes, SecuredLine(), failure);
                 Taskbar.Finish(BackupResult.Kind == TransferResultKind.Failed);
+                BackupFinished?.Invoke(this, new TransferFinishedEventArgs(BackupResult, null));
                 IsCopying = false;
                 IsBackupTransferring = false;
                 _volumeJobs.Clear();
@@ -1274,6 +1275,7 @@ namespace LDI12.App.ViewModels
         private void ShowDemoTransfer()
         {
             Mode = DataMode.Backup;
+            Status = "Sauvegarde en cours vers E:\\LDI12-Sauvegardes\\PC-CLIENT.";
             IsBackupTransferring = true;
             BeginTransfer("Copie de « Images »");
             TransferPercent = 42.6;
@@ -1482,7 +1484,7 @@ namespace LDI12.App.ViewModels
 
             // Une copie suivie d'une autre (fichiers ouverts, plusieurs comptes) : les chiffres de
             // la précédente sont acquis au bilan quand la suivante repart de zéro.
-            if (_lastFigures != null && figures.BytesTotal != _lastFigures.BytesTotal || figures.FilesTotal != _lastFigures.FilesTotal)
+            if (_lastFigures != null && (figures.BytesTotal != _lastFigures.BytesTotal || figures.FilesTotal != _lastFigures.FilesTotal))
             {
                 _bytesSecured += _lastFigures.BytesDone;
                 _filesSecured += _lastFigures.FilesDone;
@@ -1552,6 +1554,18 @@ namespace LDI12.App.ViewModels
 
         private TransferResult? _backupResult;
         private TransferResult? _restoreResult;
+
+        /// <summary>Une sauvegarde est finie : le dossier d'intervention en garde le bilan et s'y recopie.</summary>
+        public event EventHandler<TransferFinishedEventArgs>? BackupFinished;
+
+        /// <summary>Une sauvegarde est choisie pour être restaurée : le dossier d'intervention qu'elle porte peut être repris.</summary>
+        public event EventHandler<string>? RestoreSourceChosen;
+
+        /// <summary>Une restauration est finie.</summary>
+        public event EventHandler<TransferFinishedEventArgs>? RestoreFinished;
+
+        /// <summary>Une sauvegarde a été relue contre son manifeste.</summary>
+        public event EventHandler<TransferFinishedEventArgs>? VerificationFinished;
 
         /// <summary>Le bilan de la dernière sauvegarde, en tête de l'écran ; nul avant la première.</summary>
         public TransferResult? BackupResult
@@ -1676,6 +1690,7 @@ namespace LDI12.App.ViewModels
                 MarkSelection();
                 ScheduleMeasures();
                 _ = ListRestoreBackupsAsync();
+                if (!string.IsNullOrWhiteSpace(value)) RestoreSourceChosen?.Invoke(this, value.Trim());
             }
         }
 
@@ -2076,6 +2091,7 @@ namespace LDI12.App.ViewModels
                 EndCancellable();
                 RestoreResult = Conclude("Restauration", outcomes, SecuredLine(), failure);
                 Taskbar.Finish(RestoreResult.Kind == TransferResultKind.Failed);
+                RestoreFinished?.Invoke(this, new TransferFinishedEventArgs(RestoreResult, RestoreSource.Trim()));
                 _restorePreview = _restoreDriversPreview = _restoreApplicationsPreview = _restorePrintersPreview = null;
                 RestoreLines.Clear();
                 RestoreSummary = report.Count > 0 ? "Compte rendu de la restauration :" : string.Empty;
@@ -2439,6 +2455,7 @@ namespace LDI12.App.ViewModels
                 (OpenBackupCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (OpenReportCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (VerifyLastBackupCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                BackupFinished?.Invoke(this, new TransferFinishedEventArgs(BackupResult!, _lastBackupFolder));
                 Raise(nameof(HasBackupPreview));
                 RaiseBackupStates();
                 JournalChanged?.Invoke(this, EventArgs.Empty);
@@ -2610,6 +2627,7 @@ namespace LDI12.App.ViewModels
             if (mode == DataMode.Backup) BackupResult = result;
             else RestoreResult = result;
             Taskbar.Finish(result.Kind == TransferResultKind.Failed);
+            VerificationFinished?.Invoke(this, new TransferFinishedEventArgs(result, source));
         }
 
         /// <summary>Le bilan d'une vérification : ce que le technicien peut faire du support.</summary>

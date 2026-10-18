@@ -405,6 +405,13 @@ namespace LDI12.Core.Execution
         /// </remarks>
         Measured<string> ReadText(string path);
 
+        /// <summary>Les premiers octets d'un fichier, au plus <paramref name="maxBytes"/>, ou l'absence expliquée.</summary>
+        /// <remarks>
+        /// Ajoutée pour les rapports d'écran bleu : un minividage se lit en entier, un vidage de
+        /// la mémoire de plusieurs gigaoctets ne se lit que pour son en-tête.
+        /// </remarks>
+        Measured<byte[]> ReadBytes(string path, int maxBytes);
+
         /// <summary>
         /// Remplace le contenu d'un fichier existant.
         /// </summary>

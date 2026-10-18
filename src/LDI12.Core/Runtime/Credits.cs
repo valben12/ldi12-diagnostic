@@ -97,6 +97,23 @@ namespace LDI12.Core.Runtime
                 Licence = "MIT",
                 Url = "https://www.newtonsoft.com/json",
             },
+            new Component
+            {
+                Name = "Anthropic",
+                Version = "12.58.0",
+                Role = "Accès à Claude (Anthropic), le modèle d'IA de l'assistant ; inactif sans clé d'API.",
+                Licence = "MIT",
+                Url = "https://github.com/anthropics/anthropic-sdk-csharp",
+            },
+            new Component
+            {
+                Name = "Microsoft.Extensions.AI.Abstractions",
+                Version = "10.5.1",
+                Role = "Accompagne la bibliothèque d'Anthropic.",
+                Licence = "MIT",
+                Url = "https://github.com/dotnet/extensions",
+                Transitive = true,
+            },
         };
 
         public static Component? Find(string name)

@@ -82,34 +82,161 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Pied : bascule de thème -->
-                    <StackPanel DockPanel.Dock="Bottom" Margin="20,16,20,20">
-                        <Button Style="{StaticResource Button.Ghost}" Command="{Binding ToggleThemeCommand}"
-                                HorizontalAlignment="Left">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Width="14" Height="14">
-                                    <Path.Style>
-                                        <Style TargetType="Path" BasedOn="{StaticResource Icon}">
-                                            <Setter Property="Data" Value="{StaticResource Icon.Sun}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsDarkTheme}" Value="False">
-                                                    <Setter Property="Data" Value="{StaticResource Icon.Moon}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Path.Style>
-                                </Path>
-                                <TextBlock Text="Thème" Margin="8,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                    <!-- Pied : le thème, en commutateur clair / sombre. Le segment actif se détache,
+                         l'autre se clique. -->
+                    <Border DockPanel.Dock="Bottom" Margin="20,12,20,18" HorizontalAlignment="Left"
+                            Style="{StaticResource SegmentRail}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding ToggleThemeCommand}" ToolTip="Thème clair" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Pill" CornerRadius="7" Padding="12,5" BorderThickness="1"
+                                                Background="Transparent" BorderBrush="Transparent">
+                                            <Path x:Name="Glyph" Style="{StaticResource Icon}" Width="14" Height="14"
+                                                  Data="{StaticResource Icon.Sun}" Stroke="{DynamicResource Brush.TextTertiary}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsDarkTheme}" Value="False">
+                                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.Surface}" />
+                                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" />
+                                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Brush.BrandRed}" />
+                                                <Setter Property="IsHitTestVisible" Value="False" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Brush.TextPrimary}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                            <Button Command="{Binding ToggleThemeCommand}" ToolTip="Thème sombre" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Pill" CornerRadius="7" Padding="12,5" BorderThickness="1"
+                                                Background="Transparent" BorderBrush="Transparent">
+                                            <Path x:Name="Glyph" Style="{StaticResource Icon}" Width="14" Height="14"
+                                                  Data="{StaticResource Icon.Moon}" Stroke="{DynamicResource Brush.TextTertiary}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsDarkTheme}" Value="True">
+                                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.Surface}" />
+                                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" />
+                                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Brush.BrandRed}" />
+                                                <Setter Property="IsHitTestVisible" Value="False" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Brush.TextPrimary}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
+                    </Border>
 
                     <ListBox Style="{StaticResource Nav}" Margin="0,10,0,0"
-                             ItemsSource="{Binding Navigation}"
+                             ItemsSource="{Binding NavigationView}"
                              SelectedItem="{Binding SelectedNavigation, Mode=TwoWay}">
+                        <!-- Les catégories : un titre qui se replie d'un clic, chevron qui pivote,
+                             pastille de la plus grave de ses entrées quand elle est fermée. -->
+                        <ListBox.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.ContainerStyle>
+                                    <Style TargetType="GroupItem">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="GroupItem">
+                                                    <StackPanel DataContext="{Binding Name}">
+                                                        <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}" Focusable="False" Cursor="Hand"
+                                                                      Visibility="{Binding HasHeader, Converter={StaticResource BoolToVisibility}}">
+                                                            <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                    <Grid Height="30" Margin="10,8,10,0" Background="Transparent">
+                                                                        <Border x:Name="Hover" CornerRadius="9" Opacity="0"
+                                                                                Background="{DynamicResource Brush.SurfaceHover}" />
+                                                                        <Grid Margin="16,0,12,0">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock x:Name="Label" Text="{Binding Title}" Style="{StaticResource Text.Eyebrow}"
+                                                                                       VerticalAlignment="Center" />
+                                                                            <Ellipse Grid.Column="1" Style="{StaticResource NavBadge}" Margin="0,0,10,0"
+                                                                                     Visibility="{Binding ShowsAlert, Converter={StaticResource BoolToVisibility}}" />
+                                                                            <Path x:Name="Chevron" Grid.Column="2" Style="{StaticResource Icon}" Width="11" Height="11"
+                                                                                  Data="{StaticResource Icon.ChevronRight}" Stroke="{DynamicResource Brush.TextTertiary}"
+                                                                                  RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
+                                                                                <Path.RenderTransform>
+                                                                                    <RotateTransform x:Name="Turn" Angle="0" />
+                                                                                </Path.RenderTransform>
+                                                                            </Path>
+                                                                        </Grid>
+                                                                    </Grid>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="Hover" Property="Opacity" Value="1" />
+                                                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+                                                                        </Trigger>
+                                                                        <!-- Repliée sur l'écran affiché : le titre passe à la couleur de la marque. -->
+                                                                        <DataTrigger Binding="{Binding ShowsCurrent}" Value="True">
+                                                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.BrandRed}" />
+                                                                            <Setter TargetName="Chevron" Property="Stroke" Value="{DynamicResource Brush.BrandRed}" />
+                                                                        </DataTrigger>
+                                                                        <Trigger Property="IsChecked" Value="True">
+                                                                            <Trigger.EnterActions>
+                                                                                <BeginStoryboard>
+                                                                                    <Storyboard>
+                                                                                        <DoubleAnimation Storyboard.TargetName="Turn" Storyboard.TargetProperty="Angle"
+                                                                                                         To="90" Duration="0:0:0.18" />
+                                                                                    </Storyboard>
+                                                                                </BeginStoryboard>
+                                                                            </Trigger.EnterActions>
+                                                                            <Trigger.ExitActions>
+                                                                                <BeginStoryboard>
+                                                                                    <Storyboard>
+                                                                                        <DoubleAnimation Storyboard.TargetName="Turn" Storyboard.TargetProperty="Angle"
+                                                                                                         To="0" Duration="0:0:0.18" />
+                                                                                    </Storyboard>
+                                                                                </BeginStoryboard>
+                                                                            </Trigger.ExitActions>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </ToggleButton.Template>
+                                                        </ToggleButton>
+                                                        <ItemsPresenter x:Name="Entries" Margin="0,2,0,0"
+                                                                        Visibility="{Binding ShowsItems, Converter={StaticResource BoolToVisibility}}">
+                                                            <ItemsPresenter.RenderTransform>
+                                                                <TranslateTransform x:Name="Drop" />
+                                                            </ItemsPresenter.RenderTransform>
+                                                        </ItemsPresenter>
+                                                    </StackPanel>
+                                                    <ControlTemplate.Triggers>
+                                                        <!-- À l'ouverture, les entrées descendent en fondu : quatre points, 180 ms. -->
+                                                        <DataTrigger Binding="{Binding Name.ShowsItems}" Value="True">
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetName="Entries" Storyboard.TargetProperty="Opacity"
+                                                                                         From="0" To="1" Duration="0:0:0.18" />
+                                                                        <DoubleAnimation Storyboard.TargetName="Drop" Storyboard.TargetProperty="Y"
+                                                                                         From="-4" To="0" Duration="0:0:0.18" />
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                        </DataTrigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </GroupStyle.ContainerStyle>
+                            </GroupStyle>
+                        </ListBox.GroupStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid>
+                                <Grid ToolTip="{Binding Tip}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -225,6 +352,67 @@
                             <Button Style="{StaticResource Button.Ghost}" Content="Annuler"
                                     Command="{Binding CancelCommand}" Margin="0,0,10,0"
                                     Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- L'état général, rappelé sur tous les écrans ; un clic ramène à la vue d'ensemble. -->
+                            <Button Command="{Binding OpenOverviewCommand}" Margin="0,0,12,0" Cursor="Hand" ToolTip="État général de la machine"
+                                    Visibility="{Binding HasHealth, Converter={StaticResource BoolToVisibility}}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Chip" CornerRadius="14" Padding="10,5,12,5" BorderThickness="1"
+                                                Background="{DynamicResource Brush.StatusGoodSoft}" BorderBrush="Transparent">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource Brush.StatusGood}" VerticalAlignment="Center" />
+                                                <TextBlock x:Name="Label" Text="{Binding HealthText}" Margin="8,0,0,0" FontWeight="SemiBold"
+                                                           FontSize="{DynamicResource Font.Size.Caption}" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.StatusGood}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding HealthBand}" Value="Attention">
+                                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource Brush.StatusWarningSoft}" />
+                                                <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource Brush.StatusWarning}" />
+                                                <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.StatusWarning}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding HealthBand}" Value="Degraded">
+                                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource Brush.StatusProblemSoft}" />
+                                                <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource Brush.StatusProblem}" />
+                                                <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.StatusProblem}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding HealthBand}" Value="Critical">
+                                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource Brush.StatusCriticalSoft}" />
+                                                <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource Brush.StatusCritical}" />
+                                                <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Brush.StatusCritical}" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                            <!-- La recherche : tout le logiciel à quelques lettres, sans savoir où c'est rangé. -->
+                            <Button Style="{StaticResource Button.Ghost}" Command="{Binding Search.OpenCommand}" Margin="0,0,10,0"
+                                    ToolTip="Trouver un écran, une réparation, un outil (Ctrl+K)">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Path Style="{StaticResource Icon}" Width="13" Height="13" VerticalAlignment="Center"
+                                          Data="M 6,1 A 5,5 0 1 1 5.99,1 Z M 9.6,9.6 L 13,13"
+                                          Stroke="{DynamicResource Brush.TextSecondary}" />
+                                    <TextBlock Grid.Column="1" Text="Rechercher" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Margin="10,0,0,0" Padding="5,0" VerticalAlignment="Center"
+                                            CornerRadius="{DynamicResource Radius.Badge}" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Brush.BorderStrong}"
+                                            Visibility="{Binding ActualWidth,
+                                                RelativeSource={RelativeSource AncestorType=Window},
+                                                Converter={StaticResource WiderThan}, ConverterParameter=1150}">
+                                        <TextBlock Text="Ctrl+K" FontSize="{DynamicResource Font.Size.Caption}"
+                                                   Foreground="{DynamicResource Brush.TextTertiary}" />
+                                    </Border>
+                                </Grid>
+                            </Button>
                             <Button Style="{StaticResource Button.Ghost}" Content="Analyse rapide"
                                     Command="{Binding RunQuickScanCommand}" Margin="0,0,10,0"
                                     Visibility="{Binding IsScanning, Converter={StaticResource HiddenWhenTrue}}" />
@@ -587,6 +775,80 @@
                     </Grid>
                 </Grid>
             </DockPanel>
+
+            <!-- ================= Recherche universelle =================
+                 Par-dessus tout, le fond assombri : un clic à côté la referme, Échap aussi. Les
+                 flèches parcourent les résultats, Entrée ouvre celui qui est désigné. -->
+            <!-- Visibility se lie dans le contexte propre de la grille, la recherche elle-même :
+                 « Search.IsOpen » y échouait, et une liaison qui échoue laisse la grille visible. -->
+            <Grid Grid.ColumnSpan="2" DataContext="{Binding Search}"
+                  Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}}">
+                <Border Background="#8C000000" MouseLeftButtonDown="OnSearchBackdrop" />
+                <Border Width="620" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,84,0,0"
+                        Background="{DynamicResource Brush.SurfaceSoft}" BorderBrush="{DynamicResource Brush.BorderStrong}"
+                        BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" Padding="14">
+                    <StackPanel>
+                        <TextBox x:Name="SearchBox" Style="{StaticResource Field}"
+                                 Tag="Écran, réparation, outil : « dns », « pilote », « sauvegarde »…"
+                                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="OnSearchKey" />
+                        <ListBox x:Name="SearchResults" ItemsSource="{Binding Results}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                 Margin="0,10,0,0" Background="Transparent" BorderThickness="0" Focusable="False"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 PreviewMouseLeftButtonUp="OnSearchClick">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="Cursor" Value="Hand" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Row" Padding="12,8" Margin="0,0,0,2" CornerRadius="{DynamicResource Radius.Control}"
+                                                        Background="Transparent">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.BrandRedSoft}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Brush.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding Detail, Converter={StaticResource TextToVisibility}}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Kind}" Style="{StaticResource Text.Muted}"
+                                                   VerticalAlignment="Top" Margin="14,1,0,0" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Text="Rien ne correspond. Essayez un autre mot : « réseau », « disque », « mot de passe »…"
+                                   Style="{StaticResource Text.Muted}" Margin="4,12,0,4"
+                                   Visibility="{Binding HasNoResult, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="↑ ↓ pour parcourir · Entrée pour ouvrir · Échap pour fermer"
+                                   Style="{StaticResource Text.Muted}" FontSize="{DynamicResource Font.Size.Caption}"
+                                   Margin="4,10,0,0" Foreground="{DynamicResource Brush.TextTertiary}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>

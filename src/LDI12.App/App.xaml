@@ -23,6 +23,7 @@
             <local:RoundedTextConverter x:Key="Rounded" />
             <local:TextToVisibilityConverter x:Key="TextToVisibility" />
             <local:WiderThanConverter x:Key="WiderThan" />
+            <local:ShareToStarConverter x:Key="ShareToStar" />
 
             <!-- Navigation « view-model first » : ajouter un écran, c'est ajouter un modèle de vue
                  et son gabarit. La coquille n'en sait rien. -->
@@ -46,6 +47,30 @@
             </DataTemplate>
             <DataTemplate DataType="{x:Type vm:AboutViewModel}">
                 <views:AboutView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:InterventionViewModel}">
+                <views:InterventionView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AssistantViewModel}">
+                <views:AssistantView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DisksViewModel}">
+                <views:DisksView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:LanViewModel}">
+                <views:LanView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DriverStoreViewModel}">
+                <views:DriverStoreView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ProgramsViewModel}">
+                <views:ProgramsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:CrashesViewModel}">
+                <views:CrashesView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DiskUsageViewModel}">
+                <views:DiskUsageView />
             </DataTemplate>
             <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
                 <views:ReportsView />

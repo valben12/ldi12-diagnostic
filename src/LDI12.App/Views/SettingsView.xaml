@@ -43,16 +43,11 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Sliders}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Réglages" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Sliders}" Content="Réglages"
+                            local:Motion.Entrance="True" />
             <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,4" MaxWidth="1100"
                        HorizontalAlignment="Left"
-                       Text="Les seuils qui déclenchent les constats. Tous y figurent, sans exception : c'est le technicien qui répond au client, il n'y a donc pas de chiffre qu'il n'aurait pas le droit de voir. Un seuil déplacé change ce que l'outil signale, jamais ce qu'il mesure." />
+                       Text="Les seuils qui déclenchent les constats. Ils changent ce qui est signalé, jamais ce qui est mesuré." />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Muted}" Margin="0,6,0,0"
                        MaxWidth="1100" HorizontalAlignment="Left" />
 
@@ -74,7 +69,7 @@
             <TextBlock Text="MISES À JOUR" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
                 <StackPanel>
-                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding CheckUpdatesOnStartup}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding CheckUpdatesOnStartup}">
                         <TextBlock Text="Vérifier au démarrage s'il existe une version plus récente"
                                    Style="{StaticResource Text.Body}"
                                    Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />
@@ -82,15 +77,15 @@
 
                     <TextBlock Style="{StaticResource Text.Body}" Margin="27,9,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Ce qui part : le numéro de version installée, le canal, l'architecture et la famille de Windows. Rien d'autre, ni le nom de la machine, ni un identifiant, ni aucun résultat d'analyse. La réponse du serveur est signée, et le fichier téléchargé est vérifié par son empreinte : un réseau d'entreprise qui déchiffre le trafic ne peut ni annoncer une fausse version, ni glisser un autre exécutable." />
+                               Text="N'envoie que la version installée et la famille de Windows, rien qui identifie la machine. Réponse signée, téléchargement vérifié." />
 
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Sans connexion, il ne se passe rien : aucun message, aucune attente. Le diagnostic fonctionne entièrement hors ligne, et c'est chez les clients dont la box est en panne qu'il sert le plus." />
+                               Text="Sans connexion : aucun message, aucune attente." />
 
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Une version ordinaire est proposée : vous décidez. Une version qui corrige un constat faux ou une réparation qui abîme s'installe sans demander : un outil de diagnostic qui se trompe est pire qu'un outil absent. Dans les deux cas, le logiciel se remplace sur place et redémarre, y compris depuis une clé USB." />
+                               Text="Une version ordinaire est proposée ; une correction critique s'installe d'elle-même, y compris depuis une clé USB." />
 
                     <TextBlock Text="{Binding UpdateStatus}" Style="{StaticResource Text.Muted}"
                                Margin="27,12,0,0" MaxWidth="980" HorizontalAlignment="Left" />
@@ -108,7 +103,7 @@
             <TextBlock Text="CAPTEURS MATÉRIELS" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="20,17" local:Motion.Entrance="True">
                 <StackPanel>
-                    <CheckBox Style="{StaticResource Check}" IsChecked="{Binding AdvancedSensors}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AdvancedSensors}">
                         <TextBlock Text="Lire la température du processeur et les sondes de la carte mère"
                                    Style="{StaticResource Text.Body}"
                                    Foreground="{DynamicResource Brush.TextPrimary}" FontWeight="SemiBold" />
@@ -116,16 +111,16 @@
 
                     <TextBlock Style="{StaticResource Text.Body}" Margin="27,9,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Windows n'expose la température du processeur par aucune interface : ni le capteur DTS d'Intel ni le Tctl d'AMD ne sont lisibles depuis un programme ordinaire. HWMonitor, HWiNFO, NZXT CAM et Core Temp l'affichent tous en chargeant un pilote noyau signé. Il n'existe pas d'autre méthode, et c'est celle-ci qui s'active ici." />
+                               Text="Windows ne donne pas la température du processeur : la lire demande un pilote noyau, comme le font HWMonitor ou HWiNFO." />
 
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
                                Foreground="{DynamicResource Brush.StatusWarning}"
-                               Text="Ce que cela implique : le pilote employé, WinRing0, figure sur la liste des pilotes vulnérables tenue par Microsoft ; il ouvre un accès direct au matériel, et un antivirus peut le signaler. Il est écrit sous forme d'un fichier .sys portant le nom du programme, chargé par un service à démarrage manuel le temps de l'analyse, puis les deux sont retirés : rien ne reste en place entre deux passages. Une alerte de Defender annonce alors la menace « VulnerableDriver:WinNT/Winring0 » et désigne, comme fichier en cause, celui qui porte le nom du programme : le client lit les deux à la fois. Une session administrateur est nécessaire, et sur Windows 10 et 11 la liste de blocage peut simplement le refuser, ce qui n'est pas une panne mais une protection qui fait son travail. Sur la machine d'un client, à annoncer avant de cocher." />
+                               Text="Attention : ce pilote, WinRing0, est sur la liste des pilotes vulnérables de Microsoft. Defender peut le signaler (« VulnerableDriver:WinNT/Winring0 ») ou le bloquer. Il n'est chargé que le temps de l'analyse, puis retiré. Sur la machine d'un client, à annoncer avant de cocher." />
 
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="27,8,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Ce que cela apporte : température du processeur, sondes et ventilateurs de la carte mère, température des disques que le SMART ne rend pas." />
+                               Text="Apporte : température du processeur, sondes et ventilateurs de la carte mère, température des disques." />
 
                     <TextBlock Text="{Binding SensorStatus}" Style="{StaticResource Text.Muted}"
                                Margin="27,10,0,0" MaxWidth="980" HorizontalAlignment="Left" />
@@ -145,7 +140,7 @@
 
                     <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" MaxWidth="980"
                                HorizontalAlignment="Left"
-                               Text="Journaux, barème ajusté, diagnostics archivés et journal d'intervention. Rien dans la base de registre, aucun service, aucune tâche planifiée, aucun dossier de programmes." />
+                               Text="Journaux, barème, diagnostics archivés et journal d'intervention. Rien dans le registre, aucun service, aucune tâche." />
 
                     <TextBlock Text="{Binding FootprintSummary}" Style="{StaticResource Text.Muted}"
                                Margin="0,10,0,0" MaxWidth="980" HorizontalAlignment="Left"
@@ -245,7 +240,7 @@
                     <TextBlock Text="ANALYSE PERSONNALISÉE" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Choisir les modules à exécuter. Utile quand un module cale sur une machine malade, et quand on veut rejouer un seul domaine après une réparation sans refaire le diagnostic complet. Les modules écartés apparaissent dans le rapport avec la raison de leur absence." />
+                               Text="Choisir les modules : utile quand l'un d'eux cale, ou pour rejouer un seul domaine après une réparation." />
 
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <Button Style="{StaticResource Button.Ghost}" Content="Tout"

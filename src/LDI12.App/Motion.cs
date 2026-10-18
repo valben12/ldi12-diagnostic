@@ -51,6 +51,53 @@ namespace LDI12.App
         /// Fait entrer l'élément en fondu et en léger glissement vertical, décalé selon son rang
         /// dans la liste qui le contient. Posé sur la racine d'un gabarit d'élément.
         /// </summary>
+        /// <summary>
+        /// Soulève l'élément de deux points au survol, et le repose en sortie.
+        /// </summary>
+        /// <remarks>
+        /// Ce qui se clique doit le dire avant le clic. Deux points suffisent, en 140 ms : au-delà
+        /// la grille paraît flotter. Une micro-interaction, active même en rendu logiciel : elle ne
+        /// déplace qu'une tuile. Partage la translation posée par <see cref="EntranceProperty"/>.
+        /// </remarks>
+        public static readonly DependencyProperty LiftProperty = DependencyProperty.RegisterAttached(
+            "Lift", typeof(bool), typeof(Motion), new PropertyMetadata(false, OnLiftChanged));
+
+        public static bool GetLift(DependencyObject element) => (bool)element.GetValue(LiftProperty);
+        public static void SetLift(DependencyObject element, bool value) => element.SetValue(LiftProperty, value);
+
+        private static void OnLiftChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(d is UIElement element)) return;
+
+            element.MouseEnter -= OnLiftEnter;
+            element.MouseLeave -= OnLiftLeave;
+            if (e.NewValue is bool on && on)
+            {
+                element.MouseEnter += OnLiftEnter;
+                element.MouseLeave += OnLiftLeave;
+            }
+        }
+
+        private static void OnLiftEnter(object sender, MouseEventArgs e) => LiftTo((UIElement)sender, -2);
+
+        private static void OnLiftLeave(object sender, MouseEventArgs e) => LiftTo((UIElement)sender, 0);
+
+        private static void LiftTo(UIElement element, double y)
+        {
+            if (!(element.RenderTransform is TranslateTransform slide) || slide.IsFrozen)
+            {
+                slide = new TranslateTransform();
+                element.RenderTransform = slide;
+            }
+
+            slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+            {
+                To = y,
+                Duration = Fast,
+                EasingFunction = EaseOut,
+            });
+        }
+
         public static readonly DependencyProperty EntranceProperty = DependencyProperty.RegisterAttached(
             "Entrance", typeof(bool), typeof(Motion),
             new PropertyMetadata(false, OnEntranceChanged));
@@ -241,6 +288,80 @@ namespace LDI12.App
             }
 
             return false;
+        }
+
+        // ---------------------------------------------------------------- barres qui se remplissent
+
+        /// <summary>
+        /// La valeur d'une barre, atteinte en glissant plutôt qu'affichée d'un coup : la barre se
+        /// remplit à l'arrivée sur l'écran et suit chaque changement.
+        /// </summary>
+        /// <remarks>
+        /// À poser à la place de <c>Value</c>. Une barre de quelques pixels de haut : l'animation
+        /// reste légère, mais suit <see cref="Enabled"/> comme les autres, puisqu'un écran en
+        /// compte souvent des dizaines.
+        /// </remarks>
+        public static readonly DependencyProperty FillProperty = DependencyProperty.RegisterAttached(
+            "Fill", typeof(double), typeof(Motion), new PropertyMetadata(0.0, OnFillChanged));
+
+        public static double GetFill(DependencyObject element) => (double)element.GetValue(FillProperty);
+
+        public static void SetFill(DependencyObject element, double value) => element.SetValue(FillProperty, value);
+
+        private static void OnFillChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(element is System.Windows.Controls.Primitives.RangeBase bar)) return;
+            var target = (double)e.NewValue;
+
+            if (!Enabled)
+            {
+                bar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, null);
+                bar.Value = target;
+                return;
+            }
+
+            bar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty,
+                new DoubleAnimation(target, Sweep) { EasingFunction = EaseOut }, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        // ---------------------------------------------------------------- compteurs
+
+        /// <summary>
+        /// Un nombre qui défile jusqu'à sa valeur au lieu d'apparaître d'un coup : posé à la
+        /// place de <c>Text</c> sur un TextBlock.
+        /// </summary>
+        public static readonly DependencyProperty CountProperty = DependencyProperty.RegisterAttached(
+            "Count", typeof(int), typeof(Motion), new PropertyMetadata(0, OnCountChanged));
+
+        /// <summary>La valeur intermédiaire, animée ; le texte en est l'arrondi.</summary>
+        private static readonly DependencyProperty CountingProperty = DependencyProperty.RegisterAttached(
+            "Counting", typeof(double), typeof(Motion), new PropertyMetadata(0.0, OnCountingChanged));
+
+        public static int GetCount(DependencyObject element) => (int)element.GetValue(CountProperty);
+
+        public static void SetCount(DependencyObject element, int value) => element.SetValue(CountProperty, value);
+
+        private static void OnCountChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(element is TextBlock text)) return;
+            var target = (int)e.NewValue;
+
+            if (!Enabled)
+            {
+                text.BeginAnimation(CountingProperty, null);
+                text.SetValue(CountingProperty, (double)target);
+                text.Text = target.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return;
+            }
+
+            text.BeginAnimation(CountingProperty,
+                new DoubleAnimation(target, Sweep) { EasingFunction = EaseOut }, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        private static void OnCountingChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
+        {
+            if (element is TextBlock text)
+                text.Text = ((int)Math.Round((double)e.NewValue)).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }

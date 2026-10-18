@@ -19,13 +19,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Info}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="À propos" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Info}" Content="À propos"
+                            local:Motion.Entrance="True" />
 
             <!-- ===== L'atelier ===== -->
             <TextBlock Text="L'ÉDITEUR" Style="{StaticResource Text.Eyebrow}" Margin="2,24,0,10" />
@@ -76,7 +71,7 @@
                     </StackPanel>
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
                                MaxWidth="900" HorizontalAlignment="Left"
-                               Text="Ces deux boutons ouvrent le navigateur et la messagerie de la machine. Sur un poste client, rien n'est envoyé : c'est vous qui écrivez." />
+                               Text="Ouvre votre navigateur ou votre messagerie. Rien n'est envoyé sans vous." />
                 </StackPanel>
             </Border>
 
@@ -116,13 +111,25 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== L'assistant : le seul endroit où Claude est nommé ===== -->
+            <TextBlock Text="L'ASSISTANT" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
+            <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
+                <StackPanel MaxWidth="960" HorizontalAlignment="Left">
+                    <TextBlock Text="Analyse par intelligence artificielle" Style="{StaticResource Text.Emphasis}" />
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="L'analyse des pilotes et le diagnostic guidé s'appuient sur Claude, le modèle d'IA d'Anthropic. Il lit le relevé du diagnostic, cherche au besoin sur le web les versions publiées par les constructeurs, et propose un plan fait des opérations de ce logiciel." />
+                    <TextBlock Style="{StaticResource Text.Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Ce qui est envoyé : le relevé technique de la machine (matériel, pilotes, journaux, services), jamais un document ni un fichier personnel. Rien ne s'exécute sans un clic du technicien. L'assistant fonctionne avec votre propre clé d'API Anthropic, rangée chiffrée à côté du logiciel." />
+                </StackPanel>
+            </Border>
+
             <!-- ===== Ce qu'il sait faire ===== -->
             <TextBlock Text="CE QUE CE LOGICIEL SAIT FAIRE" Style="{StaticResource Text.Eyebrow}" Margin="2,26,0,10" />
             <Border Style="{StaticResource Card}" Padding="22,19" local:Motion.Entrance="True">
                 <StackPanel>
                     <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960" HorizontalAlignment="Left"
                                TextWrapping="Wrap"
-                               Text="Ces chiffres sont comptés dans les catalogues au moment où cet écran s'affiche. Ils ne peuvent donc pas vieillir sans que personne s'en aperçoive." />
+                               Text="Comptés à l'ouverture de cet écran." />
 
                     <ItemsControl ItemsSource="{Binding Coverage}" Margin="0,12,0,0">
                         <ItemsControl.ItemTemplate>
@@ -186,7 +193,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource Text.Muted}" MaxWidth="960" HorizontalAlignment="Left"
                                TextWrapping="Wrap"
-                               Text="Ces bibliothèques sont publiées par d'autres et distribuées à l'intérieur de l'exécutable. Chacune reste soumise à sa propre licence, qui prime sur celle de ce logiciel pour ce qui la concerne. Le détail figure dans LICENCES-TIERCES.md, à côté du programme." />
+                               Text="Bibliothèques tierces incluses dans l'exécutable, chacune sous sa propre licence : voir LICENCES-TIERCES.md, à côté du programme." />
 
                     <ItemsControl ItemsSource="{Binding Components}" Margin="0,12,0,0">
                         <ItemsControl.ItemTemplate>

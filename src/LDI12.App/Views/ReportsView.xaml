@@ -7,13 +7,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.FileText}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Rapports" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.FileText}" Content="Rapports"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18" />
 
             <!-- ===== Mentions portées sur les documents ===== -->
@@ -22,7 +17,7 @@
                     <TextBlock Text="MENTIONS PORTÉES SUR LES DOCUMENTS" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,6,0,0" MaxWidth="820"
                                HorizontalAlignment="Left"
-                               Text="Ces informations ne sont pas enregistrées dans le diagnostic : elles sont ajoutées à l'édition. Le même diagnostic peut donc être réédité plus tard, à un autre nom, sans être refait." />
+                               Text="Ajoutées au document à l'export, sans modifier le diagnostic." />
 
                     <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
@@ -80,7 +75,7 @@
                         <StackPanel>
                         <TextBlock Text="Rapport technicien" Style="{StaticResource Text.Emphasis}" />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
-                                   Text="Constats, caractéristiques relevées, modules de collecte et justification ligne à ligne du score. Contient les numéros de série et les noms de périphériques." />
+                                   Text="Constats, caractéristiques et score détaillé, numéros de série compris. Pour l'atelier." />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
                                    Text="Fichier HTML autonome, imprimable en PDF depuis n'importe quel navigateur." />
                         </StackPanel>
@@ -96,7 +91,7 @@
                         <StackPanel>
                         <TextBlock Text="Bilan client" Style="{StaticResource Text.Emphasis}" />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
-                                   Text="État général, ce qui va bien, ce qu'il faut surveiller, recommandations numérotées. Aucun jargon, aucun code, aucun numéro de série." />
+                                   Text="Le bilan à remettre au client : simple, sans jargon ni numéro de série." />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0"
                                    Text="Dit aussi ce qui n'a pas pu être vérifié : c'est ce qui rend le reste crédible." />
                         </StackPanel>
@@ -179,7 +174,7 @@
                     <TextBlock Text="PUBLIER LE DOSSIER" Style="{StaticResource Text.Eyebrow}" />
                     <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Text="Le logiciel fonctionne hors ligne et n'envoie jamais rien de lui-même. La publication dépose le bilan client dans le service de l'atelier, sur demande, une fois par dossier. Le rapport technicien et le diagnostic brut restent sur cette machine." />
+                               Text="Dépose le bilan client sur le service de l'atelier, uniquement sur demande." />
 
                     <TextBlock Text="{Binding PublicationStatus}" Style="{StaticResource Text.Body}"
                                Margin="0,12,0,0" TextWrapping="Wrap" MaxWidth="960"
@@ -222,7 +217,7 @@
             <Border Style="{StaticResource Card}" Padding="20,16" Margin="0,18,0,0"
                     Visibility="{Binding HasResult, Converter={StaticResource HiddenWhenTrue}}">
                 <TextBlock Style="{StaticResource Text.Body}"
-                           Text="Aucun diagnostic n'a encore été produit. Lancez une analyse rapide ou un diagnostic complet depuis la barre supérieure." />
+                           Text="Lancez une analyse depuis la barre du haut." />
             </Border>
 
         </StackPanel>

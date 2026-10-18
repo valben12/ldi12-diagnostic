@@ -17,6 +17,7 @@
     <Geometry x:Key="Icon.Sparkles">M12,3 L13.9,8.1 L19,10 L13.9,11.9 L12,17 L10.1,11.9 L5,10 L10.1,8.1 Z M19,15 L19.7,16.9 L21.6,17.6 L19.7,18.3 L19,20.2 L18.3,18.3 L16.4,17.6 L18.3,16.9 Z</Geometry>
     <Geometry x:Key="Icon.Wrench">M14.7,6.3 A1,1 0 0 0 14.7,7.7 L16.3,9.3 A1,1 0 0 0 17.7,9.3 L21.47,5.53 A6,6 0 0 1 13.53,13.47 L6.62,20.38 A2.12,2.12 0 0 1 3.62,17.38 L10.53,10.47 A6,6 0 0 1 18.47,2.53 Z</Geometry>
     <Geometry x:Key="Icon.FileText">M14,2 H6 A2,2 0 0 0 4,4 V20 A2,2 0 0 0 6,22 H18 A2,2 0 0 0 20,20 V8 Z M14,2 V8 H20 M16,13 H8 M16,17 H8 M10,9 H8</Geometry>
+    <Geometry x:Key="Icon.Clipboard">M9,2 H15 A1,1 0 0 1 16,3 V5 A1,1 0 0 1 15,6 H9 A1,1 0 0 1 8,5 V3 A1,1 0 0 1 9,2 Z M16,4 H18 A2,2 0 0 1 20,6 V20 A2,2 0 0 1 18,22 H6 A2,2 0 0 1 4,20 V6 A2,2 0 0 1 6,4 H8 M12,11 H16 M12,16 H16 M8,11 H8.01 M8,16 H8.01</Geometry>
     <!-- Ajoutées en phase 5 : nettoyage et boîte à outils. -->
     <Geometry x:Key="Icon.Trash">M3,6 H21 M8,6 V4 A2,2 0 0 1 10,2 H14 A2,2 0 0 1 16,4 V6 M19,6 V20 A2,2 0 0 1 17,22 H7 A2,2 0 0 1 5,20 V6 M10,11 V17 M14,11 V17</Geometry>
     <Geometry x:Key="Icon.Toolbox">M4,7 H20 A2,2 0 0 1 22,9 V19 A2,2 0 0 1 20,21 H4 A2,2 0 0 1 2,19 V9 A2,2 0 0 1 4,7 Z M8,7 V5 A2,2 0 0 1 10,3 H14 A2,2 0 0 1 16,5 V7 M2,13 H22 M10,13 V15 H14 V13</Geometry>
@@ -35,10 +36,28 @@
     <Geometry x:Key="Icon.Info">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 Z M12,16 V12 M12,8 H12.01</Geometry>
     <Geometry x:Key="Icon.Lock">M5,11 H19 V22 H5 Z M7,11 V7 A5,5 0 0 1 17,7 V11</Geometry>
     <Geometry x:Key="Icon.XCircle">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 Z M15,9 L9,15 M9,9 L15,15</Geometry>
+    <!-- Approfondir : plantages (écran barré), programmes (fenêtres empilées), pilotes (paquet),
+         réseau local (trois postes reliés), disques (plateau et tête). -->
+    <Geometry x:Key="Icon.MonitorX">M4,3 H20 A2,2 0 0 1 22,5 V15 A2,2 0 0 1 20,17 H4 A2,2 0 0 1 2,15 V5 A2,2 0 0 1 4,3 Z M12,17 V21 M8,21 H16 M9.5,7.5 L14.5,12.5 M14.5,7.5 L9.5,12.5</Geometry>
+    <Geometry x:Key="Icon.Layers">M12,2 L2,7 L12,12 L22,7 Z M2,17 L12,22 L22,17 M2,12 L12,17 L22,12</Geometry>
+    <Geometry x:Key="Icon.Package">M16.5,9.4 L7.5,4.21 M21,16 V8 A2,2 0 0 0 20,6.27 L13,2.27 A2,2 0 0 0 11,2.27 L4,6.27 A2,2 0 0 0 3,8 V16 A2,2 0 0 0 4,17.73 L11,21.73 A2,2 0 0 0 13,21.73 L20,17.73 A2,2 0 0 0 21,16 Z M3.27,6.96 L12,12.01 L20.73,6.96 M12,22.08 V12</Geometry>
+    <Geometry x:Key="Icon.Network">M10,2 H14 A1,1 0 0 1 15,3 V7 A1,1 0 0 1 14,8 H10 A1,1 0 0 1 9,7 V3 A1,1 0 0 1 10,2 Z M3,16 H7 A1,1 0 0 1 8,17 V21 A1,1 0 0 1 7,22 H3 A1,1 0 0 1 2,21 V17 A1,1 0 0 1 3,16 Z M17,16 H21 A1,1 0 0 1 22,17 V21 A1,1 0 0 1 21,22 H17 A1,1 0 0 1 16,21 V17 A1,1 0 0 1 17,16 Z M5,16 V13 H19 V16 M12,8 V13</Geometry>
+    <Geometry x:Key="Icon.Disc">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 Z M12,15 A3,3 0 1 0 12,9 A3,3 0 1 0 12,15 Z M17,4.5 L13.5,10</Geometry>
+    <Geometry x:Key="Icon.Search">M11,19 A8,8 0 1 0 11,3 A8,8 0 1 0 11,19 Z M21,21 L16.65,16.65</Geometry>
     <Geometry x:Key="Icon.ChevronRight">M9,18 L15,12 L9,6</Geometry>
     <Geometry x:Key="Icon.ChevronDown">M6,9 L12,15 L18,9</Geometry>
     <Geometry x:Key="Icon.Sun">M12,17 A5,5 0 1 0 12,7 A5,5 0 1 0 12,17 Z M12,1 V3 M12,21 V23 M4.22,4.22 L5.64,5.64 M18.36,18.36 L19.78,19.78 M1,12 H3 M21,12 H23 M4.22,19.78 L5.64,18.36 M18.36,5.64 L19.78,4.22</Geometry>
     <Geometry x:Key="Icon.Moon">M21,12.79 A9,9 0 1 1 11.21,3 A7,7 0 0 0 21,12.79 Z</Geometry>
     <Geometry x:Key="Icon.Square">M4,4 H20 V20 H4 Z</Geometry>
+
+    <!-- Analyse du disque : la carte (des blocs inégaux), le dossier, le fichier, l'ouverture dans l'Explorateur. -->
+    <Geometry x:Key="Icon.Treemap">M3,3 H21 V21 H3 Z M12,3 V21 M12,13 H21 M3,15 H12 M16.5,13 V21</Geometry>
+    <Geometry x:Key="Icon.Folder">M4,20 H20 A2,2 0 0 0 22,18 V8 A2,2 0 0 0 20,6 H12.07 A2,2 0 0 1 10.4,5.1 L9.6,3.9 A2,2 0 0 1 7.93,3 H4 A2,2 0 0 0 2,5 V18 A2,2 0 0 0 4,20 Z</Geometry>
+    <Geometry x:Key="Icon.File">M14,2 H6 A2,2 0 0 0 4,4 V20 A2,2 0 0 0 6,22 H18 A2,2 0 0 0 20,20 V8 Z M14,2 V8 H20</Geometry>
+    <Geometry x:Key="Icon.ExternalLink">M15,3 H21 V9 M10,14 L21,3 M18,13 V19 A2,2 0 0 1 16,21 H5 A2,2 0 0 1 3,19 V8 A2,2 0 0 1 5,6 H11</Geometry>
+    <Geometry x:Key="Icon.ArrowLeft">M19,12 H5 M12,19 L5,12 L12,5</Geometry>
+    <Geometry x:Key="Icon.ZoomIn">M11,3 A8,8 0 1 0 11,19 A8,8 0 1 0 11,3 Z M21,21 L16.65,16.65 M11,8 V14 M8,11 H14</Geometry>
+    <Geometry x:Key="Icon.ZoomOut">M11,3 A8,8 0 1 0 11,19 A8,8 0 1 0 11,3 Z M21,21 L16.65,16.65 M8,11 H14</Geometry>
+    <Geometry x:Key="Icon.Copy">M10,8 H20 A2,2 0 0 1 22,10 V20 A2,2 0 0 1 20,22 H10 A2,2 0 0 1 8,20 V10 A2,2 0 0 1 10,8 Z M4,16 A2,2 0 0 1 2,14 V4 A2,2 0 0 1 4,2 H14 A2,2 0 0 1 16,4</Geometry>
 
 </ResourceDictionary>

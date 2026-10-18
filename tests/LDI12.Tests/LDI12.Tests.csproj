@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\LDI12.Actions\LDI12.Actions.csproj" />
     <ProjectReference Include="..\..\src\LDI12.Publishing.Klarvi\LDI12.Publishing.Klarvi.csproj" />
     <ProjectReference Include="..\..\src\LDI12.Updates\LDI12.Updates.csproj" />
+    <ProjectReference Include="..\..\src\LDI12.Assistant\LDI12.Assistant.csproj" />
   </ItemGroup>
 
   <ItemGroup>

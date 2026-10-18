@@ -187,4 +187,18 @@ namespace LDI12.App.ViewModels
 
         public bool IsSuccess => Kind == TransferResultKind.Succeeded;
     }
+
+    /// <summary>La fin d'un transfert : son bilan, et le dossier concerné quand il est connu.</summary>
+    public sealed class TransferFinishedEventArgs : EventArgs
+    {
+        public TransferFinishedEventArgs(TransferResult result, string? folder)
+        {
+            Result = result;
+            Folder = folder;
+        }
+
+        public TransferResult Result { get; }
+
+        public string? Folder { get; }
+    }
 }

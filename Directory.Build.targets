@@ -12,8 +12,10 @@
     <!-- Support de langage, pas une bibliothèque : System.ValueTuple n'entre dans le
          .NET Framework qu'en 4.7. Sur net462, le compilateur exige ce paquet dès qu'un
          tuple apparaît. Même catégorie que le shim IsExternalInit de C# 9 : la règle
-         « LDI12.Core ne dépend de rien » reste tenue au sens des bibliothèques tierces. -->
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+         « LDI12.Core ne dépend de rien » reste tenue au sens des bibliothèques tierces.
+         4.6.2 et non 4.5.0 : c'est le minimum du SDK d'Anthropic (par System.Text.Json), et
+         NuGet refuse qu'un projet descende sous ce qu'exige une de ses dépendances. -->
+    <PackageReference Include="System.ValueTuple" Version="4.6.2" />
   </ItemGroup>
 
   <!-- Chaque assembly a besoin de son propre IsExternalInit : le compilateur exige que le type

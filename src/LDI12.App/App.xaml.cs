@@ -129,6 +129,15 @@ namespace LDI12.App
             var dataMode = ReadDataMode(e.Args);
             if (dataMode != null) _shell.UserData?.ShowMode(dataMode);
 
+            _searchQuery = ReadArgument(e.Args, "--search");
+            _diskScanPath = ReadArgument(e.Args, "--disk-scan");
+            _assistantDemo = ReadArgument(e.Args, "--assistant-demo");
+            _crashDemo = Array.IndexOf(e.Args, "--crash-demo") >= 0;
+            _programsDemo = ReadArgument(e.Args, "--programs-demo");
+            _driversDemo = Array.IndexOf(e.Args, "--drivers-demo") >= 0;
+            _lanDemo = ReadArgument(e.Args, "--lan-demo");
+            _disksDemo = Array.IndexOf(e.Args, "--disks-demo") >= 0;
+
             if (_screenshotPath != null)
             {
                 if (_captureDelayMs > 0)
@@ -290,6 +299,38 @@ namespace LDI12.App
             return 0;
         }
 
+        private string? _searchQuery;
+
+        /// <summary>Dossier que l'analyse du disque explore avant la capture (<c>--disk-scan "C:\Program Files"</c>).</summary>
+        private string? _diskScanPath;
+
+        /// <summary>État de l'assistant à montrer (<c>--assistant-demo result</c>), sur un plan d'exemple.</summary>
+        private string? _assistantDemo;
+
+        /// <summary>Montrer l'écran Plantages sur un historique d'exemple (<c>--crash-demo</c>).</summary>
+        private bool _crashDemo;
+
+        /// <summary>Montrer l'écran Programmes sur une liste d'exemple (<c>--programs-demo processes|autoruns</c>).</summary>
+        private string? _programsDemo;
+
+        /// <summary>Montrer le magasin de pilotes sur un exemple (<c>--drivers-demo</c>).</summary>
+        private bool _driversDemo;
+
+        /// <summary>Montrer le réseau local sur un exemple (<c>--lan-demo devices|connections|traffic</c>).</summary>
+        private string? _lanDemo;
+
+        /// <summary>Montrer les disques sur un exemple (<c>--disks-demo</c>).</summary>
+        private bool _disksDemo;
+
+        /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
+        private static string? ReadArgument(string[] args, string name)
+        {
+            for (var i = 0; i < args.Length - 1; i++)
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            return null;
+        }
+
         /// <summary>Geste à montrer sur l'écran Données (<c>--data-mode restore</c>).</summary>
         private static string? ReadDataMode(string[] args)
         {
@@ -364,17 +405,40 @@ namespace LDI12.App
         /// Capture de la fenêtre après la première analyse. Sert à contrôler le rendu réel de
         /// l'interface sans avoir à la regarder tourner, utile en revue comme en régression.
         /// </summary>
-        private void OnScanCompletedForScreenshot(object? sender, EventArgs e)
+        private async void OnScanCompletedForScreenshot(object? sender, EventArgs e)
         {
             if (_screenshotPath == null || MainWindow == null) return;
             _shell!.ScanCompleted -= OnScanCompletedForScreenshot;
 
+            if (_assistantDemo != null) _shell.Assistant.ShowDemo(_assistantDemo);
+            if (_crashDemo) _shell.Crashes.ShowDemo();
+            if (_programsDemo != null) _shell.Programs.ShowDemo(_programsDemo);
+            if (_driversDemo) _shell.DriverStore.ShowDemo();
+            if (_lanDemo != null) _shell.Lan.ShowDemo(_lanDemo);
+            if (_disksDemo) _shell.Disks.ShowDemo();
+
+            if (_diskScanPath != null)
+            {
+                await _shell.DiskUsage.ScanAsync(_diskScanPath).ConfigureAwait(true);
+                if (MainWindow == null) return;
+            }
+
+            // La recherche s'ouvre une fois l'analyse finie : réparations et outils sont alors connus.
+            if (_searchQuery != null)
+            {
+                _shell.Search.Open();
+                _shell.Search.Query = _searchQuery;
+            }
+
             // L'écran d'analyse s'efface en fondu : capturer immédiatement le saisirait à
             // mi-disparition, superposé aux résultats. On laisse la transition se terminer.
+            // La carte du disque se dessine en arrière-plan : on attend qu'elle soit prête (au plus 8 s).
             DispatcherTimer? settle = null;
+            var waited = 0;
             settle = new DispatcherTimer(TimeSpan.FromMilliseconds(420), DispatcherPriority.Background,
                 (_, __) =>
                 {
+                    if (Controls.TreemapView.Pending > 0 && (waited += 420) < 8000) return;
                     settle!.Stop();
                     CaptureNow();
                 },

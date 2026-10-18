@@ -68,6 +68,8 @@ namespace LDI12.App.ViewModels
 
         public ActionDescriptor Descriptor => _action.Descriptor;
 
+        internal IRepairAction Action => _action;
+
         public string Title { get => _title; private set => Set(ref _title, value); }
 
         public string Purpose => Descriptor.Purpose;
@@ -121,6 +123,38 @@ namespace LDI12.App.ViewModels
         public bool NeedsConfirmation => Descriptor.Risk >= ActionRisk.Moderate;
 
         public bool HasPreview => _preview != null;
+
+        private bool _isHighlighted;
+        private string? _recommendation;
+
+        /// <summary>Désignée depuis la vue d'ensemble ou un constat : encadrée, et amenée à l'écran.</summary>
+        public bool IsHighlighted { get => _isHighlighted; internal set => Set(ref _isHighlighted, value); }
+
+        /// <summary>
+        /// La recommandation du diagnostic qui la propose : « Corriger la configuration DNS ».
+        /// </summary>
+        /// <remarks>
+        /// Quinze opérations au même niveau ne disent pas laquelle sert ici. Celles que le diagnostic
+        /// de cette machine recommande passent en tête, et disent pourquoi.
+        /// </remarks>
+        public string? Recommendation
+        {
+            get => _recommendation;
+            internal set
+            {
+                if (!Set(ref _recommendation, value)) return;
+                Raise(nameof(IsRecommended));
+                Raise(nameof(RecommendationNote));
+            }
+        }
+
+        public bool IsRecommended => _recommendation != null;
+
+        /// <summary>La recommandation, seulement quand elle dit autre chose que le titre de la carte.</summary>
+        public string? RecommendationNote
+            => _recommendation != null && !string.Equals(_recommendation, Title, StringComparison.OrdinalIgnoreCase)
+                ? _recommendation
+                : null;
         public string PreviewSummary => _preview?.Summary ?? string.Empty;
         public IReadOnlyList<string> WillDo => _preview?.WillDo ?? Array.Empty<string>();
         public IReadOnlyList<string> WillNotDo => _preview?.WillNotDo ?? Array.Empty<string>();
@@ -158,6 +192,24 @@ namespace LDI12.App.ViewModels
         public ICommand ConfirmExecuteCommand { get; }
         public ICommand AbandonCommand { get; }
         public ICommand CancelCommand { get; }
+
+        /// <summary>
+        /// Lancée depuis un plan validé d'un clic : le même relevé préalable, la même exécution et
+        /// le même journal qu'à la main, sans la confirmation qui a déjà eu lieu sur le plan.
+        /// </summary>
+        /// <returns>Le compte rendu, en une phrase.</returns>
+        public async Task<(bool Succeeded, string Summary)> RunFromPlanAsync()
+        {
+            await RefreshReadinessAsync().ConfigureAwait(true);
+            if (!IsAvailable) return (false, UnavailableReason ?? "Indisponible sur cette machine.");
+
+            await PreviewAsync().ConfigureAwait(true);
+            if (_preview == null) return (false, "Relevé préalable interrompu.");
+            if (!CanExecute) return (false, string.IsNullOrWhiteSpace(_preview.Summary) ? "Rien à faire." : _preview.Summary);
+
+            await ExecuteAsync().ConfigureAwait(true);
+            return _outcome == null ? (false, "Interrompue.") : (_outcome.Succeeded, _outcome.Summary);
+        }
 
         public void SetParameter(string key, string? value)
         {
@@ -353,6 +405,46 @@ namespace LDI12.App.ViewModels
             }
         }
 
+        /// <summary>Vrai si l'application tourne déjà en administrateur : aucune invite ne sera montrée.</summary>
+        public async Task<bool> IsElevatedAsync()
+            => (await GetRunnerAsync().ConfigureAwait(true))?.Context.Platform.IsElevated == true;
+
+        /// <summary>
+        /// Lance une opération pour le compte d'un écran dédié, sans carte ni confirmation : la
+        /// lecture des plantages, la suppression d'un paquet de pilote choisi sur sa ligne.
+        /// L'invite UAC, le journal d'intervention et le délai restent ceux de toute opération.
+        /// </summary>
+        public async Task<ActionOutcome> RunQuietAsync(
+            string actionId, IReadOnlyDictionary<string, string>? parameters, IProgress<ActionProgress>? progress, CancellationToken cancellationToken)
+        {
+            var runner = await GetRunnerAsync().ConfigureAwait(true);
+            var action = ActionCatalog.Find(actionId, _logger);
+            if (runner == null || action == null) return ActionOutcome.Simple(ActionStatus.Unavailable, "Opération indisponible.");
+
+            var readiness = runner.Readiness(action, parameters);
+            if (readiness.Availability == ActionAvailability.Unavailable)
+                return ActionOutcome.Simple(ActionStatus.Unavailable, readiness.Reason ?? "Indisponible sur cette machine.");
+
+            try
+            {
+                var preview = await runner.PreviewAsync(action, parameters, cancellationToken).ConfigureAwait(true);
+                if (!preview.CanExecute)
+                    return ActionOutcome.Simple(
+                        preview.Outcome == PreviewOutcome.NothingToDo ? ActionStatus.NothingToDo : ActionStatus.Failed,
+                        string.IsNullOrWhiteSpace(preview.Summary) ? "Rien à faire." : preview.Summary);
+
+                return await runner.ExecuteAsync(action, preview, parameters, progress, cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return ActionOutcome.Simple(ActionStatus.Cancelled, "Interrompue.");
+            }
+            finally
+            {
+                NotifyJournalChanged();
+            }
+        }
+
         public async Task InitializeAsync()
         {
             var runner = await GetRunnerAsync().ConfigureAwait(true);
@@ -361,13 +453,21 @@ namespace LDI12.App.ViewModels
             Items.Clear();
             foreach (var action in ActionCatalog.CreateAll(_logger))
             {
-                // Le redémarrage de service ne se propose que rattaché à un service précis.
-                if (action.Descriptor.Id == ActionIds.RestartService) continue;
+                // Le redémarrage de service ne se propose que rattaché à un service précis, et les
+                // gestes sur un périphérique ou une entrée de démarrage n'existent que désignés par
+                // un plan de l'assistant : seuls, ils n'auraient rien sur quoi porter.
+                if (PlanOnly.ContainsKey(action.Descriptor.Id)) continue;
                 if (action.Descriptor.Id == ActionIds.Cleanup) continue;
+                if (ActionIds.OwnedByScreens.Contains(action.Descriptor.Id)) continue;
 
                 // Les pilotes et les applications d'une sauvegarde se traitent avec elle, sur
                 // l'écran Données : seuls, ils n'ont ni sauvegarde ni support à qui s'adresser.
-                if (action.Descriptor.Id == ActionIds.ExportDrivers ||
+                // La sauvegarde et la restauration ont leur écran, Données, avec leurs supports et
+                // leurs choix : présentées ici aussi, elles demandaient un dossier qu'on ne pouvait
+                // pas choisir, et faisaient croire à un second chemin.
+                if (action.Descriptor.Id == ActionIds.BackupUserData ||
+                    action.Descriptor.Id == ActionIds.RestoreUserData ||
+                    action.Descriptor.Id == ActionIds.ExportDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreDrivers ||
                     action.Descriptor.Id == ActionIds.RestoreApplications ||
                     action.Descriptor.Id == ActionIds.RestorePrinters ||
@@ -384,6 +484,158 @@ namespace LDI12.App.ViewModels
                 : "Session utilisateur. Les réparations qui exigent des privilèges ouvriront une " +
                   "invite Windows, une seule fois pour toute la session.";
         }
+
+        /// <summary>Les opérations qui ne vont qu'avec leur paramètre, et ce qu'il désigne, tel que l'assistant le lit.</summary>
+        private static readonly Dictionary<string, string> PlanOnly = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ActionIds.RestartService] = "service : nom court du service Windows (par exemple Spooler)",
+            [ActionIds.RestartDevice] = "device : identifiant d'instance du périphérique, tel que dans la section devices",
+            [ActionIds.EnableDevice] = "device : identifiant d'instance du périphérique désactivé",
+            [ActionIds.ReinstallDevice] = "device : identifiant d'instance du périphérique en erreur",
+            [ActionIds.StartupDisable] = "entry : nom de l'entrée de démarrage, tel que dans la section startup",
+            [ActionIds.AudioDefaultOutput] = "endpoint : identifiant de la sortie audio, tel que dans la lecture live audio",
+        };
+
+        /// <summary>Les paramètres facultatifs des opérations proposées seules.</summary>
+        private static readonly Dictionary<string, string> OptionalParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ActionIds.DriverUpdates] = "filter (facultatif) : ne garder que les pilotes dont le nom contient ce texte",
+            [ActionIds.PowerPlan] = "plan : equilibre ou performances",
+            [ActionIds.AudioRestoreVolume] = "endpoint (facultatif) : la sortie à rétablir, la sortie par défaut sinon",
+        };
+
+        /// <summary>Les opérations qu'un plan de l'assistant peut proposer, telles que l'assistant les lit.</summary>
+        public IReadOnlyList<LDI12.Assistant.AvailableAction> PlanCatalog()
+        {
+            var catalog = new List<LDI12.Assistant.AvailableAction>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in Items)
+            {
+                if (!item.IsAvailable || !seen.Add(item.Descriptor.Id) || PlanOnly.ContainsKey(item.Descriptor.Id)) continue;
+                OptionalParameters.TryGetValue(item.Descriptor.Id, out var parameter);
+                catalog.Add(Describe(item.Descriptor, parameter));
+            }
+
+            foreach (var entry in PlanOnly)
+            {
+                var action = ActionCatalog.Find(entry.Key, _logger);
+                if (action != null) catalog.Add(Describe(action.Descriptor, entry.Value));
+            }
+            return catalog;
+        }
+
+        /// <summary>Lance une opération d'un plan validé ; null si elle n'est pas proposée sur cette machine.</summary>
+        public async Task<(bool Succeeded, string Summary)?> RunFromPlanAsync(string actionId, IReadOnlyDictionary<string, string> parameters)
+        {
+            RepairActionItem? item = null;
+            if (PlanOnly.ContainsKey(actionId))
+            {
+                // Un geste désigné : créé pour l'occasion, avec ce qu'il vise.
+                var action = ActionCatalog.Find(actionId, _logger);
+                if (action == null || parameters.Count == 0) return null;
+                item = new RepairActionItem(this, action);
+            }
+            else
+            {
+                foreach (var candidate in Items)
+                    if (string.Equals(candidate.Descriptor.Id, actionId, StringComparison.OrdinalIgnoreCase)) { item = candidate; break; }
+
+                // Des paramètres, ou l'opération déjà en cours à l'écran : un élément à part, pour ne
+                // laisser ni filtre ni cible collés à la carte de l'écran Réparations.
+                if (item != null && (parameters.Count > 0 || item.IsBusy)) item = new RepairActionItem(this, item.Action);
+            }
+            if (item == null) return null;
+
+            foreach (var parameter in parameters) item.SetParameter(parameter.Key, parameter.Value);
+            return await item.RunFromPlanAsync().ConfigureAwait(true);
+        }
+
+        private static LDI12.Assistant.AvailableAction Describe(ActionDescriptor descriptor, string? parameter) => new()
+        {
+            Id = descriptor.Id,
+            Title = descriptor.DisplayName,
+            Purpose = descriptor.Purpose,
+            Risk = descriptor.Risk switch
+            {
+                ActionRisk.ReadOnly => "lecture seule",
+                ActionRisk.Low => "faible",
+                ActionRisk.Moderate => "modéré",
+                _ => "élevé",
+            },
+            Parameter = parameter,
+        };
+
+        /// <summary>
+        /// Désigne une opération : encadrée quelques secondes, et amenée à l'écran par la vue.
+        /// </summary>
+        public void Highlight(string actionId)
+        {
+            RepairActionItem? target = null;
+            foreach (var item in Items)
+            {
+                item.IsHighlighted = false;
+                if (target == null && string.Equals(item.Descriptor.Id, actionId, StringComparison.OrdinalIgnoreCase)) target = item;
+            }
+
+            if (target == null) return;
+            target.IsHighlighted = true;
+
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            timer.Tick += (_, __) =>
+            {
+                timer.Stop();
+                target.IsHighlighted = false;
+            };
+            timer.Start();
+        }
+
+        /// <summary>Les opérations que ce diagnostic recommande passent en tête, avec leur raison.</summary>
+        private void ApplyRecommendations()
+        {
+            var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var recommendation in _snapshot?.Recommendations ?? Array.Empty<Recommendation>())
+                if (recommendation.LinkedAction != null && !reasons.ContainsKey(recommendation.LinkedAction))
+                    reasons[recommendation.LinkedAction] = recommendation.Title;
+
+            foreach (var item in Items)
+                item.Recommendation = reasons.TryGetValue(item.Descriptor.Id, out var title) ? title : null;
+
+            // Tri stable : les recommandées d'abord, chacune gardant sa place relative.
+            var ordered = new List<RepairActionItem>(Items);
+            var rank = new Dictionary<RepairActionItem, int>();
+            for (var index = 0; index < ordered.Count; index++) rank[ordered[index]] = index;
+            ordered.Sort((a, b) => a.IsRecommended != b.IsRecommended
+                ? (a.IsRecommended ? -1 : 1)
+                : rank[a].CompareTo(rank[b]));
+
+            for (var index = 0; index < ordered.Count; index++)
+            {
+                var current = Items.IndexOf(ordered[index]);
+                if (current != index) Items.Move(current, index);
+            }
+
+            RecommendedCount = reasons.Count == 0 ? 0 : CountRecommended();
+        }
+
+        private int CountRecommended()
+        {
+            var count = 0;
+            foreach (var item in Items) if (item.IsRecommended) count++;
+            return count;
+        }
+
+        private int _recommendedCount;
+
+        /// <summary>Combien d'opérations ce diagnostic recommande : le dire en tête de l'écran.</summary>
+        public int RecommendedCount
+        {
+            get => _recommendedCount;
+            private set { if (Set(ref _recommendedCount, value)) Raise(nameof(RecommendedText)); }
+        }
+
+        public string RecommendedText => RecommendedCount == 0
+            ? "OPÉRATIONS DISPONIBLES"
+            : "OPÉRATIONS DISPONIBLES · " + RecommendedCount + " RECOMMANDÉE" + (RecommendedCount > 1 ? "S" : "") + " PAR LE DIAGNOSTIC, EN TÊTE";
 
         public async void Update(SystemSnapshot snapshot)
         {
@@ -409,6 +661,7 @@ namespace LDI12.App.ViewModels
         {
             SyncServiceItems();
             ApplyParameters();
+            ApplyRecommendations();
 
             foreach (var item in Items) await item.RefreshReadinessAsync().ConfigureAwait(true);
         }
@@ -462,6 +715,17 @@ namespace LDI12.App.ViewModels
                 if (volume.IsSystemVolume.Or(false) && volume.DriveLetter.HasValue)
                     return volume.DriveLetter.Value;
             return null;
+        }
+
+        /// <summary>
+        /// Un point de restauration avant un plan qui modifie le système, s'il n'y en a pas déjà
+        /// un de cette session. Rend le compte rendu en une phrase.
+        /// </summary>
+        public async Task<string> EnsureRestorePointAsync()
+        {
+            if (_restoreDone) return "Point de restauration déjà créé pendant cette intervention.";
+            await CreateRestorePointAsync().ConfigureAwait(true);
+            return RestoreStatus;
         }
 
         private async Task CreateRestorePointAsync()

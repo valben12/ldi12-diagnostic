@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <RootNamespace>LDI12.Assistant</RootNamespace>
+    <AssemblyName>LDI12.Assistant</AssemblyName>
+    <!-- C# 12 ici seulement : le SDK officiel d'Anthropic déclare ses paramètres en membres
+         « required » (C# 11), que C# 9 refuse de renseigner. La publication passe par
+         MSBuild 17, qui compile cette version ; le reste de la solution reste en C# 9. -->
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LDI12.Core\LDI12.Core.csproj" />
+    <ProjectReference Include="..\LDI12.Reports\LDI12.Reports.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Seul accès à Claude, et seule dépendance réseau de ce projet. Version figée : le SDK
+         suit l'API de près, une mise à jour se décide et se teste. -->
+    <PackageReference Include="Anthropic" Version="12.58.0" />
+  </ItemGroup>
+
+</Project>

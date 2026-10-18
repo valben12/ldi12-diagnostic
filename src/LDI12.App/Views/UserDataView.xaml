@@ -58,6 +58,7 @@
              retenu ; l'épaisseur ne change pas, pour que la grille ne bouge pas au clic. -->
         <Style x:Key="DriveTile" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="local:Motion.Lift" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -145,6 +146,7 @@
              le cadre rouge. L'état vient du Tag, pour que le même modèle serve aux trois. -->
         <Style x:Key="ModeTile" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="local:Motion.Lift" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -180,6 +182,7 @@
              reste dessinée en haut à droite : c'est elle qui dit l'état, pas seulement la couleur. -->
         <Style x:Key="OptionTile" TargetType="ToggleButton">
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="local:Motion.Lift" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -348,7 +351,7 @@
                 </Grid>
                 <TextBlock Style="{StaticResource Text.Muted}" Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="880"
                            HorizontalAlignment="Left"
-                           Text="Chaque fichier est relu après son écriture, c'est compté dans l'avancement. L'icône de la barre des tâches suit la copie et clignote à la fin. Si le support est débranché ou si vous arrêtez, rien n'est perdu : relancer reprend où la copie s'était arrêtée." />
+                           Text="Chaque fichier est relu. Arrêtée ou interrompue, la copie reprend où elle en était." />
             </StackPanel>
         </DataTemplate>
 
@@ -408,13 +411,8 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel MaxWidth="1440" Margin="28,30,28,36">
 
-            <StackPanel Orientation="Horizontal">
-                <Path Style="{StaticResource Icon}" Width="20" Height="20"
-                      Data="{StaticResource Icon.Archive}"
-                      Stroke="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-                <TextBlock Text="Données" Style="{StaticResource Text.Title}" Margin="12,0,0,0"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <ContentControl Style="{StaticResource PageHeader}" Tag="{StaticResource Icon.Archive}" Content="Données"
+                            local:Motion.Entrance="True" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource Text.Body}" Margin="0,8,0,18"
                        TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left" />
 
@@ -472,7 +470,7 @@
                         <TextBlock Text="CE QU'IL Y AURAIT À SAUVEGARDER" Style="{StaticResource Text.Eyebrow}" />
                         <TextBlock Style="{StaticResource Text.Muted}" Margin="0,7,0,0" MaxWidth="960"
                                    HorizontalAlignment="Left" TextWrapping="Wrap"
-                                   Text="Avant une réinstallation, la question n'est pas seulement « combien de gigaoctets » mais « combien de temps, combien de place, et qu'est-ce qu'on oublie ». Ce relevé compte les fichiers du compte ouvert, dossier par dossier. Il n'en ouvre aucun, n'en copie aucun, et n'affiche aucun nom de fichier : ce sont les données du client, et les regarder ne fait pas partie du travail." />
+                                   Text="Combien de place, combien de temps, et ce qu'on oublierait. Aucun fichier n'est ouvert ni copié." />
 
                         <TextBlock Text="{Binding PlanSummary}" Style="{StaticResource Text.Muted}"
                                    Margin="0,14,0,0" TextWrapping="Wrap" MaxWidth="960"
@@ -623,7 +621,7 @@
                             <StackPanel Visibility="{Binding IsVolumeSource, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
                                            Margin="0,0,0,8"
-                                           Text="Les fichiers de ce disque sont lus avec les droits administrateur, en mode sauvegarde : les comptes protégés s'ouvrent aussi. Une invite Windows s'affichera à la préparation. Un dossier de sauvegarde est créé par compte, pour pouvoir restaurer chacun dans le sien." />
+                                           Text="Lu en administrateur : les comptes protégés s'ouvrent aussi. Un dossier de sauvegarde par compte." />
                                 <Border Style="{StaticResource Card}" Padding="14,10" MaxWidth="900" HorizontalAlignment="Left"
                                         Visibility="{Binding HasSourceAccounts, Converter={StaticResource BoolToVisibility}}">
                                     <StackPanel>
@@ -648,7 +646,7 @@
                                         <TextBlock Text="Pilotes de ce Windows" Style="{StaticResource Text.Body}"
                                                    Foreground="{DynamicResource Brush.TextPrimary}" />
                                         <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
-                                                   Text="Les pilotes tiers de ce Windows, sans ceux livrés avec lui. Copiés et vérifiés avec les fichiers, puis réinstallés à la restauration sur le nouveau PC. Décochez ceux qui n'y serviront pas." />
+                                                   Text="Les pilotes ajoutés à ce Windows, réinstallés à la restauration." />
                                     </StackPanel>
                                 </CheckBox>
                                 <Border Style="{StaticResource Card}" Padding="14,10" Margin="28,8,0,0" MaxWidth="900" HorizontalAlignment="Left"
@@ -674,7 +672,7 @@
                             <ContentControl Style="{StaticResource Step}" Tag="2" Content="Où copier ?" local:StepMark.Done="{Binding HasBackupDestination}" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
                                        MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="Le disque ou la clé de destination. Il apparaît ici dès qu'il est branché, et sa vitesse est mesurée d'elle-même." />
+                                       Text="Il apparaît dès qu'il est branché, et sa vitesse est mesurée." />
                             <!-- Les supports branchés, relus toutes les trois secondes : brancher le disque
                                  suffit à le voir apparaître. Le disque de Windows n'y figure jamais. -->
                             <ItemsControl ItemsSource="{Binding BackupDrives}" ItemsPanel="{StaticResource TilePanel}"
@@ -699,19 +697,19 @@
 
                             <!-- Reprise : une sauvegarde arrêtée en route (support débranché, plein, ou arrêt
                                  demandé) repart où elle s'était arrêtée, dans le même dossier. -->
-                            <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0" IsChecked="{Binding ResumeBackup}">
+                            <CheckBox Style="{StaticResource Switch}" Margin="0,16,0,0" IsChecked="{Binding ResumeBackup}">
                                 <StackPanel>
                                     <TextBlock Text="Reprendre une sauvegarde interrompue" Style="{StaticResource Text.Body}"
                                                Foreground="{DynamicResource Brush.TextPrimary}" />
                                     <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880"
-                                               Text="S'il y a sur ce support une sauvegarde inachevée de cette machine, la copie la continue : les fichiers déjà copiés et vérifiés ne sont pas recopiés. Décocher pour repartir de zéro dans un nouveau dossier." />
+                                               Text="Continue une sauvegarde inachevée de ce PC, sans recopier ce qui est déjà vérifié." />
                                 </StackPanel>
                             </CheckBox>
 
                             <ContentControl Style="{StaticResource Step}" Tag="3" Content="Ce qui part avec" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
                                        MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="Cliquez une tuile pour la cocher. Les deux tuiles orangées, Wi-Fi et mots de passe, écrivent des secrets en clair sur le support : elles se décochent à chaque ouverture, et le support est à effacer une fois la machine rendue." />
+                                       Text="Cliquez pour cocher. En orange : ce qui écrit des secrets en clair sur le support." />
                             <WrapPanel>
                                 <ToggleButton Style="{StaticResource OptionTile}" IsChecked="{Binding IncludePersonal}"
                                               ToolTip="Bureau, Documents, Images, Musique, Vidéos, Téléchargements et OneDrive."
@@ -855,7 +853,7 @@
                             <TextBlock Text="Autres dossiers" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
                                        Foreground="{DynamicResource Brush.TextPrimary}" />
                             <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="Un dossier « Compta » sur C:, des photos sur un second disque, un disque entier : ajoutez-les ici. Ils sont restaurés à leur emplacement d'origine quand ce disque existe sur la nouvelle machine, sinon dans les Documents." />
+                                       Text="Un dossier hors des emplacements habituels, ou un disque entier." />
                             <ItemsControl ItemsSource="{Binding ExtraFolders}" Margin="0,8,0,0"
                                           Visibility="{Binding HasExtraFolders, Converter={StaticResource BoolToVisibility}}">
                                 <ItemsControl.ItemTemplate>
@@ -882,7 +880,7 @@
                             <TextBlock Text="Écarter des dossiers personnels" Style="{StaticResource Text.Body}" Margin="0,14,0,0"
                                        Foreground="{DynamicResource Brush.TextPrimary}" />
                             <TextBlock Style="{StaticResource Text.Muted}" TextWrapping="Wrap" MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="Laisser vide pour tout copier. La préparation montre ce qui est écarté et les plus gros dossiers, pour décider en connaissance de cause." />
+                                       Text="Laisser vide pour tout copier." />
                             <Grid Margin="0,8,0,0" HorizontalAlignment="Left">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -905,7 +903,7 @@
                             <ContentControl Style="{StaticResource Step}" Tag="4" Content="Préparer, puis copier" local:StepMark.Done="{Binding CanCopy}" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
                                        MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="La préparation relève tout sans rien écrire : durée, place, programmes ouverts, mises en garde. La copie ne démarre qu'au clic sur « Copier et vérifier », dans la barre en bas de l'écran." />
+                                       Text="Relève durée, place et programmes ouverts, sans rien écrire." />
                             <!-- Préparer et copier sont dans la barre du bas, toujours à portée. Restent
                                  ici les deux gestes d'appoint. -->
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -997,7 +995,7 @@
                                           Visibility="{Binding HasRestoreDrives, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="0,0,0,10" TextWrapping="Wrap" MaxWidth="880"
                                        HorizontalAlignment="Left"
-                                       Text="Aucun support branché ne porte de sauvegarde LDI12. Branchez le disque de la sauvegarde : il apparaîtra ici de lui-même."
+                                       Text="Branchez le disque de la sauvegarde : il apparaîtra ici."
                                        Visibility="{Binding HasNoRestoreDrive, Converter={StaticResource BoolToVisibility}}" />
 
                             <!-- Plusieurs sauvegardes sur ce support : un compte par dossier, ou plusieurs clients. -->
@@ -1024,7 +1022,7 @@
                             <ContentControl Style="{StaticResource Step}" Tag="2" Content="Ce qui revient avec les données" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
                                        MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="Les dossiers, les navigateurs et le courrier reviennent toujours. Ces quatre-là sont en plus, et seulement si la sauvegarde les contient." />
+                                       Text="Dossiers, navigateurs et courrier reviennent toujours. En plus, si la sauvegarde les contient :" />
                             <WrapPanel>
                                 <ToggleButton Style="{StaticResource OptionTile}" IsChecked="{Binding RestoreDriversChecked}"
                                               ToolTip="Seulement si la sauvegarde en contient. Installés en premier, avant les données : ils ramènent la carte Wi-Fi. Une invite administrateur s'affichera à la préparation.">
@@ -1096,7 +1094,7 @@
                             <ContentControl Style="{StaticResource Step}" Tag="3" Content="Préparer, puis restaurer" local:StepMark.Done="{Binding CanRestore}" />
                             <TextBlock Style="{StaticResource Text.Muted}" Margin="32,-4,0,10" TextWrapping="Wrap"
                                        MaxWidth="880" HorizontalAlignment="Left"
-                                       Text="La préparation relit la sauvegarde sans rien écrire sur ce PC ; « Restaurer », dans la barre en bas de l'écran, lance la copie. Fermez d'abord les navigateurs et la messagerie : le bouton ci-dessous s'en charge." />
+                                       Text="Relit la sauvegarde sans rien écrire. Fermez d'abord navigateurs et messagerie." />
                             <Button Style="{StaticResource Button.Ghost}" Content="Fermer navigateurs et messagerie" HorizontalAlignment="Left"
                                     ToolTip="Ferme Edge, Chrome, Firefox, Outlook, Thunderbird et Office, y compris en arrière-plan, puis prépare de nouveau. Edge reste souvent ouvert en arrière-plan sur un PC neuf."
                                     Command="{Binding CloseProgramsForRestoreCommand}" Margin="0,4,0,0" />

@@ -162,6 +162,7 @@ namespace LDI12.App.ViewModels
         private readonly DiskUsageViewModel _diskUsage;
         private readonly CrashesViewModel _crashes;
         private readonly ProgramsViewModel _programs;
+        private readonly DriverStoreViewModel _driverStore;
         private readonly ToolsViewModel _tools;
         private readonly HistoryViewModel _history;
         private readonly MonitoringViewModel _monitoring;
@@ -220,6 +221,7 @@ namespace LDI12.App.ViewModels
             _diskUsage = new DiskUsageViewModel(logger);
             _crashes = new CrashesViewModel(_repairs, logger);
             _programs = new ProgramsViewModel(_repairs, logger);
+            _driverStore = new DriverStoreViewModel(_repairs, logger);
             _tools = new ToolsViewModel(logger, () => _repairs.GetRunnerAsync());
             _about = new AboutViewModel(logger);
 
@@ -285,6 +287,7 @@ namespace LDI12.App.ViewModels
                 new NavigationItem("Outils", "Icon.Toolbox", _tools),
                 new NavigationItem("Plantages", "Icon.MonitorX", _crashes) { StartsGroup = true },
                 new NavigationItem("Programmes", "Icon.Layers", _programs),
+                new NavigationItem("Magasin de pilotes", "Icon.Package", _driverStore),
                 new NavigationItem("Surveillance", "Icon.Pulse", _monitoring) { StartsGroup = true },
                 new NavigationItem("Mesures", "Icon.Gauge", _measures),
                 new NavigationItem("Rapports", "Icon.FileText", _reports) { StartsGroup = true },
@@ -310,7 +313,7 @@ namespace LDI12.App.ViewModels
             var software = new NavigationGroup("Logiciel", false);
             Assign(diagnostic, "Matériel", "Stockage", "Windows", "Réseau", "Sécurité", "Performances");
             Assign(act, "Réparations", "Nettoyage", "Espace disque", "Données", "Outils");
-            Assign(deep, "Plantages", "Programmes");
+            Assign(deep, "Plantages", "Programmes", "Magasin de pilotes");
             Assign(measure, "Surveillance", "Mesures");
             Assign(report, "Rapports", "Historique");
             Assign(software, "Réglages", "À propos");
@@ -373,6 +376,9 @@ namespace LDI12.App.ViewModels
         /// <summary>Les programmes, que les captures d'écran montrent sur une liste d'exemple.</summary>
         public ProgramsViewModel Programs => _programs;
 
+        /// <summary>Le magasin de pilotes, que les captures d'écran montrent sur un exemple.</summary>
+        public DriverStoreViewModel DriverStore => _driverStore;
+
         /// <summary>La recherche universelle, Ctrl+K.</summary>
         public SearchViewModel Search { get; }
 
@@ -415,6 +421,8 @@ namespace LDI12.App.ViewModels
                 () => { _programs.IsProcessesTab = true; Show(_programs); }, "process explorer gestionnaire des taches processus tuer terminer bloque cpu memoire signature"));
             entries.Add(new SearchEntry("Programmes au démarrage", "Programmes", "Tout ce qui se lance seul : session, tâches, services, pilotes",
                 () => { _programs.IsAutorunsTab = true; Show(_programs); }, "autoruns demarrage startup msconfig taches planifiees services pilotes extensions lancement automatique"));
+            entries.Add(new SearchEntry("Anciens pilotes du magasin", "Magasin de pilotes", "Les versions remplacées, ce qu'elles pèsent, les retirer",
+                () => Show(_driverStore), "driver store explorer rapr magasin pilotes driverstore filerepository oem inf anciennes versions nettoyer pnputil"));
             entries.Add(new SearchEntry("Ce qui prend de la place", "Espace disque", "La carte de chaque fichier, les plus gros, les pistes",
                 () => Show(_diskUsage), "windirstat treemap carte gros fichiers place disque plein volume dossier"));
 

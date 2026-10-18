@@ -293,6 +293,12 @@ namespace LDI12.Tests
             public ControlResult SetServiceStart(string name, int start) { Calls.Add("start-type " + name + " " + start); return ControlResult.Ok("ok"); }
             public ControlResult SetTaskEnabled(string path, bool enabled) { Calls.Add("task " + path + " " + enabled); return ControlResult.Ok("ok"); }
             public ControlResult EndProcess(int processId) { Calls.Add("end " + processId); return ControlResult.Ok("ok"); }
+            public HashSet<string> PackagesInUse { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public ControlResult DeleteDriverPackage(string publishedName)
+            {
+                Calls.Add("delete-package " + publishedName);
+                return PackagesInUse.Contains(publishedName) ? ControlResult.Fail("un périphérique présent l'utilise") : ControlResult.Ok("ok");
+            }
 
             public List<AudioOutputState> Audio { get; } = new List<AudioOutputState>();
             public IReadOnlyList<AudioOutputState> AudioEndpoints() => Audio;

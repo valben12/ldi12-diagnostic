@@ -158,6 +158,12 @@ namespace LDI12.Core.Execution
         /// <summary>Met fin à un processus.</summary>
         ControlResult EndProcess(int processId);
 
+        /// <summary>
+        /// Retire un paquet du magasin de pilotes (« oem12.inf »). Jamais forcé : Windows refuse
+        /// lui-même un paquet qu'un périphérique présent utilise.
+        /// </summary>
+        ControlResult DeleteDriverPackage(string publishedName);
+
         /// <summary>Le mode d'alimentation actif, ou null s'il ne se lit pas.</summary>
         Guid? ActivePowerScheme();
 
@@ -214,6 +220,7 @@ namespace LDI12.Core.Execution
         public ControlResult SetServiceStart(string name, int start) => No();
         public ControlResult SetTaskEnabled(string path, bool enabled) => No();
         public ControlResult EndProcess(int processId) => No();
+        public ControlResult DeleteDriverPackage(string publishedName) => No();
         public Guid? ActivePowerScheme() => null;
         public bool PowerSchemeExists(Guid scheme) => false;
         public ControlResult ActivatePowerScheme(Guid scheme) => No();

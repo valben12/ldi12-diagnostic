@@ -134,6 +134,7 @@ namespace LDI12.App
             _assistantDemo = ReadArgument(e.Args, "--assistant-demo");
             _crashDemo = Array.IndexOf(e.Args, "--crash-demo") >= 0;
             _programsDemo = ReadArgument(e.Args, "--programs-demo");
+            _driversDemo = Array.IndexOf(e.Args, "--drivers-demo") >= 0;
 
             if (_screenshotPath != null)
             {
@@ -310,6 +311,9 @@ namespace LDI12.App
         /// <summary>Montrer l'écran Programmes sur une liste d'exemple (<c>--programs-demo processes|autoruns</c>).</summary>
         private string? _programsDemo;
 
+        /// <summary>Montrer le magasin de pilotes sur un exemple (<c>--drivers-demo</c>).</summary>
+        private bool _driversDemo;
+
         /// <summary>La valeur qui suit une option de la ligne de commande, ou nul.</summary>
         private static string? ReadArgument(string[] args, string name)
         {
@@ -401,6 +405,7 @@ namespace LDI12.App
             if (_assistantDemo != null) _shell.Assistant.ShowDemo(_assistantDemo);
             if (_crashDemo) _shell.Crashes.ShowDemo();
             if (_programsDemo != null) _shell.Programs.ShowDemo(_programsDemo);
+            if (_driversDemo) _shell.DriverStore.ShowDemo();
 
             if (_diskScanPath != null)
             {

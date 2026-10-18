@@ -68,6 +68,7 @@ namespace LDI12.Actions
                 () => new AutorunToggleAction(elevated: true),
                 () => new ProcessEndAction(elevated: false),
                 () => new ProcessEndAction(elevated: true),
+                () => new DriverPackagesDeleteAction(),
             };
 
             var actions = new List<IRepairAction>(factories.Length);

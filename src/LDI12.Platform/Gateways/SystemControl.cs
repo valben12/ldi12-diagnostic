@@ -212,6 +212,22 @@ namespace LDI12.Platform.Gateways
                 ? ControlResult.Ok("Processus terminé.")
                 : ControlResult.Fail("Windows a refusé : " + reason + ".", reason != null && reason.StartsWith("accès refusé", StringComparison.Ordinal) ? 5 : 0)));
 
+        [System.Runtime.InteropServices.DllImport("setupapi.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern bool SetupUninstallOEMInfW(string infFileName, uint flags, IntPtr reserved);
+
+        public ControlResult DeleteDriverPackage(string publishedName)
+            => Guard(() =>
+            {
+                // Sans l'option de forçage : un paquet en service est refusé par Windows lui-même.
+                if (SetupUninstallOEMInfW(publishedName, 0, IntPtr.Zero))
+                    return Log("Paquet " + publishedName + " retiré", ControlResult.Ok("Paquet retiré du magasin."));
+                var error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+                var reason = unchecked((uint)error) == 0xE000023D
+                    ? "un périphérique présent l'utilise"
+                    : error == 5 ? "privilèges administrateur nécessaires" : new Win32Exception(error).Message;
+                return Log("Paquet " + publishedName, ControlResult.Fail(reason, error));
+            });
+
         private RegistryView NativeView()
             => _platform.Profile.NativeArchitecture == ProcessorArchitecture.X64 || Environment.Is64BitOperatingSystem
                 ? RegistryView.Registry64

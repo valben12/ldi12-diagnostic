@@ -54,6 +54,9 @@
             <DataTemplate DataType="{x:Type vm:AssistantViewModel}">
                 <views:AssistantView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DriverStoreViewModel}">
+                <views:DriverStoreView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:ProgramsViewModel}">
                 <views:ProgramsView />
             </DataTemplate>

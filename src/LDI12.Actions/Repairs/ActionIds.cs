@@ -128,6 +128,9 @@
         /// <summary>Le même, pour un processus du système ou d'un autre compte.</summary>
         public const string ProcessEndAdmin = "PROCESS-END-ADMIN";
 
+        /// <summary>Retirer des paquets du magasin de pilotes (écran Magasin de pilotes).</summary>
+        public const string DriverPackagesDelete = "DRIVER-PACKAGES-DELETE";
+
         /// <summary>
         /// Les opérations qui appartiennent à un écran dédié : elles n'ont de sens qu'avec ce qu'il
         /// montre, et ne figurent pas dans la liste des Réparations.
@@ -140,6 +143,7 @@
                 AutorunToggleAdmin,
                 ProcessEnd,
                 ProcessEndAdmin,
+                DriverPackagesDelete,
             };
 
         /// <summary>Préfixe des lanceurs de consoles Windows, voir <c>WindowsToolCatalog</c>.</summary>

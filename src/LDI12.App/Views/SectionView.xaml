@@ -109,7 +109,37 @@
 
             <Border Style="{StaticResource Card}" Padding="20,16"
                     Visibility="{Binding HasFindings, Converter={StaticResource HiddenWhenTrue}}">
-                <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.Body}" />
+                <DockPanel>
+                    <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="18" Margin="0,0,14,0"
+                            VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsClean}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.StatusGoodSoft}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Path Width="17" Height="17" Data="{StaticResource Icon.CheckCircle}">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Stroke" Value="{DynamicResource Brush.TextTertiary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsClean}" Value="True">
+                                            <Setter Property="Stroke" Value="{DynamicResource Brush.StatusGood}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding EmptyTitle}" Style="{StaticResource Text.Emphasis}" />
+                        <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <!-- ===== Caractéristiques relevées =====

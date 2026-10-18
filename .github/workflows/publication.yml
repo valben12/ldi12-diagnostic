@@ -62,7 +62,9 @@ jobs:
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { Write-Host 'Aucune capture nouvelle.'; exit 0 }
           git commit -m "Captures d'écran de ${{ github.sha }}"
-          git pull --rebase origin ${{ github.ref_name }}
+          # Deux exécutions proches capturent les mêmes écrans : au rebasage, les images de celle-ci,
+          # prises sur le code le plus récent qu'elle connaisse, l'emportent au lieu de tout bloquer.
+          git pull --rebase -X theirs origin ${{ github.ref_name }}
           git push origin HEAD:${{ github.ref_name }}
 
       # Deux façons de demander une release : pousser une étiquette « v… », ou pousser sur une

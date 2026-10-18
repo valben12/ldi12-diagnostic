@@ -193,7 +193,7 @@
                                   ToolTip="Relevé chaque seconde ; en pause, la liste reste figée pour être lue." />
                         <CheckBox Style="{StaticResource Switch}" Content="Établies seulement" IsChecked="{Binding EstablishedOnly}" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBox DockPanel.Dock="Left" Style="{StaticResource Field}" Width="240" Tag="Rechercher un programme, une adresse"
+                    <TextBox DockPanel.Dock="Left" Style="{StaticResource Field}" Width="210" Tag="Programme, adresse…"
                              Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,14,0" />
                     <TextBlock Text="{Binding ConnectionSummary}" Style="{StaticResource Text.Muted}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 </DockPanel>
@@ -268,7 +268,8 @@
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Style="{StaticResource Button.Ghost}" Content="Arrêter" Command="{Binding StopCaptureCommand}" Margin="0,0,8,0"
                                     Visibility="{Binding IsCapturing, Converter={StaticResource BoolToVisibility}}" />
-                            <Button Style="{StaticResource Button.Primary}" Content="Écouter" Command="{Binding CaptureCommand}" />
+                            <Button Style="{StaticResource Button.Primary}" Content="Écouter" Command="{Binding CaptureCommand}"
+                                    ToolTip="Sans pilote à installer. Windows demandera l'autorisation administrateur." />
                         </StackPanel>
                         <Border DockPanel.Dock="Right" Style="{StaticResource SegmentRail}" Margin="0,0,12,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
@@ -293,8 +294,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Border>
-                        <TextBlock Text="Sans pilote à installer. Windows demandera l'autorisation administrateur." Style="{StaticResource Text.Muted}"
-                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        <Grid />
                     </DockPanel>
                     <ProgressBar Style="{StaticResource Progress}" IsIndeterminate="True" Height="4" Margin="0,12,0,0"
                                  Visibility="{Binding IsCapturing, Converter={StaticResource BoolToVisibility}}" />

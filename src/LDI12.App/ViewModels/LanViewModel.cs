@@ -518,9 +518,11 @@ namespace LDI12.App.ViewModels
         private void Count()
         {
             var shown = Connections.Count(c => KeepConnection(c));
-            ConnectionSummary = shown + " affichée(s) · " + Connections.Count(c => c.IsEstablished) + " établie(s) · "
-                                + Connections.Select(c => c.Process).Distinct().Count() + " programme(s)"
-                                + (_isLive ? " · en direct" : " · en pause");
+            // Le direct se lit sur l'interrupteur : le résumé garde les chiffres, au pluriel juste.
+            string Plural(int count, string one, string many) => count + " " + (count > 1 ? many : one);
+            var established = Connections.Count(c => c.IsEstablished);
+            var programs = Connections.Select(c => c.Process).Distinct().Count();
+            ConnectionSummary = Plural(shown, "affichée", "affichées") + " · " + Plural(established, "établie", "établies") + " · " + Plural(programs, "programme", "programmes");
         }
 
         private async void SampleConnections()

@@ -8,7 +8,7 @@ technicien, un bilan sans jargon pour la personne à qui appartient l'ordinateur
 Windows 7 SP1 jusqu'à Windows 11 · x86, x64, ARM64 en émulation · C# et WPF sur
 .NET Framework 4.6.2 · exécutable unique de 13,5 Mo · hors ligne.
 
-![Vue d'ensemble](docs/images/vue-ensemble.webp)
+![Vue d'ensemble](docs/captures/dark-00-vue-ensemble.png)
 
 ## Pourquoi celui-ci plutôt qu'un autre
 
@@ -37,7 +37,7 @@ minutes selon l'état du disque.
 - **Réseau** : cartes, adresses, qualité du sans-fil, mandataires, table de routage, fichier
   hosts, résolution de noms, ports en écoute, et le chemin réel d'un paquet jusqu'à la sortie.
 
-![Écran Stockage](docs/images/stockage.webp)
+![Écran Stockage](docs/captures/dark-04-stockage.png)
 
 ## Sauvegarder et restaurer
 
@@ -94,7 +94,7 @@ Cette obligation n'est pas une convention d'écriture, elle est portée par le t
 `ExecuteAsync` exige l'objet produit par `PreviewAsync`. Il n'existe aucun chemin de code par
 lequel une action puisse s'exécuter sans que ce qu'elle allait faire ait d'abord été établi.
 
-![Écran Réparations](docs/images/reparations.webp)
+![Écran Réparations](docs/captures/dark-09-reparations.png)
 
 ## Approfondir
 
@@ -115,8 +115,22 @@ que le technicien allait chercher dans autant d'outils séparés.
   et la place qu'elles prennent ; le nettoyage ne touche jamais un pilote en service.
 - **Réseau local** (Advanced IP Scanner, Wireshark) : les appareils du réseau, leur fabricant,
   leurs services et partages, le réveil à distance ; les connexions de ce PC programme par
-  programme ; une écoute du trafic sans pilote, résumée à l'écran et enregistrée dans un
-  fichier que Wireshark ouvre.
+  programme, actualisées chaque seconde ; une écoute du trafic sans pilote, de une minute à
+  quatre heures, dont les paquets défilent à l'écran comme dans Wireshark et que Wireshark
+  rouvre ensuite depuis le fichier enregistré.
+
+![Écran Disques : test de surface](docs/captures/dark-14-disques-1400.png)
+
+![Écran Plantages](docs/captures/dark-15-plantages.png)
+
+![Écran Réseau local : écoute du trafic](docs/captures/dark-18-reseau-local-trafic.png)
+
+Et pour retrouver la place perdue, l'écran **Espace disque** dessine chaque fichier à sa
+taille, à la manière de WinDirStat : la carte se zoome à la molette jusqu'aux plus petits
+fichiers, une bulle dit ce qu'il y a sous la souris, et un fichier se met à la corbeille sans
+quitter l'écran.
+
+![Écran Espace disque](docs/captures/light-11-espace-disque.png)
 
 ## Ce qu'il ne fait pas
 
@@ -214,7 +228,7 @@ trié et constats détaillés.
 
 Le journal technique est dans `%LOCALAPPDATA%\LDI12\Diagnostic\logs\`.
 
-![Écran Rapports](docs/images/rapports.webp)
+![Écran Rapports](docs/captures/dark-21-rapports.png)
 
 ## Contrôler le rendu de l'interface
 

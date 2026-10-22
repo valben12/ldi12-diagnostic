@@ -210,6 +210,119 @@ namespace LDI12.Tests
         public void Un_export_illisible_ne_donne_aucune_application()
             => Assert.Empty(WingetApplications.Parse("pas du json"));
 
+        /// <summary>
+        /// Le défaut rencontré sur un Windows 10 de client : « winget n'a produit aucune liste
+        /// (code -2147024893, 0x80070003 : le chemin d'accès spécifié est introuvable) ».
+        /// </summary>
+        /// <remarks>
+        /// winget écrit sa liste là où on le lui dit, et rend ce code quand le dossier n'existe
+        /// pas. Celui des fichiers temporaires manque plus souvent qu'on ne le croit. L'export des
+        /// pilotes et celui du Wi-Fi créaient déjà le leur ; ce relevé-là ne le faisait pas.
+        /// </remarks>
+        [Fact]
+        public async Task Le_releve_winget_cree_son_dossier_avant_d_appeler_l_outil()
+        {
+            const string dossier = @"C:\Users\jcb48\AppData\Local\Temp";
+            const string export = dossier + @"\ldi12-winget-1234.json";
+
+            var files = new FakeFileSystemGateway();
+            var pret = false;
+            var runner = new ScriptedProcessRunner(_ =>
+            {
+                pret = files.DirectoryExists(dossier);
+                files.Texts[export] = WingetApplications.Document(new[] { "Mozilla.Firefox" });
+                return ActionFakes.Result(0);
+            });
+
+            var listing = await WingetApplications.ListAsync(runner, files, export, CancellationToken.None);
+
+            Assert.True(pret, "Le dossier de sortie doit exister avant que winget soit appelé.");
+            Assert.Equal(dossier, Assert.Single(runner.Requests).WorkingDirectory);
+            Assert.Equal(new[] { "Mozilla.Firefox" }, listing.Packages);
+            Assert.Null(listing.Failure);
+        }
+
+        /// <summary>
+        /// Le vrai défaut du poste de client : le compte Windows s'appelle « Françoise &amp; Patrick ».
+        /// </summary>
+        /// <remarks>
+        /// winget prend les octets UTF-8 de son argument <c>-o</c> pour de l'ANSI : « Françoise »
+        /// lui devient « FranÃ§oise », un dossier qui n'existe pas, et il rend « 0x80070003 : le
+        /// chemin d'accès spécifié est introuvable » alors que le dossier est bien là. Mesuré sur
+        /// un vrai winget : l'accent seul suffit, l'esperluette et les espaces n'y sont pour rien.
+        /// Le remède est de ne jamais lui faire décoder un chemin.
+        /// </remarks>
+        [Fact]
+        public async Task Un_dossier_accentue_ne_passe_jamais_dans_la_ligne_de_commande_de_winget()
+        {
+            const string dossier = @"C:\Users\Françoise & Patrick\AppData\Local\Temp";
+            const string export = dossier + @"\ldi12-winget-1234.json";
+
+            var files = new FakeFileSystemGateway();
+            var runner = new ScriptedProcessRunner(_ =>
+            {
+                files.Texts[export] = WingetApplications.Document(new[] { "Mozilla.Firefox" });
+                return ActionFakes.Result(0);
+            });
+
+            var listing = await WingetApplications.ListAsync(runner, files, export, CancellationToken.None);
+
+            var demande = Assert.Single(runner.Requests);
+            Assert.DoesNotContain("Françoise", demande.Arguments);
+            Assert.DoesNotContain(@"\", demande.Arguments.Substring(demande.Arguments.IndexOf("-o ", StringComparison.Ordinal)));
+            Assert.Contains("\"ldi12-winget-1234.json\"", demande.Arguments);
+            Assert.Equal(dossier, demande.WorkingDirectory);
+
+            // Et la liste est relue au chemin complet : c'est nous qui savons où winget a écrit.
+            Assert.Equal(new[] { "Mozilla.Firefox" }, listing.Packages);
+        }
+
+        [Fact]
+        public async Task Sur_un_chemin_reseau_winget_recoit_le_chemin_complet_faute_de_dossier_de_travail()
+        {
+            // Un dossier de travail ne peut pas être un chemin UNC : là, le chemin complet repart
+            // dans l'argument, et winget fera ce qu'il pourra. Mieux vaut cela que ne rien lancer.
+            const string export = @"\\serveur\partage\temp\winget.json";
+            var files = new FakeFileSystemGateway();
+            files.Directories.Add(@"\\serveur\partage\temp");
+            var runner = new ScriptedProcessRunner(_ => ActionFakes.Result(0));
+
+            await WingetApplications.ListAsync(runner, files, export, CancellationToken.None);
+
+            var demande = Assert.Single(runner.Requests);
+            Assert.Contains(export, demande.Arguments);
+            Assert.Null(demande.WorkingDirectory);
+        }
+
+        [Fact]
+        public async Task Un_dossier_de_sortie_impossible_a_creer_est_nomme_et_winget_n_est_pas_appele()
+        {
+            var files = new FakeFileSystemGateway();
+            files.Uncreatable.Add(@"X:\temp");
+            var runner = new ScriptedProcessRunner(_ => ActionFakes.Result(0));
+
+            var listing = await WingetApplications.ListAsync(runner, files, @"X:\temp\liste.json", CancellationToken.None);
+
+            Assert.Empty(runner.Requests);
+            Assert.Contains(@"X:\temp", listing.Failure);
+            Assert.Empty(listing.Packages);
+        }
+
+        [Fact]
+        public async Task Un_releve_winget_sans_fichier_dit_ou_il_l_attendait()
+        {
+            // Le message lu sur une photo d'écran ne disait pas quel chemin : impossible de
+            // distinguer un dossier manquant d'un refus d'écriture.
+            const string export = @"C:\Temp\ldi12-winget-5678.json";
+            var files = new FakeFileSystemGateway();
+            var runner = new ScriptedProcessRunner(_ => ActionFakes.Result(unchecked((int)0x80070003)));
+
+            var listing = await WingetApplications.ListAsync(runner, files, export, CancellationToken.None);
+
+            Assert.Contains(export, listing.Failure);
+            Assert.Contains("-2147024893", listing.Failure);
+        }
+
         [Fact]
         public async Task Sans_winget_la_reinstallation_des_applications_dit_quoi_installer()
         {

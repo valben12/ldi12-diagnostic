@@ -326,9 +326,12 @@ namespace LDI12.Tests
             return Measured.Ok(HashOf(path), DataSource.FileSystem);
         }
 
+        /// <summary>Dossiers qui refusent d'être créés : support en lecture seule, chemin interdit.</summary>
+        public HashSet<string> Uncreatable { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public bool CreateDirectory(string path)
         {
-            if (Gone(path)) return false;
+            if (Gone(path) || Uncreatable.Contains(path)) return false;
             Created.Add(path);
 
             // Comme la vraie passerelle : un dossier créé existe ensuite. La sauvegarde s'en sert

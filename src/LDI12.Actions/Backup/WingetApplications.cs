@@ -71,15 +71,51 @@ namespace LDI12.Actions.Backup
         /// Par <c>winget export</c>, dont le fichier JSON ne dépend pas de la langue du système,
         /// contrairement au tableau de <c>winget list</c> qui tronque les noms longs. Compter
         /// une trentaine de secondes : winget met sa source à jour avant de répondre.
+        /// <para>
+        /// Le dossier de sortie est créé avant l'appel, comme le font déjà l'export des pilotes et
+        /// celui des profils Wi-Fi. Sans cela, winget rend « 0x80070003 : le chemin d'accès spécifié
+        /// est introuvable » et le relevé s'arrête sur un message qui ne dit pas quel chemin.
+        /// </para>
+        /// <para>
+        /// <b>Et le chemin ne lui est jamais donné en entier.</b> winget relit mal les caractères
+        /// non ASCII de son argument <c>-o</c> : il prend les octets UTF-8 pour de l'ANSI, si bien
+        /// que « Françoise » devient « FranÃ§oise ». Le dossier ainsi nommé n'existe pas, et winget
+        /// rend le même « 0x80070003 » alors que le vrai dossier, lui, est bien là. Mesuré sur un
+        /// compte Windows accentué : l'accent seul suffit, sans espace ni esperluette. Le dossier
+        /// passe donc par le dossier de travail, que Windows transmet sans que winget le décode, et
+        /// l'argument ne porte plus que le nom du fichier, qui est écrit par nos soins en ASCII.
+        /// </para>
         /// </remarks>
         public static async Task<WingetListing> ListAsync(
             IProcessRunner processes, IFileSystemGateway files, string exportPath, CancellationToken cancellationToken)
         {
+            var folder = Folder(exportPath);
+
+            // Le dossier des fichiers temporaires manque plus souvent qu'on ne le croit : un compte
+            // élevé qui n'a jamais ouvert de session, un nettoyage qui a emporté le dossier plutôt
+            // que son contenu, une variable TEMP qui pointe sur un disque absent.
+            if (folder != null && !files.DirectoryExists(folder) && !files.CreateDirectory(folder))
+                return new WingetListing
+                {
+                    Failure = "Le dossier « " + folder + " » n'existe pas et n'a pas pu être créé : winget " +
+                              "n'a nulle part où écrire sa liste.",
+                };
+
+            // Un dossier de travail ne peut pas être un chemin réseau : dans ce cas seulement, le
+            // chemin complet repart dans l'argument, faute de mieux.
+            var name = Name(exportPath);
+            var local = folder != null && name != null && !folder.StartsWith(@"\\", StringComparison.Ordinal);
+
             var run = await processes.RunAsync(
                 new ProcessRequest("winget.exe",
-                    "export -o \"" + exportPath + "\" -s " + Source + " --accept-source-agreements")
+                    "export -o \"" + (local ? name : exportPath) + "\" -s " + Source + " --accept-source-agreements")
                 {
                     Timeout = TimeSpan.FromMinutes(3),
+
+                    // Le dossier de travail porte le chemin à la place de l'argument. Il sert aussi
+                    // à ne pas hériter de celui de LDI12 : la clé USB d'où il a été lancé, qui a pu
+                    // être retirée, ou un lecteur réseau que la session élevée ne voit pas.
+                    WorkingDirectory = local ? folder : null,
                 },
                 cancellationToken).ConfigureAwait(false);
 
@@ -97,13 +133,42 @@ namespace LDI12.Actions.Backup
             if (!text.HasValue)
                 return new WingetListing
                 {
-                    Failure = "winget n'a produit aucune liste (" + DriverBackup.Tail(run) + ").",
+                    Failure = "winget n'a produit aucune liste dans « " + exportPath + " » (" +
+                              DriverBackup.Tail(run) + ").",
                 };
 
             var packages = Parse(text.Value);
             return packages.Count == 0
                 ? new WingetListing { Failure = "winget ne reconnaît aucun des logiciels installés." }
                 : new WingetListing { Packages = packages };
+        }
+
+        /// <summary>Le dossier d'un chemin de sortie, ou <c>null</c> si ce chemin n'en nomme pas.</summary>
+        /// <remarks>
+        /// <see cref="Path.GetDirectoryName(string)"/> lève sur un chemin mal formé : ici, un
+        /// chemin qu'on n'arrive pas à lire n'est pas une raison de ne pas essayer winget, qui
+        /// dira lui-même ce qu'il en pense.
+        /// </remarks>
+        private static string? Folder(string path)
+        {
+            try
+            {
+                var folder = Path.GetDirectoryName(path);
+                return string.IsNullOrEmpty(folder) ? null : folder;
+            }
+            catch (ArgumentException) { return null; }
+            catch (PathTooLongException) { return null; }
+        }
+
+        /// <summary>Le nom du fichier de sortie, ou <c>null</c> s'il ne peut pas être isolé.</summary>
+        private static string? Name(string path)
+        {
+            try
+            {
+                var name = Path.GetFileName(path);
+                return string.IsNullOrEmpty(name) ? null : name;
+            }
+            catch (ArgumentException) { return null; }
         }
 
         /// <summary>Les identifiants de la source winget d'un export, ou d'une sauvegarde.</summary>
